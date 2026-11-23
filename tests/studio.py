@@ -142,4 +142,3 @@ if __name__=="__main__":
         exercise(page,root)
         browser.close();http.shutdown()
         print("PASS: templates, live catalog downloads, layout, five imported slides, rich text, editable vectors, SVG and JSON round trip")
-

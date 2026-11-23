@@ -74,4 +74,3 @@ if __name__=="__main__":
         ctx=b.new_context(viewport={"width":1440,"height":900})
         run(ctx.new_page(),ctx,f"http://127.0.0.1:{h.server_port}/lessons/",files);b.close();h.shutdown()
         print("PASS: v1 database upgrade, four font formats, inheritance, measured autofit, missing font and offline fonts")
-

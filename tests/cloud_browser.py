@@ -101,4 +101,3 @@ if __name__=="__main__":
         b=p.chromium.launch(executable_path=os.getenv("CHROMIUM_PATH") or shutil.which("chromium"),args=["--no-sandbox"])
         flow(b,f"http://127.0.0.1:{h.server_port}/lessons/",tmp);b.close();h.shutdown()
         print("PASS: Supabase client fixture: owner login, private templates, image upload, public projector JSON, guest view and unpublish")
-

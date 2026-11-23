@@ -76,4 +76,3 @@ python tests/fonts_browser.py sample.woff2 sample.woff sample.ttf sample.otf
 | Шрифты | | src/assets/fonts/Sans.woff, Serif.woff, SansMono.woff, public/FONT-LICENSE.txt |
 | Проверки | tests/browser.py, tests/model.test.mjs | tests/format-v2.test.mjs, tests/studio.py, tests/fonts_browser.py, tests/cloud_browser.py, tests/template-policies.sql |
 | Документация | README.md, docs/ARCHITECTURE.md, docs/CHECKS.md, docs/SUPABASE_SETUP.md, docs/USER_GUIDE.md | docs/STUDIO_REPORT.md, docs/examples/atlas-instructions.txt, docs/examples/water-cycle.json, docs/examples/slides/slide-1.png … slide-5.png |
-

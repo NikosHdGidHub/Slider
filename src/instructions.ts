@@ -22,8 +22,8 @@ export function download(
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 const transparent =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==";
-function catalogData(t: Template) {
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==";
+function catalogData(t: Template, library: StyleLibrary) {
   const entry = validateTemplate(t),
     missing: string[] = [];
   // The text file may leave the device. Never serialize external asset addresses.
@@ -38,7 +38,26 @@ function catalogData(t: Template) {
         it.src = transparent;
       }
   }
-  const fontIds = entry.deck.resources.fonts.map((f) => f.id);
+  const aliases = new Map(
+    entry.deck.resources.fonts.map((f) => [
+      f.id,
+      library.fonts.find((v) => v.id === f.id && v.data === f.data)?.id ??
+        library.fonts.find((v) => v.data === f.data)?.id ??
+        f.id,
+    ]),
+  );
+  function resolveFont(style: { font?: string }) {
+    if (style.font && aliases.has(style.font))
+      style.font = aliases.get(style.font);
+  }
+  for (const s of entry.deck.theme.styles) resolveFont(s.values);
+  for (const slide of entry.deck.slides)
+    for (const item of slide.items) {
+      if (item.overrides) resolveFont(item.overrides);
+      for (const paragraph of item.paragraphs ?? [])
+        paragraph.runs.forEach(resolveFont);
+    }
+  const fontIds = [...aliases.values()];
   entry.deck.resources.fonts = [];
   return { ...entry, externalAssetsOmitted: missing, fontIds };
 }
@@ -114,7 +133,7 @@ export function instructions(
   scope: string,
   library: StyleLibrary = collectStyles(templates.map((t) => t.deck)),
 ) {
-  const catalog = templates.map(catalogData);
+  const catalog = templates.map((t) => catalogData(t, library));
   return [
     "Атлас уроков · Формат " + FORMAT_VERSION,
     scope,

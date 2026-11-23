@@ -140,6 +140,30 @@ test("генератор отражает текущий каталог, иск�
   };
   t.deck.slides[0].background =
     "https://example.org/private?token=privateToken123";
+  const fonts = ["Sans", "Serif"].map((name, i) => {
+    const entry = structuredClone(builtins[i]);
+    entry.deck.resources.fonts = [
+      {
+        id: "localFont",
+        label: name,
+        format: "woff",
+        data: readFileSync(
+          new URL("../src/assets/fonts/" + name + ".woff", import.meta.url),
+        ).toString("base64"),
+      },
+    ];
+    entry.deck.theme.styles[0].values.font = "localFont";
+    return entry;
+  });
+  const catalog = instructions(fonts, "Локально")
+    .split("G. Каталог презентаций (данные)\n\n")[1]
+    .split("\n\n")[0];
+  const entries = JSON.parse(catalog);
+  assert.notEqual(entries[0].fontIds[0], entries[1].fontIds[0]);
+  assert.equal(
+    entries[1].deck.theme.styles[0].values.font,
+    entries[1].fontIds[0],
+  );
   const before = instructions([...builtins, t], "Локально");
   assert.match(before, /Тест-запись/);
   assert.doesNotMatch(before, /privateToken123/);
