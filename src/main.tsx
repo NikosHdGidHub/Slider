@@ -1,10 +1,747 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  BookOpen,
+  Library,
+  Globe2,
+  BookOpenText,
+  Plus,
+  Upload,
+  Play,
+  ArrowUpRight,
+  Monitor,
+  UserRound,
+  Layers3,
+  FolderOpen,
+  FileJson,
+  Trash2,
+  Link2,
+  LogOut,
+  CloudOff,
+  Menu,
+  X,
+  ChevronRight,
+  Compass,
+} from "lucide-react";
+import { newDeck, validateDeck, type Deck, MAX_DOCUMENT_BYTES } from "./model";
+import { embedImages } from "./media";
+import { adminId, client, listPublished, readPublic, unpublish } from "./cloud";
+import { entries, saveEntry, type Entry } from "./storage";
+import { publish } from "./publication";
+import { Editor } from "./Editor";
+import { Viewer } from "./Viewer";
+import { Stage } from "./Stage";
+import { example } from "./example";
+import relief from "./assets/relief.webp";
+import { registerShell, ensureShell } from "./offline";
+import guide from "../docs/USER_GUIDE.md?raw";
+import "./style.css";
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+registerShell();
+const localMode =
+  !client && ["127.0.0.1", "localhost", "[::1]"].includes(location.hostname);
+const ownerKey = "atlas-owner-" + adminId;
+const link = (id: string) => location.href.split("#")[0] + "#p/" + id;
+const errorText = (err: unknown) =>
+  err instanceof Error ? err.message : "Не удалось выполнить действие.";
+function App() {
+  const [owner, setOwner] = useState(false),
+    [list, setList] = useState<Entry[]>([]),
+    [page, setPage] = useState("library"),
+    [drawer, setDrawer] = useState(false);
+  const [doc, setDoc] = useState<Deck | null>(null),
+    [watch, setWatch] = useState<Deck | null>(null),
+    [status, setStatus] = useState("Сохранено");
+  const current = useRef<Deck | null>(null),
+    rev = useRef(0),
+    queue = useRef(Promise.resolve()),
+    failure = useRef<unknown>(null);
+  const [modal, setModal] = useState(""),
+    [message, notice] = useState(""),
+    [busy, setBusy] = useState(""),
+    [value, setValue] = useState(""),
+    [pw, password] = useState("");
+  const [pubs, setPubs] = useState<string[]>([]),
+    [publicError, pubError] = useState(""),
+    [hash, setHash] = useState(location.hash),
+    [publicDeck, setPublicDeck] = useState<Deck | null>(null);
+  const [online, setOnline] = useState(navigator.onLine),
+    [libraryError, libError] = useState(""),
+    importer = useRef<HTMLInputElement>(null);
+  const allowed = localMode || owner;
+  async function refresh() {
+    setList(await entries());
+    libError("");
+  }
+  async function task(label: string, fn: () => Promise<void>) {
+    setBusy(label);
+    try {
+      await fn();
+    } catch (e) {
+      notice(errorText(e));
+    } finally {
+      setBusy("");
+    }
+  }
+  function dialog(name: string) {
+    setValue("");
+    password("");
+    setModal(name);
+  }
+  function navigate(next: string) {
+    setPage(next);
+    setDrawer(false);
+  }
+  useEffect(() => {
+    const network = () => setOnline(navigator.onLine),
+      route = () => setHash(location.hash);
+    window.addEventListener("online", network);
+    window.addEventListener("offline", network);
+    window.addEventListener("hashchange", route);
+    return () => {
+      window.removeEventListener("online", network);
+      window.removeEventListener("offline", network);
+      window.removeEventListener("hashchange", route);
+    };
+  }, []);
+  useEffect(() => {
+    if (!client) return;
+    if (!online && localStorage.getItem(ownerKey) === "yes") setOwner(true);
+    const { data } = client.auth.onAuthStateChange((evt, s) => {
+      const ok = s?.user.id.toLowerCase() === adminId;
+      if (ok) localStorage.setItem(ownerKey, "yes");
+      if (evt === "SIGNED_OUT" && navigator.onLine)
+        localStorage.removeItem(ownerKey);
+      setOwner(
+        ok || (!navigator.onLine && localStorage.getItem(ownerKey) === "yes"),
+      );
+    });
+    return () => data.subscription.unsubscribe();
+  }, [online]);
+  useEffect(() => {
+    if (allowed) refresh().catch((e) => libError(errorText(e)));
+    else {
+      setList([]);
+      setDoc(null);
+      current.current = null;
+    }
+  }, [allowed]);
+  useEffect(() => {
+    let live = true;
+    pubError("");
+    setPublicDeck(null);
+    if (hash.startsWith("#p/"))
+      readPublic(hash.slice(3))
+        .then(validateDeck)
+        .then((d) => {
+          if (live) setPublicDeck(d);
+        })
+        .catch((e) => {
+          if (live) pubError(errorText(e));
+        });
+    return () => {
+      live = false;
+    };
+  }, [hash]);
+  useEffect(() => {
+    if (page === "published" && owner)
+      listPublished()
+        .then(setPubs)
+        .catch((e) => notice(errorText(e)));
+  }, [page, owner]);
+  function open(d: Deck, revision: number) {
+    current.current = d;
+    rev.current = revision;
+    queue.current = Promise.resolve();
+    failure.current = null;
+    setStatus("Сохранено");
+    setDoc(d);
+  }
+  function change(fn: (d: Deck) => Deck) {
+    const prev = current.current;
+    if (!prev) return;
+    const next = fn(prev);
+    current.current = next;
+    setDoc(next);
+    setStatus("Сохранение…");
+    const expected = rev.current++;
+    queue.current = queue.current.then(async () => {
+      if (failure.current) return;
+      try {
+        await saveEntry(next, expected);
+        if (current.current === next) setStatus("Сохранено");
+      } catch (e) {
+        failure.current = e;
+        setStatus("Ошибка записи");
+        notice(errorText(e));
+      }
+    });
+  }
+  async function closeEditor() {
+    await queue.current;
+    if (
+      failure.current &&
+      !confirm("Последние изменения не записаны. Выйти без сохранения?")
+    )
+      return;
+    current.current = null;
+    setDoc(null);
+    await refresh();
+  }
+  async function insert(d: Deck) {
+    await saveEntry(d, 0);
+    await refresh();
+    open(d, 1);
+    setModal("");
+  }
+  function need(name: string) {
+    dialog(allowed ? name : "login");
+  }
+  async function importData(raw: string) {
+    const d = validateDeck(raw);
+    d.id = crypto.randomUUID();
+    await insert(d);
+  }
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    await task("Подождите…", async () => {
+      if (modal === "login") {
+        if (!client)
+          throw new Error(
+            "Настройте Supabase по инструкции SUPABASE_SETUP.md. Для локальной работы запустите проект на localhost.",
+          );
+        const { data, error } = await client.auth.signInWithPassword({
+          email: value.trim(),
+          password: pw,
+        });
+        if (error)
+          throw new Error(
+            "Не удалось войти. Проверьте почту, пароль и подключение.",
+          );
+        if (data.user?.id !== adminId) {
+          await client.auth.signOut({ scope: "local" });
+          throw new Error("Для этого аккаунта доступ к редактору закрыт.");
+        }
+        setModal("");
+      } else if (modal === "create") await insert(newDeck(value));
+      else if (modal === "import") await importData(value);
+    });
+  }
+  async function act(id: "export" | "publish" | "offline") {
+    const d = current.current;
+    if (!d) return;
+    await task(
+      id === "publish"
+        ? "Публикация…"
+        : id === "offline"
+          ? "Проверяем файлы…"
+          : "Подготовка JSON…",
+      async () => {
+        if (id === "export") {
+          const data = validateDeck(d),
+            file = new Blob([JSON.stringify(data)], {
+              type: "application/json",
+            });
+          if (file.size > MAX_DOCUMENT_BYTES)
+            throw new Error(
+              "Для импорта файл должен быть меньше 64 МБ. Разделите занятие.",
+            );
+          const url = URL.createObjectURL(file),
+            a = document.createElement("a");
+          a.href = url;
+          a.download =
+            (d.title.replace(/[\\/]/g, "_") || "Методичка") + ".json";
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        } else if (id === "offline") {
+          await ensureShell();
+          const prepared = await embedImages(d);
+          await queue.current;
+          if (current.current !== d)
+            throw new Error("Методичка изменилась. Повторите подготовку.");
+          change(() => prepared);
+          await queue.current;
+          if (failure.current) throw failure.current;
+          notice(
+            "Готово к офлайн-показу. Приложение и все изображения сохранены.",
+          );
+        } else {
+          if (!owner)
+            throw new Error(
+              "Для публикации подключите Supabase и войдите как владелец.",
+            );
+          await publish(d);
+          setPubs((p) => Array.from(new Set([...p, d.id])));
+          setValue(link(d.id));
+          setModal("link");
+        }
+      },
+    );
+  }
+  async function remove(en: Entry) {
+    if (
+      !confirm(
+        "Удалить локальную методичку «" +
+          en.deck.title +
+          "»? Публикация останется доступна.",
+      )
+    )
+      return;
+    await task("Удаление…", async () => {
+      await saveEntry(en.deck, en.revision, true);
+      await refresh();
+    });
+  }
+  async function logout() {
+    await task("Выход…", async () => {
+      if (client) {
+        const { error } = await client.auth.signOut({ scope: "local" });
+        if (error) throw error;
+      }
+      localStorage.removeItem(ownerKey);
+      setOwner(false);
+      setPubs([]);
+      navigate("library");
+    });
+  }
+  const nav = [
+    ["library", "Мои методички", Library],
+    ["published", "Опубликованные", Globe2],
+    ["guide", "Руководство", BookOpenText],
+  ] as const;
+  const home = (
+    <div className="shell">
+      <aside className={"sidebar " + (drawer ? "opened" : "")}>
+        <div className="brand">
+          <span className="brand-icon">
+            <BookOpen />
+          </span>
+          Атлас уроков
+        </div>
+        <div className="side-rule" />
+        <small className="nav-label">Рабочее пространство</small>
+        <nav>
+          {nav.map(([key, label, Icon]) => (
+            <button
+              key={key}
+              className={page === key ? "active" : ""}
+              onClick={() => navigate(key)}
+            >
+              <Icon size={19} />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="account">
+          <div className="avatar">
+            <UserRound size={20} />
+          </div>
+          <div>
+            <b>
+              {localMode
+                ? "Локальный режим"
+                : owner
+                  ? "Преподаватель"
+                  : "Гостевой режим"}
+            </b>
+            <small>
+              {localMode
+                ? "На этом устройстве"
+                : owner
+                  ? "Владелец"
+                  : "Только просмотр"}
+            </small>
+          </div>
+          {owner ? (
+            <button title="Выйти" onClick={logout}>
+              <LogOut size={17} />
+            </button>
+          ) : (
+            !localMode && (
+              <button title="Войти" onClick={() => dialog("login")}>
+                <ArrowUpRight size={17} />
+              </button>
+            )
+          )}
+        </div>
+      </aside>
+      <div className="desk">
+        <header className="top">
+          <button
+            className="hamb"
+            aria-label="Навигация"
+            onClick={() => setDrawer(!drawer)}
+          >
+            <Menu />
+          </button>
+          <span>Рабочее пространство</span>
+          <ChevronRight size={14} />
+          <b>{nav.find((n) => n[0] === page)?.[1]}</b>
+          <div className="device">
+            {online ? <Monitor size={15} /> : <CloudOff size={15} />}{" "}
+            {online ? "На этом устройстве" : "Офлайн"}
+          </div>
+        </header>
+        <main className="library">
+          <div className="title-row">
+            <h1>
+              {page === "library"
+                ? "Мои методички"
+                : page === "guide"
+                  ? "Руководство"
+                  : "Опубликованные"}
+            </h1>
+            {page === "library" && (
+              <button className="primary" onClick={() => need("create")}>
+                <Plus size={18} />
+                Создать методичку
+              </button>
+            )}
+          </div>
+          {page === "library" ? (
+            <>
+              <article className="feature">
+                <div className="feature-copy">
+                  <div className="feature-tag">
+                    <Compass size={15} />
+                    Пример методички
+                  </div>
+                  <h2>
+                    Как читать
+                    <br />
+                    <em>рельеф</em>
+                  </h2>
+                  <div className="feature-meta">
+                    <span>География</span>
+                    <i />4 слайда
+                  </div>
+                  <button onClick={() => setWatch(example)}>
+                    <Play size={15} fill="currentColor" />
+                    Открыть пример
+                  </button>
+                </div>
+                <div
+                  className="plate"
+                  style={{ backgroundImage: "url(" + relief + ")" }}
+                >
+                  <span className="plate-north">
+                    N<br />↑
+                  </span>
+                  <div className="scale-line">
+                    0<span>1 км</span>
+                  </div>
+                </div>
+              </article>
+              <section className="collection">
+                <div className="section-title">
+                  <h2>
+                    Локальная библиотека <span>{list.length}</span>
+                  </h2>
+                  <button className="secondary" onClick={() => need("import")}>
+                    <Upload size={16} />
+                    Импорт JSON
+                  </button>
+                </div>
+                {libraryError ? (
+                  <p role="alert">{libraryError}</p>
+                ) : list.length ? (
+                  <div className="cards">
+                    {list.map((en) => (
+                      <article className="card" key={en.deck.id}>
+                        <button
+                          className="card-open"
+                          onClick={() => open(en.deck, en.revision)}
+                        >
+                          <div className="card-preview">
+                            <Stage slide={en.deck.slides[0]} />
+                          </div>
+                          <b>{en.deck.title}</b>
+                          <small>
+                            {en.deck.slides.length} слайд. ·{" "}
+                            {new Date(en.updated).toLocaleDateString("ru-RU")}
+                          </small>
+                        </button>
+                        <button
+                          className="icon"
+                          title="Удалить локальную методичку"
+                          onClick={() => remove(en)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty">
+                    <span className="folder">
+                      <FolderOpen strokeWidth={1.4} />
+                    </span>
+                    <h3>
+                      {allowed
+                        ? "Здесь появятся ваши методички"
+                        : "Библиотека преподавателя"}
+                    </h3>
+                    <p>
+                      {allowed
+                        ? "Создайте первую методичку или импортируйте готовый JSON."
+                        : "Войдите в аккаунт владельца, чтобы открыть локальные методички."}
+                    </p>
+                    {!allowed && (
+                      <button
+                        className="secondary"
+                        onClick={() => dialog("login")}
+                      >
+                        Войти
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+            </>
+          ) : page === "guide" ? (
+            <article className="guide">
+              {guide
+                .split("\n")
+                .filter(Boolean)
+                .filter((l) => !l.startsWith("# "))
+                .map((line, i) =>
+                  line.startsWith("## ") ? (
+                    <h2 key={i}>{line.slice(3)}</h2>
+                  ) : (
+                    <p key={i}>{line}</p>
+                  ),
+                )}
+            </article>
+          ) : (
+            <section>
+              {owner ? (
+                pubs.length ? (
+                  pubs.map((id) => (
+                    <div className="pub" key={id}>
+                      <Globe2 />
+                      <div>
+                        <strong>
+                          {list.find((en) => en.deck.id === id)?.deck.title ||
+                            "Опубликованная методичка"}
+                        </strong>
+                        <a href={link(id)}>{link(id)}</a>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (confirm("Снять методичку с публикации?"))
+                            task("Снимаем с публикации…", async () => {
+                              await unpublish(id);
+                              setPubs(await listPublished());
+                            });
+                        }}
+                      >
+                        Снять с публикации
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="empty">
+                    <Globe2 />
+                    <h3>Публикаций пока нет</h3>
+                    <p>
+                      В редакторе откройте меню действий и выберите
+                      «Опубликовать».
+                    </p>
+                  </div>
+                )
+              ) : (
+                <div className="empty">
+                  <Globe2 />
+                  <h3>Публикации владельца</h3>
+                  <p>Гости открывают занятия по прямой ссылке.</p>
+                  <button className="secondary" onClick={() => dialog("login")}>
+                    Вход преподавателя
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+  return (
+    <>
+      {hash.startsWith("#p/") ? (
+        publicDeck ? (
+          <Viewer initialMode="slides" deck={publicDeck} onClose={() => (location.hash = "")} />
+        ) : (
+          <main className="empty">
+            <BookOpen />
+            <p>{publicError || "Открываем методичку…"}</p>
+            <button onClick={() => (location.hash = "")}>В библиотеку</button>
+          </main>
+        )
+      ) : watch ? (
+        <Viewer deck={watch} onClose={() => setWatch(null)} />
+      ) : doc && allowed ? (
+        <Editor
+          key={doc.id}
+          deck={doc}
+          change={change}
+          status={status}
+          back={() => task("Сохранение…", closeEditor)}
+          view={() => setWatch(doc)}
+          action={act}
+          notice={notice}
+        />
+      ) : (
+        home
+      )}
+      {modal && (
+        <div className="overlay">
+          <section
+            className="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dialog-title"
+          >
+            <button
+              className="dismiss icon"
+              aria-label="Закрыть"
+              onClick={() => setModal("")}
+            >
+              <X size={19} />
+            </button>
+            <div className="dialog-icon">
+              {modal === "import" ? (
+                <FileJson />
+              ) : modal === "link" ? (
+                <Link2 />
+              ) : modal === "login" ? (
+                <UserRound />
+              ) : (
+                <Layers3 />
+              )}
+            </div>
+            <h2 id="dialog-title">
+              {
+                {
+                  create: "Новая методичка",
+                  import: "Импорт JSON",
+                  login: "Вход преподавателя",
+                  link: "Методичка опубликована",
+                }[modal]
+              }
+            </h2>
+            {modal === "link" ? (
+              <>
+                <p>По ссылке доступны слайды и заметки преподавателя.</p>
+                <input
+                  readOnly
+                  value={value}
+                  onFocus={(e) => e.target.select()}
+                />
+                <button
+                  className="primary"
+                  onClick={() =>
+                    task("Копирование…", async () => {
+                      await navigator.clipboard.writeText(value);
+                      notice("Ссылка скопирована.");
+                    })
+                  }
+                >
+                  Скопировать ссылку
+                </button>
+              </>
+            ) : (
+              <form onSubmit={submit}>
+                {modal === "import" ? (
+                  <>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => importer.current?.click()}
+                    >
+                      <Upload />
+                      Выбрать файл JSON
+                    </button>
+                    <label>
+                      Или вставьте JSON
+                      <textarea
+                        required
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <label>
+                    {modal === "login" ? "Электронная почта" : "Название"}
+                    <input
+                      autoFocus
+                      required
+                      type={modal === "login" ? "email" : "text"}
+                      maxLength={200}
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                      placeholder={
+                        modal === "login"
+                          ? "teacher@example.org"
+                          : "Например, Тестовый урок"
+                      }
+                    />
+                  </label>
+                )}
+                {modal === "login" && (
+                  <label>
+                    Пароль
+                    <input
+                      required
+                      type="password"
+                      autoComplete="current-password"
+                      value={pw}
+                      onChange={(e) => password(e.target.value)}
+                    />
+                  </label>
+                )}
+                <button className="primary" type="submit">
+                  {modal === "create"
+                    ? "Создать"
+                    : modal === "import"
+                      ? "Импортировать"
+                      : "Войти"}
+                </button>
+              </form>
+            )}
+          </section>
+        </div>
+      )}
+      <input
+        type="file"
+        hidden
+        ref={importer}
+        accept=".json,application/json"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f)
+            task("Импорт…", async () => {
+              if (f.size > MAX_DOCUMENT_BYTES)
+                throw new Error("Файл превышает 64 МБ.");
+              await importData(await f.text());
+            });
+        }}
+      />
+      {busy && (
+        <div className="working" role="status">
+          {busy}
+        </div>
+      )}
+      {message && (
+        <div className="toast" role="status">
+          <span>{message}</span>
+          <button aria-label="Закрыть уведомление" onClick={() => notice("")}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+createRoot(document.getElementById("root")!).render(<App />);
