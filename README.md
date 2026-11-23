@@ -16,8 +16,14 @@ python -m http.server 8000 --bind 127.0.0.1 --directory dist
 
 Установите Node.js 24 LTS и распакуйте архив. Откройте терминал в каталоге с package.json.
 
+
+
 ```sh
-npm ci
+
+npx npm-check-updates@latest
+npx npm-check-updates@latest -u
+
+npm install
 npm run dev
 ```
 
