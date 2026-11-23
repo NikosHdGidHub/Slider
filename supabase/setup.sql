@@ -2,7 +2,7 @@
 begin;
 do $setup$
 declare
-  admin_id constant uuid := '00000000-0000-0000-0000-000000000000';
+  admin_id constant uuid := '43649fda-26cb-4b20-bbc1-0a398e9d8ce3';
   scope text := 'bucket_id in (''images'', ''presentations'')';
   allowed text := format('(select auth.uid()) = %L::uuid', admin_id);
   action text;
