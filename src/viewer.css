@@ -259,3 +259,37 @@ body.atlas-projector {
     gap: 0.3rem;
   }
 }
+@font-face {
+  font-family: "Atlas Sans";
+  src: url("./assets/fonts/Sans.woff") format("woff");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atlas Serif";
+  src: url("./assets/fonts/Serif.woff") format("woff");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atlas Mono";
+  src: url("./assets/fonts/SansMono.woff") format("woff");
+  font-display: swap;
+}
+.atlas-shape {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.atlas-slide-text {
+  position: relative;
+}
+.overflow-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  background: #782e1c;
+  color: white;
+  padding: 4px 8px;
+  font: 16px Arial;
+  z-index: 2;
+}

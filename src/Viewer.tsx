@@ -191,7 +191,7 @@ export function Viewer({
           </header>
           <div className="atlas-teacher-grid">
             <div className="atlas-preview-panel">
-              <Stage slide={slide} />
+              <Stage deck={deck} slide={slide} />
               <nav className="atlas-switch" aria-label="Листать слайды">
                 {navigation}
               </nav>
@@ -213,7 +213,7 @@ export function Viewer({
                 aria-current={i === index ? "step" : undefined}
                 onClick={() => setIndex(i)}
               >
-                <Stage slide={s} />
+                <Stage deck={deck} slide={s} />
                 <span>{i + 1}</span>
               </button>
             ))}
@@ -228,7 +228,7 @@ export function Viewer({
               showControls();
             }}
           >
-            <Stage slide={slide} />
+            <Stage deck={deck} slide={slide} />
           </div>
           <nav
             className={"atlas-slide-tools" + (tools ? "" : " atlas-tools-idle")}
@@ -266,7 +266,7 @@ export function Viewer({
             className="atlas-screen-frame"
             onDoubleClick={() => void full(screen.document.documentElement)}
           >
-            <Stage slide={slide} />
+            <Stage deck={deck} slide={slide} />
           </div>,
           screen.document.body,
         )}

@@ -40,8 +40,8 @@ def run(page, ctx, browser, url, temp):
     create()
     click("Добавить текст")
     page.get_by_role("textbox",name="Текст",exact=True).fill("Высота")
-    page.get_by_label("Размер шрифта").fill("64")
-    page.get_by_label("Цвет текста").fill("#113311")
+    page.get_by_role("spinbutton",name="Размер шрифта",exact=True).fill("64")
+    page.get_by_label("Цвет текста").filter(visible=True).fill("#113311")
     item = page.locator(".canvas .atlas-item").first
     box = item.bounding_box()
     page.mouse.move(box['x']+10,box['y']+10)
@@ -91,6 +91,7 @@ def run(page, ctx, browser, url, temp):
     with freshpage.expect_file_chooser() as chooser:
         freshpage.get_by_role("button",name="Выбрать файл JSON").click()
     chooser.value.set_files(output)
+    freshpage.get_by_role("button",name="Открыть в редакторе").click()
     freshpage.locator(".thumb").nth(1).click()
     expect(freshpage.locator(".canvas img")).to_be_visible()
     expect(freshpage.get_by_role("textbox",name="Заметки преподавателя")).to_have_value("Офлайн-заметка")

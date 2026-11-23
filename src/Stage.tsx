@@ -1,14 +1,21 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { Item, Slide } from "./model";
+import type { Item, Slide, Deck } from "./model";
 import "./viewer.css";
+import { PathHandles } from "./PathHandles";
+import { TextBlock, VectorShape, useFonts } from "./Artwork";
 
 interface StageProps {
   slide: Slide;
+  deck?: Deck;
+  onText?: (id: string, fields: Partial<Item>) => void;
+  onNodes?: (id: string, nodes: NonNullable<Item["nodes"]>) => void;
+  onEditText?: (id: string) => void;
+  diagnostics?: boolean;
   selected?: string;
   onSelect?: (id: string) => void;
   onMove?: (id: string, x: number, y: number) => void;
-  onResize?: (id: string, w: number, h: number) => void;
+  onResize?: (id: string, w: number, h: number, x: number, y: number) => void;
 }
 
 function SlideImage({
@@ -41,12 +48,18 @@ function SlideImage({
 
 export function Stage({
   slide,
+  deck,
+  onEditText,
+  diagnostics,
+  onNodes,
+  onText,
   selected,
   onSelect,
   onMove,
   onResize,
 }: StageProps) {
   const host = useRef<HTMLDivElement>(null);
+  const fontError = useFonts(host, deck);
   const [scale, setScale] = useState(0);
   const drag = useRef<{
     item: Item;
@@ -75,7 +88,7 @@ export function Stage({
     e.stopPropagation();
     e.preventDefault();
     onSelect(item.id);
-    e.currentTarget.setPointerCapture(e.pointerId);
+    (e.target as Element).setPointerCapture(e.pointerId);
     drag.current = {
       item,
       x: e.clientX,
@@ -92,25 +105,33 @@ export function Stage({
     const dy = (e.clientY - run.y) / run.scale;
     const item = run.item;
     if (run.resize) {
-      const maxW = 1280 - item.x;
-      const maxH = 720 - item.y;
+      const angle = ((item.rotation ?? 0) * Math.PI) / 180,
+        c = Math.cos(angle),
+        s = Math.sin(angle);
+      const fx = item.flipX ? -1 : 1,
+        fy = item.flipY ? -1 : 1;
+      const localX = (c * dx + s * dy) * fx,
+        localY = (-s * dx + c * dy) * fy;
+      const transformed = !!(item.rotation || item.flipX || item.flipY);
+      const maxW = transformed ? 8192 : Math.max(1, 1280 - item.x),
+        maxH = transformed ? 8192 : Math.max(1, 720 - item.y);
+      let w = Math.min(maxW, Math.max(Math.min(24, item.w), item.w + localX));
+      let h = Math.min(maxH, Math.max(Math.min(24, item.h), item.h + localY));
       if (item.type === "image") {
-        const ratio = item.w / item.h;
-        const target =
-          Math.abs(dx) >= Math.abs(dy) ? item.w + dx : (item.h + dy) * ratio;
-        const w = Math.min(
-          maxW,
-          maxH * ratio,
-          Math.max(1, Math.min(24, item.w), target),
-        );
-        onResize?.(item.id, w, w / ratio);
-      } else {
-        onResize?.(
-          item.id,
-          Math.min(maxW, Math.max(24, item.w + dx)),
-          Math.min(maxH, Math.max(24, item.h + dy)),
-        );
+        const ratio = item.w / item.h,
+          target = Math.abs(localX) >= Math.abs(localY) ? w : h * ratio;
+        w = Math.min(maxW, maxH * ratio, target);
+        h = w / ratio;
       }
+      const dw = w - item.w,
+        dh = h - item.h;
+      onResize?.(
+        item.id,
+        w,
+        h,
+        item.x + (dw * fx * c - dh * fy * s - dw) / 2,
+        item.y + (dw * fx * s + dh * fy * c - dh) / 2,
+      );
     } else {
       onMove?.(
         item.id,
@@ -140,28 +161,49 @@ export function Stage({
         }}
       >
         {slide.background && <SlideImage src={slide.background} background />}
+        {fontError && <span className="overflow-badge">{fontError}</span>}
         {slide.items.map((item) => (
           <div
             key={item.id}
             className={
               "atlas-item" + (selected === item.id ? " atlas-selected" : "")
             }
-            style={{ left: item.x, top: item.y, width: item.w, height: item.h }}
+            style={{
+              left: item.x,
+              top: item.y,
+              width: item.w,
+              height: item.h,
+              opacity: item.opacity,
+              transform: `rotate(${item.rotation ?? 0}deg) scale(${item.flipX ? -1 : 1},${item.flipY ? -1 : 1})`,
+              filter: item.shadow
+                ? `drop-shadow(${item.shadow.x}px ${item.shadow.y}px ${item.shadow.blur}px ${item.shadow.color})`
+                : undefined,
+            }}
+            onDoubleClick={() => item.type !== "image" && onEditText?.(item.id)}
             onPointerDown={(e) => start(e, item)}
           >
             {item.type === "image" ? (
               <SlideImage src={item.src} />
             ) : (
-              <div
-                className="atlas-slide-text"
-                style={{
-                  color: item.color,
-                  fontSize: item.size,
-                  textAlign: item.align,
-                }}
-              >
-                {item.text}
-              </div>
+              <>
+                {item.type === "shape" && <VectorShape item={item} />}
+                {(item.type === "text" || item.text || item.paragraphs) && (
+                  <TextBlock
+                    onText={
+                      onText ? (fields) => onText(item.id, fields) : undefined
+                    }
+                    item={item}
+                    deck={deck}
+                    editing={!!onSelect || !!diagnostics}
+                  />
+                )}
+              </>
+            )}
+            {selected === item.id && onNodes && item.nodes && (
+              <PathHandles
+                item={item}
+                change={(nodes) => onNodes(item.id, nodes)}
+              />
             )}
             {selected === item.id && onResize && (
               <span

@@ -1,3 +1,4 @@
+import { shapes } from "./schema";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -16,14 +17,37 @@ import {
   Palette,
   RotateCcw,
 } from "lucide-react";
+import type { StyleLibrary } from "./styleLibrary";
+import {
+  TextPanel,
+  ShapePanel,
+  GeometryPanel,
+  StylesPanel,
+  Num,
+} from "./Properties";
+import { applyLayout, type Template } from "./catalog";
+import { importSVG } from "./vectorImport";
 import { Stage } from "./Stage";
-import { newSlide, newText, type Deck, type Item, type Slide } from "./model";
+import {
+  newSlide,
+  newText,
+  newShape,
+  validateDeck,
+  type Deck,
+  type Item,
+  type Slide,
+} from "./model";
 import { optimize } from "./media";
 import { cloudImage } from "./publication";
 import { client } from "./cloud";
 
 type Props = {
   deck: Deck;
+  styleLibrary?: StyleLibrary;
+  templates?: Template[];
+  saveTemplate?: () => void;
+  description?: string;
+  describe?: (v: string) => void;
   change: (f: (d: Deck) => Deck) => void;
   back: () => void;
   view: () => void;
@@ -33,6 +57,11 @@ type Props = {
 };
 export function Editor({
   deck,
+  styleLibrary,
+  templates = [],
+  saveTemplate,
+  description,
+  describe,
   change,
   back,
   view,
@@ -57,7 +86,15 @@ export function Editor({
   function patch(id: string, fields: Partial<Item>) {
     modify((s) => ({
       ...s,
-      items: s.items.map((it) => (it.id === id ? { ...it, ...fields } : it)),
+      items: s.items.map((it) =>
+        it.id === id
+          ? (Object.fromEntries(
+              Object.entries({ ...it, ...fields }).filter(
+                ([, value]) => value !== undefined,
+              ),
+            ) as unknown as Item)
+          : it,
+      ),
     }));
   }
   function removeItem() {
@@ -91,7 +128,17 @@ export function Editor({
     });
   }
   function addSlide() {
-    const fresh = newSlide();
+    const normal = deck.slides.find((s) => s.kind === "normal");
+    const fresh = normal
+      ? {
+          ...structuredClone(normal),
+          id: crypto.randomUUID(),
+          notes: "",
+          items: normal.items
+            .filter((o) => o.role === "decoration")
+            .map((o) => ({ ...structuredClone(o), id: crypto.randomUUID() })),
+        }
+      : newSlide();
     change((d) => ({
       ...d,
       slides: [
@@ -119,6 +166,15 @@ export function Editor({
   async function insert(file: File) {
     const bg = background.current;
     try {
+      if (!bg && (file.type === "image/svg+xml" || /\.svg$/i.test(file.name))) {
+        const items = await importSVG(file);
+        const next = { ...slide, items: [...slide.items, ...items] };
+        validateDeck({ ...deck, slides: [next] });
+        modify((s) => ({ ...s, items: [...s.items, ...items] }));
+        select(items[0].id);
+        notice("SVG добавлен как редактируемые векторные фигуры.");
+        return;
+      }
       const { src, width, height } = await optimize(file);
       if (bg) modify((s) => ({ ...s, background: src }));
       else {
@@ -171,37 +227,43 @@ export function Editor({
           <Play size={16} />
           Показать
         </button>
-        <div className="menu-anchor">
-          <button
-            className="icon"
-            aria-label="Действия с методичкой"
-            onClick={() => setMenu(!menu)}
-          >
-            <MoreHorizontal />
+        {saveTemplate ? (
+          <button className="secondary" onClick={saveTemplate}>
+            Сохранить шаблон
           </button>
-          {menu && (
-            <div className="popover">
-              {(
-                [
-                  ["export", "Экспортировать JSON", FileDown],
-                  ["offline", "Подготовить к офлайн-показу", WifiOff],
-                  ["publish", "Опубликовать", UploadCloud],
-                ] as const
-              ).map(([key, label, Icon]) => (
-                <button
-                  key={key}
-                  onClick={() => {
-                    setMenu(false);
-                    action(key);
-                  }}
-                >
-                  <Icon size={17} />
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="menu-anchor">
+            <button
+              className="icon"
+              aria-label="Действия с методичкой"
+              onClick={() => setMenu(!menu)}
+            >
+              <MoreHorizontal />
+            </button>
+            {menu && (
+              <div className="popover">
+                {(
+                  [
+                    ["export", "Экспортировать JSON", FileDown],
+                    ["offline", "Подготовить к офлайн-показу", WifiOff],
+                    ["publish", "Опубликовать", UploadCloud],
+                  ] as const
+                ).map(([key, label, Icon]) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setMenu(false);
+                      action(key);
+                    }}
+                  >
+                    <Icon size={17} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </header>
       <div className="edit-grid">
         <aside className="strip">
@@ -218,7 +280,7 @@ export function Editor({
               }}
             >
               <b>{i + 1}</b>
-              <Stage slide={s} />
+              <Stage deck={deck} slide={s} />
             </button>
           ))}
           <button className="secondary full" onClick={addSlide}>
@@ -238,6 +300,16 @@ export function Editor({
               <Type />
               Добавить текст
             </button>
+            <button
+              onClick={() => {
+                const shape = newShape();
+                modify((s) => ({ ...s, items: [...s.items, shape] }));
+                select(shape.id);
+              }}
+            >
+              <Plus />
+              Фигура
+            </button>
             <button onClick={() => pickImage()}>
               <ImagePlus />
               Изображение
@@ -245,11 +317,20 @@ export function Editor({
           </div>
           <div className="canvas">
             <Stage
+              deck={deck}
               slide={slide}
               selected={sel}
+              onText={patch}
+              onNodes={(id, nodes) => patch(id, { nodes })}
+              onEditText={(id) => {
+                select(id);
+                requestAnimationFrame(() =>
+                  document.getElementById("atlas-edit-text")?.focus(),
+                );
+              }}
               onSelect={select}
               onMove={(id, x, y) => patch(id, { x, y })}
-              onResize={(id, w, h) => patch(id, { w, h })}
+              onResize={(id, w, h, x, y) => patch(id, { w, h, x, y })}
             />
           </div>
           <label className="notes">
@@ -262,59 +343,64 @@ export function Editor({
           </label>
         </main>
         <aside className="inspector">
+          {slide.items.length > 0 && (
+            <label>
+              Объекты слайда
+              <select
+                aria-label="Объекты слайда"
+                value={sel}
+                onChange={(e) => select(e.target.value)}
+              >
+                <option value="">Слайд целиком</option>
+                {slide.items.map((o, i) => (
+                  <option key={o.id} value={o.id}>
+                    {i + 1}.{" "}
+                    {o.text.slice(0, 32) ||
+                      (o.type === "image"
+                        ? "Изображение"
+                        : (shapes[o.shape!] ?? "Текст"))}
+                    {o.role === "decoration" ? " · оформление" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <h3>{item ? "Свойства объекта" : "Свойства слайда"}</h3>
           {item ? (
             <>
-              {item.type === "text" && (
-                <>
-                  <label>
-                    Текст
-                    <textarea
-                      value={item.text}
-                      onChange={(e) => patch(item.id, { text: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Размер шрифта
-                    <input
-                      type="number"
-                      min="8"
-                      max="240"
-                      value={item.size}
-                      onChange={(e) =>
-                        patch(item.id, {
-                          size: Math.max(8, Math.min(240, +e.target.value)),
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Цвет текста
-                    <input
-                      type="color"
-                      value={item.color}
-                      onChange={(e) =>
-                        patch(item.id, { color: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Выравнивание
-                    <select
-                      value={item.align}
-                      onChange={(e) =>
-                        patch(item.id, {
-                          align: e.target.value as Item["align"],
-                        })
-                      }
-                    >
-                      <option value="left">По левому краю</option>
-                      <option value="center">По центру</option>
-                      <option value="right">По правому краю</option>
-                    </select>
-                  </label>
-                </>
+              {item.type === "shape" && (
+                <ShapePanel item={item} patch={(v) => patch(item.id, v)} />
               )}
+              {item.type !== "image" && (
+                <TextPanel
+                  key={item.id}
+                  deck={deck}
+                  item={item}
+                  patch={(v) => patch(item.id, v)}
+                />
+              )}
+              <GeometryPanel item={item} patch={(v) => patch(item.id, v)} />
+              <div className="field-pair">
+                {[-1, 1].map((delta) => (
+                  <button
+                    key={delta}
+                    disabled={!slide.items[slide.items.indexOf(item) + delta]}
+                    onClick={() =>
+                      modify((s) => {
+                        const items = s.items.slice(),
+                          i = items.findIndex((o) => o.id === sel);
+                        [items[i], items[i + delta]] = [
+                          items[i + delta],
+                          items[i],
+                        ];
+                        return { ...s, items };
+                      })
+                    }
+                  >
+                    {delta < 0 ? "Слой ниже" : "Слой выше"}
+                  </button>
+                ))}
+              </div>
               <button onClick={removeItem}>
                 <Trash2 />
                 Удалить объект
@@ -326,6 +412,94 @@ export function Editor({
             </>
           ) : (
             <>
+              {describe && (
+                <label>
+                  Описание шаблона
+                  <textarea
+                    maxLength={2000}
+                    value={description}
+                    onChange={(e) => describe(e.target.value)}
+                  />
+                </label>
+              )}
+              <label>
+                Роль слайда
+                <select
+                  value={slide.kind ?? "normal"}
+                  onChange={(e) =>
+                    modify((s) => ({
+                      ...s,
+                      kind: e.target.value as Slide["kind"],
+                    }))
+                  }
+                >
+                  <option value="normal">Обычный</option>
+                  <option value="title">Титульный</option>
+                  <option value="end">Завершающий</option>
+                </select>
+              </label>
+              {(slide.kind ?? "normal") === "normal" && (
+                <label>
+                  Компоновка
+                  <select
+                    aria-label="Применить компоновку"
+                    value=""
+                    onChange={(e) => {
+                      const t = templates.find(
+                        (t) => t.deck.id === e.target.value,
+                      );
+                      if (!t) return;
+                      if (
+                        slide.items.some((o) => o.role !== "decoration") &&
+                        !confirm(
+                          "Заменить содержимое слайда? Оформление и заметки сохранятся.",
+                        )
+                      )
+                        return;
+                      try {
+                        const next = applyLayout(deck, slide.id, t);
+                        change(() => next);
+                      } catch (err) {
+                        notice((err as Error).message);
+                      }
+                    }}
+                  >
+                    <option value="">Выберите компоновку</option>
+                    {templates
+                      .filter((t) => t.kind === "layout")
+                      .map((t) => (
+                        <option key={t.deck.id} value={t.deck.id}>
+                          {t.deck.title}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
+              <details>
+                <summary>Область содержимого</summary>
+                {(["x", "y", "w", "h"] as const).map((k) => (
+                  <Num
+                    key={k}
+                    label={k}
+                    value={(slide.area ?? { x: 0, y: 0, w: 1280, h: 720 })[k]}
+                    min={k === "x" || k === "y" ? 0 : 1}
+                    max={k === "x" || k === "w" ? 1280 : 720}
+                    change={(v) =>
+                      modify((s) => ({
+                        ...s,
+                        area: {
+                          x: 0,
+                          y: 0,
+                          w: 1280,
+                          h: 720,
+                          ...s.area,
+                          [k]: v,
+                        },
+                      }))
+                    }
+                  />
+                ))}
+              </details>
               <label>
                 Цвет фона
                 <input
@@ -361,6 +535,12 @@ export function Editor({
               </button>
             </>
           )}
+          <StylesPanel
+            library={styleLibrary}
+            deck={deck}
+            change={change}
+            notice={notice}
+          />
           <hr />
           <h3>Порядок слайдов</h3>
           <button disabled={!idx} onClick={() => reorder(-1)}>

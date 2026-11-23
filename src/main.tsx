@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BookOpen,
@@ -28,6 +28,12 @@ import { embedImages } from "./media";
 import { adminId, client, listPublished, readPublic, unpublish } from "./cloud";
 import { entries, saveEntry, type Entry } from "./storage";
 import { publish } from "./publication";
+import { collectStyles } from "./styleLibrary";
+import { TemplateLibrary } from "./TemplateLibrary";
+import { ImportPreview } from "./ImportPreview";
+import { builtins, validateTemplate, type Template } from "./catalog";
+import { getCatalog, saveLocal, type CatalogRow } from "./templateStore";
+import { instructions, download } from "./instructions";
 import { Editor } from "./Editor";
 import { Viewer } from "./Viewer";
 import { Stage } from "./Stage";
@@ -69,6 +75,77 @@ function App() {
     [libraryError, libError] = useState(""),
     importer = useRef<HTMLInputElement>(null);
   const allowed = localMode || owner;
+  const [catalog, setCatalog] = useState<CatalogRow[]>(
+    builtins.map((template) => ({ template, builtin: true })),
+  );
+  const [catalogKind, setCatalogKind] =
+    useState<Template["kind"]>("presentation");
+  const [scope, setScope] = useState("");
+  const [editingTemplate, setEditingTemplate] = useState<{
+    t: Template;
+    row?: CatalogRow;
+  } | null>(null);
+  const [preview, setPreview] = useState<Deck | null>(null);
+  const access = useRef(allowed);
+  access.current = allowed;
+  async function refreshCatalog() {
+    const result = await getCatalog(allowed, owner);
+    if (access.current === allowed) {
+      setCatalog(result.rows);
+      setScope(result.scope);
+    }
+    return result;
+  }
+  const visibleRows = allowed
+    ? catalog
+    : builtins.map((template) => ({ template, builtin: true }));
+  useEffect(() => {
+    void refreshCatalog().catch((e) => notice(errorText(e)));
+    if (!allowed) setEditingTemplate(null);
+  }, [allowed, online]);
+  const styleLibrary = useMemo(
+    () =>
+      collectStyles([
+        ...visibleRows.map((r) => r.template.deck),
+        ...(allowed ? list.map((e) => e.deck) : []),
+      ]),
+    [catalog, allowed, list],
+  );
+  async function getInstructions() {
+    await task("Формируем инструкцию…", async () => {
+      const result = await refreshCatalog();
+      if (allowed !== access.current) return;
+      const templates = await Promise.all(
+        result.rows.map(async ({ template }) => {
+          if (
+            !navigator.onLine ||
+            !template.deck.slides.some(
+              (s) =>
+                s.background?.startsWith("https:") ||
+                s.items.some((o) => o.src.startsWith("https:")),
+            )
+          )
+            return template;
+          try {
+            return { ...template, deck: await embedImages(template.deck) };
+          } catch {
+            return template;
+          }
+        }),
+      );
+      if (allowed !== access.current) return;
+      const styleCatalog = collectStyles([
+        ...templates.map((t) => t.deck),
+        ...(allowed ? (await entries()).map((e) => e.deck) : []),
+      ]);
+      download(
+        "atlas-instructions.txt",
+        instructions(templates, result.scope, styleCatalog),
+        "text/plain",
+      );
+      notice(result.scope + ". Инструкция скачана.");
+    });
+  }
   async function refresh() {
     setList(await entries());
     libError("");
@@ -84,6 +161,7 @@ function App() {
     }
   }
   function dialog(name: string) {
+    setPreview(null);
     setValue("");
     password("");
     setModal(name);
@@ -199,8 +277,23 @@ function App() {
   }
   async function importData(raw: string) {
     const d = validateDeck(raw);
-    d.id = crypto.randomUUID();
-    await insert(d);
+    const used = new Set<string | undefined>(
+      d.theme.styles.map((s) => s.values.font),
+    );
+    for (const s of d.slides)
+      for (const o of s.items) {
+        used.add(o.overrides?.font);
+        o.paragraphs?.forEach((p) => p.runs.forEach((r) => used.add(r.font)));
+      }
+    for (const f of styleLibrary.fonts)
+      if (used.has(f.id) && !d.resources.fonts.some((a) => a.id === f.id))
+        d.resources.fonts.push(structuredClone(f));
+    if (new Blob([JSON.stringify(d)]).size > MAX_DOCUMENT_BYTES)
+      throw new Error("Со встроенными шрифтами файл превышает 64 МиБ.");
+    validateDeck(d);
+    setValue(raw);
+    setPreview(d);
+    setModal("preview");
   }
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -270,6 +363,13 @@ function App() {
             throw new Error(
               "Для публикации подключите Supabase и войдите как владелец.",
             );
+          if (
+            d.resources.fonts.length &&
+            !confirm(
+              "Шрифты будут встроены в публичную презентацию и доступны зрителям. Лицензия разрешает распространение?",
+            )
+          )
+            return;
           await publish(d);
           setPubs((p) => Array.from(new Set([...p, d.id])));
           setValue(link(d.id));
@@ -306,6 +406,7 @@ function App() {
   }
   const nav = [
     ["library", "Мои методички", Library],
+    ["templates", "Шаблоны", Layers3],
     ["published", "Опубликованные", Globe2],
     ["guide", "Руководство", BookOpenText],
   ] as const;
@@ -389,8 +490,19 @@ function App() {
                 ? "Мои методички"
                 : page === "guide"
                   ? "Руководство"
-                  : "Опубликованные"}
+                  : page === "templates"
+                    ? "Шаблоны"
+                    : "Опубликованные"}
             </h1>
+            {(page === "library" || page === "templates") && (
+              <button
+                className="secondary instructions-button"
+                onClick={getInstructions}
+              >
+                <FileJson size={17} />
+                Скачать инструкцию для ИИ
+              </button>
+            )}
             {page === "library" && (
               <button className="primary" onClick={() => need("create")}>
                 <Plus size={18} />
@@ -453,7 +565,7 @@ function App() {
                           onClick={() => open(en.deck, en.revision)}
                         >
                           <div className="card-preview">
-                            <Stage slide={en.deck.slides[0]} />
+                            <Stage deck={en.deck} slide={en.deck.slides[0]} />
                           </div>
                           <b>{en.deck.title}</b>
                           <small>
@@ -497,6 +609,24 @@ function App() {
                   </div>
                 )}
               </section>
+            </>
+          ) : page === "templates" ? (
+            <>
+              <p className="catalog-scope">{scope}</p>
+              <TemplateLibrary
+                kind={catalogKind}
+                setKind={setCatalogKind}
+                rows={visibleRows}
+                allowed={allowed}
+                onlineOwner={owner && online}
+                create={insert}
+                view={setWatch}
+                edit={(t, row) => setEditingTemplate({ t, row })}
+                refresh={async () => {
+                  await refreshCatalog();
+                }}
+                notice={notice}
+              />
             </>
           ) : page === "guide" ? (
             <article className="guide">
@@ -569,7 +699,11 @@ function App() {
     <>
       {hash.startsWith("#p/") ? (
         publicDeck ? (
-          <Viewer initialMode="slides" deck={publicDeck} onClose={() => (location.hash = "")} />
+          <Viewer
+            initialMode="slides"
+            deck={publicDeck}
+            onClose={() => (location.hash = "")}
+          />
         ) : (
           <main className="empty">
             <BookOpen />
@@ -579,9 +713,46 @@ function App() {
         )
       ) : watch ? (
         <Viewer deck={watch} onClose={() => setWatch(null)} />
+      ) : editingTemplate && allowed ? (
+        <Editor
+          key={editingTemplate.t.deck.id}
+          deck={editingTemplate.t.deck}
+          status="Редактор шаблона"
+          styleLibrary={styleLibrary}
+          templates={visibleRows.map((r) => r.template)}
+          description={editingTemplate.t.description}
+          describe={(description) =>
+            setEditingTemplate((v) => v && { ...v, t: { ...v.t, description } })
+          }
+          change={(fn) =>
+            setEditingTemplate(
+              (v) => v && { ...v, t: { ...v.t, deck: fn(v.t.deck) } },
+            )
+          }
+          back={() => {
+            if (confirm("Закрыть редактор без сохранения шаблона?"))
+              setEditingTemplate(null);
+          }}
+          saveTemplate={() =>
+            task("Сохраняем шаблон…", async () => {
+              const t = validateTemplate(editingTemplate.t);
+              await saveLocal(t, editingTemplate.row);
+              await refreshCatalog();
+              setEditingTemplate(null);
+              setCatalogKind(t.kind);
+              navigate("templates");
+              notice("Шаблон сохранён.");
+            })
+          }
+          view={() => setWatch(editingTemplate.t.deck)}
+          action={() => {}}
+          notice={notice}
+        />
       ) : doc && allowed ? (
         <Editor
           key={doc.id}
+          styleLibrary={styleLibrary}
+          templates={visibleRows.map((r) => r.template)}
           deck={doc}
           change={change}
           status={status}
@@ -596,7 +767,9 @@ function App() {
       {modal && (
         <div className="overlay">
           <section
-            className="dialog"
+            className={
+              "dialog " + (modal === "preview" ? "import-preview" : "")
+            }
             role="dialog"
             aria-modal="true"
             aria-labelledby="dialog-title"
@@ -622,6 +795,7 @@ function App() {
             <h2 id="dialog-title">
               {
                 {
+                  preview: "Предпросмотр импорта",
                   create: "Новая методичка",
                   import: "Импорт JSON",
                   login: "Вход преподавателя",
@@ -629,7 +803,18 @@ function App() {
                 }[modal]
               }
             </h2>
-            {modal === "link" ? (
+            {modal === "preview" && preview ? (
+              <ImportPreview
+                deck={preview}
+                back={() => setModal("import")}
+                accept={() =>
+                  task("Импорт…", async () => {
+                    await insert({ ...preview, id: crypto.randomUUID() });
+                    setPreview(null);
+                  })
+                }
+              />
+            ) : modal === "link" ? (
               <>
                 <p>По ссылке доступны слайды и заметки преподавателя.</p>
                 <input
@@ -724,7 +909,9 @@ function App() {
             task("Импорт…", async () => {
               if (f.size > MAX_DOCUMENT_BYTES)
                 throw new Error("Файл превышает 64 МБ.");
-              await importData(await f.text());
+              const raw = await f.text();
+              setValue(raw);
+              await importData(raw);
             });
         }}
       />

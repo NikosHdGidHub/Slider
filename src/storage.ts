@@ -1,11 +1,17 @@
-import type { Deck } from "./model";
+import { validateTemplate, type Template } from "./catalog";
+import { validateDeck, type Deck } from "./model";
 
 export type Entry = { deck: Deck; updated: number; revision: number };
 const opened = new Promise<IDBDatabase>((resolve, reject) => {
-  const request = indexedDB.open("atlas-lessons-v1", 1);
+  const request = indexedDB.open("atlas-lessons-v1", 2);
   request.onupgradeneeded = () => {
-    request.result.createObjectStore("lessons", { keyPath: "deck.id" });
-    request.result.createObjectStore("images");
+    if (!request.result.objectStoreNames.contains("lessons"))
+      request.result.createObjectStore("lessons", { keyPath: "deck.id" });
+    if (!request.result.objectStoreNames.contains("images"))
+      request.result.createObjectStore("images");
+    request.result.createObjectStore("templates", {
+      keyPath: "template.deck.id",
+    });
   };
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error);
@@ -14,8 +20,17 @@ export async function entries(): Promise<Entry[]> {
   const db = await opened;
   return new Promise((resolve, reject) => {
     const q = db.transaction("lessons").objectStore("lessons").getAll();
-    q.onsuccess = () =>
-      resolve(q.result.sort((a: Entry, b: Entry) => b.updated - a.updated));
+    q.onsuccess = () => {
+      try {
+        resolve(
+          q.result
+            .map((e: Entry) => ({ ...e, deck: validateDeck(e.deck) }))
+            .sort((a: Entry, b: Entry) => b.updated - a.updated),
+        );
+      } catch (e) {
+        reject(e);
+      }
+    };
     q.onerror = () => reject(q.error);
   });
 }
@@ -52,5 +67,55 @@ export async function imageAddress(
     const req = url ? store.put(url, key) : store.get(key);
     tx.oncomplete = () => resolve(url || req.result);
     tx.onabort = () => reject(tx.error);
+  });
+}
+export interface TemplateEntry {
+  template: Template;
+  revision: number;
+  cloudRevision: number;
+  dirty: boolean;
+}
+export async function localTemplates(): Promise<TemplateEntry[]> {
+  const db = await opened;
+  return new Promise((resolve, reject) => {
+    const q = db.transaction("templates").objectStore("templates").getAll();
+    q.onsuccess = () => {
+      try {
+        resolve(
+          q.result.map((e: TemplateEntry) => ({
+            ...e,
+            template: validateTemplate(e.template),
+          })),
+        );
+      } catch (err) {
+        reject(err);
+      }
+    };
+    q.onerror = () => reject(q.error);
+  });
+}
+export async function writeTemplate(entry: TemplateEntry, remove = false) {
+  const db = await opened;
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("templates", "readwrite"),
+      store = tx.objectStore("templates"),
+      id = entry.template.deck.id;
+    const q = store.get(id);
+    q.onsuccess = () => {
+      if ((q.result?.revision ?? 0) !== entry.revision) {
+        reject(
+          new Error(
+            "Шаблон изменился в другой вкладке. Откройте библиотеку заново.",
+          ),
+        );
+        tx.abort();
+        return;
+      }
+      if (remove) store.delete(id);
+      else store.put({ ...entry, revision: entry.revision + 1 });
+    };
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(tx.error ?? new Error("Запись шаблона прервана."));
   });
 }

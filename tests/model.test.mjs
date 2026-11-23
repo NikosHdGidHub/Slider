@@ -19,7 +19,7 @@ test('порядок слайдов, заметки, положение объе
 
 test('неподдерживаемые версии, дубликаты, некорректные типы, ссылки и размеры отклоняются', () => {
   const edits = [
-    d => { d.version = 2 }, d => { d.slides = [] }, d => { d.slides.push(d.slides[0]) },
+    d => { d.version = 99 }, d => { d.slides = [] }, d => { d.slides.push(d.slides[0]) },
     d => { d.slides[0].items[0].w = NaN }, d => { d.slides[0].items[0].type = 'html' },
     d => { d.slides[0].items[0].color = 'url(foo)' },
     ...['blob:local', 'http://example.org/x', 'javascript:alert(1)', 'https://user:pass@example.org/a', 'data:image/svg+xml;base64,PHN2Zz4=', 'data:image/png;base64,PHN2Zz4='].map(src => d => { d.slides[0].background = src })

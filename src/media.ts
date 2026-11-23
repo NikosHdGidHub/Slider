@@ -1,3 +1,4 @@
+import { importSVG } from "./vectorImport";
 import { imageSource, MAX_DOCUMENT_BYTES, validateDeck } from "./model";
 import type { Deck } from "./model";
 
@@ -31,46 +32,6 @@ function dataURL(blob: Blob): Promise<string> {
   });
 }
 
-async function checkSVG(file: Blob) {
-  const source = await file.text();
-  if (/<!DOCTYPE|<!ENTITY/i.test(source))
-    throw new Error("SVG с внешними сущностями не поддерживается.");
-  const parsed = new DOMParser().parseFromString(source, "image/svg+xml");
-  const root = parsed.documentElement;
-  if (
-    root.localName !== "svg" ||
-    root.namespaceURI !== "http://www.w3.org/2000/svg" ||
-    parsed.querySelector("parsererror")
-  )
-    throw new Error("Некорректный файл SVG.");
-  // SVG is decoded only in an isolated image and rasterized. Never attach imported XML to the page.
-  const elements = parsed.getElementsByTagName("*");
-  if (elements.length > 50000)
-    throw new Error("Слишком сложное изображение SVG.");
-  for (const element of elements) {
-    if (
-      [
-        "script",
-        "foreignObject",
-        "animate",
-        "animateMotion",
-        "animateTransform",
-        "set",
-      ].includes(element.localName)
-    )
-      throw new Error("Активные элементы SVG не поддерживаются.");
-    for (const attr of element.attributes) {
-      if (
-        /^on/i.test(attr.localName) ||
-        (attr.localName === "href" && !attr.value.startsWith("#"))
-      )
-        throw new Error(
-          "Для SVG допустимы только внутренние ссылки без обработчиков событий.",
-        );
-    }
-  }
-}
-
 export async function optimize(
   file: Blob,
 ): Promise<{ src: string; width: number; height: number }> {
@@ -79,7 +40,7 @@ export async function optimize(
   const svg = file.type === "image/svg+xml";
   if (!svg && !RASTER_MIME.includes(file.type))
     throw new Error("Выберите изображение JPEG, PNG, WebP или SVG.");
-  if (svg) await checkSVG(file);
+  if (svg) await importSVG(file);
   const objectURL = URL.createObjectURL(file);
   try {
     const image = await decode(objectURL);

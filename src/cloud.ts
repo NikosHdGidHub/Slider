@@ -1,3 +1,4 @@
+import { MAX_DOCUMENT_BYTES, readJSON } from "./model";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const url = String(import.meta.env.VITE_SUPABASE_URL || "").trim();
@@ -97,7 +98,27 @@ export async function readPublic(id: string): Promise<unknown> {
     throw new Error(
       "Публикация недоступна. Проверьте ссылку и подключение к сети.",
     );
-  return response.json();
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Публикация пуста.");
+  const decoder = new TextDecoder(),
+    parts: string[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_DOCUMENT_BYTES) {
+        await reader.cancel();
+        throw new Error("Публикация превышает 64 МиБ.");
+      }
+      parts.push(decoder.decode(value, { stream: true }));
+    }
+    parts.push(decoder.decode());
+    return readJSON(parts.join(""));
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export async function unpublish(id: string): Promise<void> {
