@@ -356,6 +356,7 @@ export function rememberArt(deck: Deck) {
         id: crypto.randomUUID(),
         kind,
         color: s.color,
+        ...(s.effects ? { effects: s.effects } : {}),
         background: s.background,
         items,
         notes: "",
@@ -363,14 +364,23 @@ export function rememberArt(deck: Deck) {
   }
   deck.master.art = art;
 }
+export function inheritedBackground(s: Slide, sample?: Slide): Slide {
+  const next = {
+    ...s,
+    color: sample?.color ?? "#ffffff",
+    background: sample?.background ?? null,
+  };
+  delete next.effects;
+  delete next.ownBackground;
+  if (sample?.effects) next.effects = { ...sample.effects };
+  return next;
+}
 export function applyKind(master: Master, s: Slide, kind: Kind): Slide {
   const sample = master.art?.[kind];
   if (!master.art) return repairSlots(master, { ...s, kind });
   return repairSlots(master, {
-    ...s,
+    ...(s.ownBackground ? s : inheritedBackground(s, sample)),
     kind,
-    color: sample?.color ?? "#ffffff",
-    background: sample?.background ?? null,
     items: [
       ...(sample?.items ?? []).map((o) => ({
         ...structuredClone(o),
@@ -388,9 +398,7 @@ export function switchMaster(deck: Deck, template: Deck): Deck {
     const kind = s.kind ?? "normal",
       sample = imported.slides.find((v) => v.kind === kind);
     const next = {
-      ...s,
-      color: sample?.color ?? "#ffffff",
-      background: sample?.background ?? null,
+      ...(s.ownBackground ? s : inheritedBackground(s, sample)),
     };
     const old = slots(deck.master, s),
       available = slots(master, s),

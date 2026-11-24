@@ -24,10 +24,12 @@ interface StageProps {
 function SlideImage({
   src,
   background = false,
+  effects,
   item,
 }: {
   src: string;
   background?: boolean;
+  effects?: Slide["effects"];
   item?: Item;
 }) {
   const [failed, setFailed] = useState("");
@@ -43,13 +45,19 @@ function SlideImage({
   return (
     <img
       style={
-        item
+        background
           ? {
-              objectFit: item.imageFit ?? "contain",
+              objectFit: effects?.fit ?? "cover",
               objectPosition:
-                (item.focusX ?? 50) + "% " + (item.focusY ?? 50) + "%",
+                (effects?.x ?? 50) + "% " + (effects?.y ?? 50) + "%",
             }
-          : undefined
+          : item
+            ? {
+                objectFit: item.imageFit ?? "contain",
+                objectPosition:
+                  (item.focusX ?? 50) + "% " + (item.focusY ?? 50) + "%",
+              }
+            : undefined
       }
       draggable={false}
       className={background ? "atlas-background-image" : "atlas-object-image"}
@@ -189,7 +197,41 @@ export function Stage({
           transform: "scale(" + scale + ")",
         }}
       >
-        {slide.background && <SlideImage src={slide.background} background />}
+        {slide.background && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              overflow: "hidden",
+              pointerEvents: "none",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                filter:
+                  "brightness(" +
+                  (slide.effects?.brightness ?? 100) +
+                  "%) blur(" +
+                  (slide.effects?.blur ?? 0) +
+                  "px)",
+                transform: "scale(" + (slide.effects?.zoom ?? 100) / 100 + ")",
+                transformOrigin:
+                  (slide.effects?.x ?? 50) +
+                  "% " +
+                  (slide.effects?.y ?? 50) +
+                  "%",
+              }}
+            >
+              <SlideImage
+                src={slide.background}
+                background
+                effects={slide.effects}
+              />
+            </div>
+          </div>
+        )}
         {fontError && <span className="overflow-badge">{fontError}</span>}
         {locations.map((v) => {
           const c = v.cell;
@@ -271,6 +313,7 @@ export function Stage({
           );
         })}
         {slide.items.map((original) => {
+          if (original.hidden) return null;
           const p = pose(original, locations);
           if (!p) return null;
           const factor = original.contentScale ?? 1;
@@ -312,8 +355,7 @@ export function Stage({
                   top: p.y + p.item.y * p.k,
                   transformOrigin: "0 0",
                   transform: "scale(" + p.k * factor + ")",
-                  pointerEvents:
-                    onSelect && (!original.fixed || design) ? "auto" : "none",
+                  pointerEvents: onSelect ? "auto" : "none",
                 }}
               >
                 <div
@@ -334,10 +376,19 @@ export function Stage({
                       : undefined,
                   }}
                   onDoubleClick={() =>
-                    item.type !== "image" && onEditText?.(item.id)
+                    !original.locked &&
+                    (!original.fixed || design) &&
+                    item.type !== "image" &&
+                    onEditText?.(item.id)
                   }
                   onPointerDown={(e) =>
-                    start(e, original, false, p.k, p.fixed && !design)
+                    start(
+                      e,
+                      original,
+                      false,
+                      p.k,
+                      original.locked || (p.fixed && !design),
+                    )
                   }
                 >
                   {item.type === "image" ? (
@@ -350,7 +401,9 @@ export function Stage({
                         item.paragraphs) && (
                         <TextBlock
                           onText={
-                            onText
+                            onText &&
+                            !original.locked &&
+                            (!original.fixed || design)
                               ? (fields) => onText(item.id, fields)
                               : undefined
                           }
@@ -361,19 +414,26 @@ export function Stage({
                       )}
                     </>
                   )}
-                  {selected === item.id && onNodes && item.nodes && (
-                    <PathHandles
-                      item={item}
-                      change={(nodes) => onNodes(item.id, nodes)}
-                    />
-                  )}
-                  {(!p.fixed || design) && selected === item.id && onResize && (
-                    <span
-                      className="atlas-resize"
-                      aria-label="Изменить размер"
-                      onPointerDown={(e) => start(e, original, true, p.k)}
-                    />
-                  )}
+                  {!original.locked &&
+                    (!original.fixed || design) &&
+                    selected === item.id &&
+                    onNodes &&
+                    item.nodes && (
+                      <PathHandles
+                        item={item}
+                        change={(nodes) => onNodes(item.id, nodes)}
+                      />
+                    )}
+                  {!original.locked &&
+                    (!p.fixed || design) &&
+                    selected === item.id &&
+                    onResize && (
+                      <span
+                        className="atlas-resize"
+                        aria-label="Изменить размер"
+                        onPointerDown={(e) => start(e, original, true, p.k)}
+                      />
+                    )}
                 </div>
               </div>
             </div>

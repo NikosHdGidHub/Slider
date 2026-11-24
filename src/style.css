@@ -1029,3 +1029,107 @@ h1 {
     position: static;
   }
 }
+
+/* Workspace controls share neutral surfaces while the slide retains its own theme. */
+.editor,
+.grid-designer {
+  --panel: #292c31;
+  --edge: #4a5059;
+  --ink: #e4e7ec;
+  background: #202226;
+  color: var(--ink);
+}
+.editor .edit-head,
+.grid-designer .edit-head,
+.editor .inspector,
+.grid-designer .inspector,
+.editor .strip,
+.editor .tools,
+.editor .bench,
+.grid-work,
+.editor .notes {
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--edge);
+}
+:is(.editor, .grid-designer)
+  :is(.edit-head, .inspector, .tools, .strip, .catalog-tabs)
+  :is(button, select, input, textarea),
+.grid-work section > button,
+.studio-menu button {
+  background: #353940;
+  color: #eef0f4;
+  border: 1px solid #555c66;
+  border-radius: 5px;
+}
+:is(.editor, .grid-designer)
+  :is(.inspector, .edit-head, .strip, .notes, .grid-work)
+  :is(label, small, h1, h2, h3, summary) {
+  color: #dfe5ed;
+}
+:is(.editor, .grid-designer) .inspector details {
+  background: #2c3036;
+  border-color: #525964;
+}
+:is(.editor, .grid-designer) .inspector :is(input, select, textarea),
+.editor .notes textarea {
+  color-scheme: dark;
+}
+:is(.editor, .grid-designer) button[aria-pressed="true"],
+.editor .thumb.active,
+.grid-designer .catalog-tabs button.active {
+  outline: 2px solid #85b9ff;
+  outline-offset: -2px;
+}
+.editor .canvas,
+.grid-designer .grid-board {
+  background: #16181c;
+  box-shadow: 0 2px 12px #12141855;
+}
+.layer-list {
+  display: grid;
+  gap: 2px;
+  max-height: 190px;
+  overflow: auto;
+  padding: 4px;
+}
+.layer-row {
+  display: flex;
+  gap: 8px;
+  text-align: left;
+  align-items: center;
+  min-height: 29px;
+  overflow-wrap: anywhere;
+}
+.studio-menu {
+  position: fixed;
+  z-index: 1200;
+  width: min(210px, 100vw);
+  max-height: 100vh;
+  overflow: auto;
+  background: #26292e;
+  padding: 5px;
+  border: 1px solid #646c78;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px #0006;
+}
+.studio-menu button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+}
+.studio-menu button:hover,
+.layer-row:hover {
+  background: #41526b;
+}
+.bg-tools {
+  display: grid;
+  gap: 6px;
+}
+.edit-head {
+  flex-wrap: wrap;
+}
+.editor button:disabled,
+.grid-designer button:disabled {
+  opacity: 0.55;
+}

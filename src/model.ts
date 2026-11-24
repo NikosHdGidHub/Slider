@@ -64,6 +64,9 @@ export interface Paragraph {
   after?: number;
 }
 export interface Item extends Box {
+  layerName?: string;
+  hidden?: boolean;
+  locked?: boolean;
   imageFit?: "contain" | "cover";
   focusX?: number;
   focusY?: number;
@@ -104,6 +107,15 @@ export interface Slide {
   footer?: string;
   id: string;
   color: string;
+  ownBackground?: boolean;
+  effects?: {
+    brightness?: number;
+    blur?: number;
+    zoom?: number;
+    x?: number;
+    y?: number;
+    fit?: "cover" | "contain";
+  };
   background: string | null;
   notes: string;
   items: Item[];

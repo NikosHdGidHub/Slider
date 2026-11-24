@@ -1,3 +1,5 @@
+import { type HistoryControls, useCommands, type Action } from "./StudioTools";
+import { Background } from "./Background";
 import { PlacementPanel } from "./PlacementPanel";
 import {
   slots,
@@ -5,6 +7,7 @@ import {
   accepts,
   linkCaptions,
   applyKind,
+  inheritedBackground,
   freezeDecoration,
 } from "./grid";
 import { shapes } from "./schema";
@@ -51,6 +54,7 @@ import { cloudImage } from "./publication";
 import { client } from "./cloud";
 
 type Props = {
+  history: HistoryControls;
   deck: Deck;
   styleLibrary?: StyleLibrary;
   templates?: Template[];
@@ -76,12 +80,14 @@ export function Editor({
   description,
   describe,
   change,
+  history,
   back,
   view,
   status,
   action,
   notice,
 }: Props) {
+  const clipboard = useRef<Item[]>([]);
   const [sid, choose] = useState(deck.slides[0].id),
     [sel, select] = useState(""),
     [menu, setMenu] = useState(false);
@@ -150,7 +156,12 @@ export function Editor({
         )
       )
         return;
-      if (item && ["Delete", "Backspace"].includes(e.key)) {
+      if (
+        item &&
+        !item.locked &&
+        (!item.fixed || saveTemplate) &&
+        ["Delete", "Backspace"].includes(e.key)
+      ) {
         e.preventDefault();
         removeItem();
       }
@@ -184,7 +195,11 @@ export function Editor({
       slides: [
         ...d.slides.slice(0, idx + 1),
         deck.master.art
-          ? applyKind(deck.master, { ...fresh, items: [] }, "normal")
+          ? applyKind(
+              deck.master,
+              { ...fresh, ownBackground: false, items: [] },
+              "normal",
+            )
           : fresh,
         ...d.slides.slice(idx + 1),
       ],
@@ -248,9 +263,185 @@ export function Editor({
       notice((e as Error).message);
     }
   }
+  const editable = (o: Item) => !o.locked && (!o.fixed || !!saveTemplate);
+  function commands(o?: Item): Action[] {
+    const actions: Action[] = [];
+    function copy() {
+      if (o)
+        clipboard.current = structuredClone(
+          slide.items.filter(
+            (v) =>
+              v.id === o.id || (o.group && o.group === v.group && editable(v)),
+          ),
+        );
+    }
+    function paste(source = clipboard.current) {
+      if (!source.length) return;
+      if (slide.items.length + source.length > 500) {
+        notice("На слайде можно разместить до 500 объектов.");
+        return;
+      }
+      const ids = new Map<string, string>();
+      const copies = source.map((v) => {
+        const x = { ...structuredClone(v), id: crypto.randomUUID() };
+        delete x.slot;
+        delete x.priorSlot;
+        delete x.fixed;
+        for (const k of ["group", "relation"] as const)
+          if (x[k]) {
+            const key = k + x[k];
+            if (!ids.has(key)) ids.set(key, "g" + crypto.randomUUID());
+            x[k] = ids.get(key);
+          }
+        return x;
+      });
+      modify((s) => ({ ...s, items: [...s.items, ...additions(s, copies)] }));
+      select(copies[0].id);
+    }
+    if (o) {
+      actions.push({ name: "Свойства", run: () => select(o.id) });
+      if (editable(o)) {
+        actions.push(
+          { name: "Копировать", key: "c", run: copy },
+          {
+            name: "Вырезать",
+            key: "x",
+            run: () => {
+              copy();
+              const ids = new Set(clipboard.current.map((v) => v.id));
+              modify((s) => ({
+                ...s,
+                items: s.items.filter((v) => !ids.has(v.id)),
+              }));
+              select("");
+            },
+          },
+          {
+            name: "Дублировать",
+            run: () => {
+              copy();
+              paste();
+            },
+          },
+          {
+            name: "Удалить",
+            run: () => {
+              modify((s) => ({
+                ...s,
+                items: s.items.filter((v) => v.id !== o.id),
+              }));
+              select("");
+            },
+          },
+        );
+        for (const delta of [-1, 1]) {
+          const i = slide.items.indexOf(o),
+            adj = slide.items[i + delta];
+          if (adj && target(adj) !== "tray")
+            actions.push({
+              name: delta > 0 ? "Выше" : "Ниже",
+              run: () => reorderLayer(o.id, adj.id),
+            });
+        }
+      }
+      if (!o.fixed) {
+        actions.push(
+          {
+            name: o.locked ? "Разблокировать" : "Заблокировать",
+            run: () => patch(o.id, { locked: !o.locked }),
+          },
+          {
+            name: o.hidden ? "Показать слой" : "Скрыть слой",
+            run: () => patch(o.id, { hidden: !o.hidden }),
+          },
+        );
+        if (!o.locked)
+          actions.push({
+            name: "Переименовать",
+            run: () => {
+              const n = prompt(
+                "Название слоя",
+                o.layerName ?? o.text.slice(0, 40),
+              );
+              if (n?.trim()) patch(o.id, { layerName: n.trim().slice(0, 200) });
+            },
+          });
+      }
+    }
+    actions.push({ name: "Вставить", key: "v", run: () => paste() });
+    return actions;
+  }
+  function reorderLayer(id: string, dest: string) {
+    modify((s) => {
+      const items = s.items.slice(),
+        from = items.findIndex((v) => v.id === id),
+        to = items.findIndex((v) => v.id === dest);
+      if (from < 0 || to < 0 || !editable(items[from])) return s;
+      items.splice(to, 0, items.splice(from, 1)[0]);
+      return { ...s, items };
+    });
+  }
+  const actions = commands(item),
+    context = useCommands([...history.actions, ...actions]);
+  useEffect(() => {
+    document
+      .querySelector('.layer-row[aria-pressed="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [sel]);
+  function rows(tray: boolean) {
+    return slide.items
+      .filter((o) => (target(o) === "tray") === tray)
+      .reverse()
+      .map((o) => (
+        <button
+          aria-label={
+            tray
+              ? undefined
+              : "Слой " +
+                (o.layerName ||
+                  o.text.slice(0, 38) ||
+                  { shape: "Фигура", text: "Текст", image: "Изображение" }[
+                    o.type
+                  ])
+          }
+          className="layer-row"
+          key={o.id}
+          aria-pressed={o.id === sel}
+          draggable={!tray && editable(o)}
+          onDragStart={(e) =>
+            e.dataTransfer.setData("application/atlas-layer", o.id)
+          }
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) =>
+            reorderLayer(
+              e.dataTransfer.getData("application/atlas-layer"),
+              o.id,
+            )
+          }
+          onClick={() => select(o.id)}
+          onContextMenu={(e) => {
+            select(o.id);
+            context.open(e, commands(o));
+          }}
+        >
+          <span aria-hidden="true">
+            {o.type === "text" ? "T" : o.type === "image" ? "▧" : "◇"}
+          </span>
+          {o.layerName ||
+            o.text.slice(0, 38) ||
+            { text: "Текст", shape: "Фигура", image: "Изображение" }[
+              o.type
+            ]}{" "}
+          {o.fixed || o.locked ? "🔒" : ""}
+          {o.hidden ? " · скрыт" : ""}
+        </button>
+      ));
+  }
   return (
     <div className="editor">
+      {context.menu}
       <header className="edit-head">
+        {history.buttons}
         <button className="icon" title="В библиотеку" onClick={back}>
           <ArrowLeft />
         </button>
@@ -368,7 +559,16 @@ export function Editor({
               Изображение
             </button>
           </div>
-          <div className="canvas">
+          <div
+            className="canvas"
+            onContextMenu={(e) => {
+              const id = (e.target as Element)
+                .closest("[data-item]")
+                ?.getAttribute("data-item");
+              select(id ?? "");
+              context.open(e, commands(slide.items.find((o) => o.id === id)));
+            }}
+          >
             <Stage
               deck={deck}
               slide={slide}
@@ -429,6 +629,7 @@ export function Editor({
                         ? { ...o, x, y }
                         : a.group &&
                             a.group === o.group &&
+                            editable(o) &&
                             target(a) === target(o)
                           ? { ...o, x: o.x + x - a.x, y: o.y + y - a.y }
                           : o,
@@ -457,12 +658,49 @@ export function Editor({
               templates={templates}
               update={(next) => change(() => next)}
               select={select}
-              selected={sel}
+              selected={item?.locked ? "" : sel}
               notice={notice}
               saveAs={saveAs}
             />
           )}
-          {slide.items.length > 0 && (
+          {!saveTemplate && (
+            <>
+              <details open>
+                <summary>Нераспределённые элементы</summary>
+                <div className="layer-list">
+                  {rows(true)}
+                  {!slide.items.some((o) => target(o) === "tray") && (
+                    <small>Пусто</small>
+                  )}
+                </div>
+              </details>
+              <details open>
+                <summary>Слои</summary>
+                <div className="layer-list">
+                  {rows(false)}
+                  <button
+                    onClick={() => select("")}
+                    onContextMenu={(e) =>
+                      context.open(e, [
+                        { name: "Свойства фона", run: () => select("") },
+                      ])
+                    }
+                  >
+                    🔒 Фон
+                  </button>
+                </div>
+              </details>
+              <details>
+                <summary>Действия с объектом</summary>
+                {actions.map((a) => (
+                  <button key={a.name} onClick={a.run}>
+                    {a.name}
+                  </button>
+                ))}
+              </details>
+            </>
+          )}
+          {saveTemplate && slide.items.length > 0 && (
             <label>
               Объекты слайда
               <select
@@ -487,7 +725,9 @@ export function Editor({
             </label>
           )}
           <h3>{item ? "Свойства объекта" : "Свойства слайда"}</h3>
-          {item ? (
+          {item && !editable(item) ? (
+            <small>Слой закреплён или заблокирован</small>
+          ) : item ? (
             <>
               {item.type === "image" && (
                 <details open>
@@ -705,41 +945,52 @@ export function Editor({
               )}
               {gridTemplateKind !== "layout" && (
                 <>
-                  <label>
-                    Цвет фона
-                    <input
-                      type="color"
-                      value={slide.color}
-                      onChange={(e) =>
-                        modify((s) => ({ ...s, color: e.target.value }))
-                      }
-                    />
-                  </label>
-                  <button onClick={() => pickImage(true)}>
-                    <ImagePlus />
-                    Фоновое изображение
-                  </button>
-                  {slide.background && (
+                  <Background
+                    deck={deck}
+                    key={slide.id}
+                    slide={slide}
+                    notice={notice}
+                    update={(next) =>
+                      modify(() => ({ ...next, ownBackground: true }))
+                    }
+                    reset={() =>
+                      modify((s) =>
+                        inheritedBackground(
+                          s,
+                          deck.master.art?.[s.kind ?? "normal"],
+                        ),
+                      )
+                    }
+                  />
+                  {!saveTemplate && (
                     <button
                       onClick={() =>
-                        modify((s) => ({ ...s, background: null }))
+                        change((d) => {
+                          const kind = slide.kind ?? "normal",
+                            base = d.master.art?.[kind] ?? {
+                              ...newSlide(),
+                              kind,
+                            };
+                          const sample = inheritedBackground(base, slide);
+                          return {
+                            ...d,
+                            master: {
+                              ...d.master,
+                              art: { ...d.master.art, [kind]: sample },
+                            },
+                            slides: d.slides.map((s) =>
+                              (s.kind ?? "normal") === kind &&
+                              (s.id === slide.id || !s.ownBackground)
+                                ? inheritedBackground(s, sample)
+                                : s,
+                            ),
+                          };
+                        })
                       }
                     >
-                      Убрать изображение
+                      Применить фон к схеме этой методички
                     </button>
                   )}
-                  <button
-                    onClick={() =>
-                      modify((s) => ({
-                        ...s,
-                        background: null,
-                        color: newSlide().color,
-                      }))
-                    }
-                  >
-                    <RotateCcw />
-                    Сбросить фон
-                  </button>
                 </>
               )}
             </>

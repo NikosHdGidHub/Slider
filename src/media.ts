@@ -33,11 +33,21 @@ function dataURL(blob: Blob): Promise<string> {
   });
 }
 
+export async function originalBackground(file: File) {
+  if (!RASTER_MIME.includes(file.type) || file.size > MAX_IMAGE_BYTES)
+    throw Error(
+      "Для оригинала нужен PNG, JPEG или WebP до 16 МиБ. Выберите оптимизацию или меньший файл.",
+    );
+  const src = imageSource(await dataURL(file));
+  await decode(src);
+  return src;
+}
 export async function optimize(
   file: Blob,
+  limit = MAX_IMAGE_BYTES,
 ): Promise<{ src: string; width: number; height: number }> {
-  if (!file.size || file.size > MAX_IMAGE_BYTES)
-    throw new Error("Выберите файл размером до 16 МБ.");
+  if (!file.size || file.size > limit)
+    throw new Error("Выберите файл размером до " + limit / 1048576 + " МиБ.");
   const svg = file.type === "image/svg+xml";
   if (!svg && !RASTER_MIME.includes(file.type))
     throw new Error("Выберите изображение JPEG, PNG, WebP или SVG.");
