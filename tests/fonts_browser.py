@@ -54,7 +54,7 @@ def run(page,ctx,url,files):
     assert page.evaluate("Array.from(document.fonts).filter(f=>f.family.startsWith('AtlasUser') && f.status==='loaded').length")>=4
     click("Действия с методичкой")
     with page.expect_download() as d:click("Экспортировать JSON")
-    actual=json.loads(Path(d.value.path()).read_text());assert actual["version"]==2 and len(actual["resources"]["fonts"])==4
+    actual=json.loads(Path(d.value.path()).read_text());assert actual["version"]==3 and len(actual["resources"]["fonts"])==4
     assert actual["slides"][0]["items"][0]["overrides"]=={"font":"legacy","fit":False}
     click("В библиотеку");click("Импорт JSON")
     actual["resources"]["fonts"]=[]

@@ -65,12 +65,13 @@ def flow(browser,url,tmp):
     def click(n):btn(n).click()
     def action(n):click("Действия с методичкой");click(n)
     click("Создать методичку");page.get_by_label("Электронная почта").fill("owner@example.org");page.get_by_label("Пароль").fill("local-fixture");page.locator(".dialog").get_by_role("button",name="Войти",exact=True).click()
-    click("Шаблоны");click("Создать шаблон");page.get_by_label("Название методички").fill("Облако");click("Сохранить шаблон")
+    click("Шаблоны");click("Создать шаблон");page.get_by_label("Название шаблона").fill("Облако");click("Сохранить шаблон")
     card=page.locator(".template-card").filter(has_text="Облако")
     card.locator("summary").click();card.get_by_role("button",name="Сохранить в облаке").click()
     expect(card).to_contain_text("На устройстве и в облаке")
     assert len(templates)==1
     card.get_by_role("button",name="Создать презентацию").click()
+    click("Добавить текст");page.get_by_label("Текст",exact=True).fill("Тема занятия")
     with page.expect_file_chooser() as chooser:click("Изображение")
     chooser.value.set_files(ROOT/"public/icons/atlas-192.png")
     expect(page.locator(".canvas img")).to_be_visible()
@@ -78,6 +79,9 @@ def flow(browser,url,tmp):
     page.locator(".inspector input[type=file]").set_input_files(ROOT/"src/assets/fonts/Serif.woff")
     style=page.locator(".inspector details").filter(has=page.locator("summary",has_text="Шрифты и общие стили")).last
     style.get_by_label("Гарнитура",exact=True).select_option(label="Serif.woff")
+    click("Добавить текст")
+    page.get_by_role("textbox",name="Текст",exact=True).fill("Черновой материал")
+    page.get_by_label("Размещение объекта").select_option("tray")
     action("Опубликовать")
     link=page.locator(".dialog input[readonly]").input_value()
     assert any(k.startswith("images/") for k in files)
@@ -87,6 +91,7 @@ def flow(browser,url,tmp):
     expect(public.get_by_text("Тема занятия",exact=True).first).to_be_visible()
     expect(public.locator(".atlas-stage img").first).to_be_visible()
     public.wait_for_function("Array.from(document.fonts).some(f=>f.family.startsWith('AtlasUser') && f.status==='loaded')")
+    assert not any(o["text"]=="Черновой материал" for raw in [v for k,v in files.items() if k.startswith("presentations/")] for s in json.loads(raw)["slides"] for o in s["items"])
     assert len(json.loads(next(v for k,v in files.items() if k.startswith("presentations/")))["resources"]["fonts"])==1
     click("Закрыть");click("В библиотеку");click("Опубликованные");click("Снять с публикации")
     expect(page.get_by_text("Публикаций пока нет")).to_be_visible()

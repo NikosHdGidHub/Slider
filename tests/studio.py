@@ -19,8 +19,8 @@ def exercise(page, tmp):
     def click(name): button(name).click()
     def notice(text): expect(page.locator(".toast")).to_contain_text(text)
     def guide():
-        with page.expect_download() as event: click("Скачать инструкцию для ИИ")
-        assert event.value.suggested_filename=="atlas-instructions.txt"
+        with page.expect_download() as event: click("Скачать инструкцию для генерации шаблона")
+        assert event.value.suggested_filename=="atlas-template-instructions.txt"
         return Path(event.value.path()).read_text(encoding="utf-8")
     def upload(name, file):
         with page.expect_file_chooser() as event: click(name)
@@ -38,11 +38,10 @@ def exercise(page, tmp):
     click("Шаблоны")
     assert "Живая природа" in guide()
     click("Создать шаблон")
-    page.get_by_label("Название методички").fill("Мой тестовый шаблон")
+    page.get_by_label("Название шаблона").fill("Мой тестовый шаблон")
     page.get_by_label("Описание шаблона").fill("Для совместного чтения")
-    click("Слайд");click("Сохранить шаблон");notice("ровно три")
-    expect(page.locator(".thumb")).to_have_count(4)
-    click("Удалить слайд");click("Сохранить шаблон")
+    click("Добавить строку");click("Добавить столбец");click("Удалить строку");click("Удалить столбец")
+    click("Сохранить шаблон")
     expect(page.locator(".template-card").filter(has_text="Мой тестовый шаблон")).to_have_count(1)
     assert "Для совместного чтения" in guide()
     card=page.locator(".template-card").filter(has_text="Мой тестовый шаблон")
@@ -57,18 +56,18 @@ def exercise(page, tmp):
     expect(page.locator(".thumb")).to_have_count(3)
     page.locator(".thumb").nth(1).click()
     page.get_by_label("Заметки преподавателя",exact=True).fill("Проверка заметок")
-    page.get_by_label("Применить компоновку").select_option(label="Три карточки")
+    page.get_by_label("Режим области слайда").select_option(label="Описание, изображение и вывод")
     edited=export()
     assert edited["slides"][1]["notes"]=="Проверка заметок"
-    assert len([o for o in edited["slides"][1]["items"] if o.get("role")=="decoration"])==2
+    assert len(edited["slides"][1]["structure"]["cells"])==3
     click("В библиотеку")
     card=page.locator(".template-card").filter(has_text="Переименованный шаблон")
     card.locator("summary").click();card.get_by_role("button",name="Удалить шаблон").click()
     expect(card).to_have_count(0);assert "Переименованный шаблон" not in guide()
-    upload("Импорт шаблона",tfile);expect(card).to_have_count(1)
+    upload("Импорт шаблона",tfile);click("Импортировать шаблон");expect(card).to_have_count(1)
     click("Компоновки"); click("Создать шаблон")
-    page.get_by_label("Название методички").fill("Одна карточка")
-    click("Фигура");click("Сохранить шаблон")
+    page.get_by_label("Название шаблона").fill("Одна карточка")
+    click("Добавить строку");click("Сохранить шаблон")
     expect(page.locator(".template-card").filter(has_text="Одна карточка")).to_have_count(1)
     click("Мои методички")
     click("Импорт JSON");upload("Выбрать файл JSON",ROOT/"docs/examples/water-cycle.json")

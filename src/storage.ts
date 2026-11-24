@@ -49,7 +49,22 @@ export async function saveEntry(deck: Deck, revision: number, remove = false) {
         );
         tx.abort();
       } else if (remove) store.delete(deck.id);
-      else store.put({ deck, revision: revision + 1, updated: Date.now() });
+      else {
+        const previous = read.result?.deck;
+        if (
+          deck.migrated === false &&
+          previous &&
+          (previous.version < 3 || previous.migrated)
+        ) {
+          const backup = {
+            ...previous,
+            id: crypto.randomUUID(),
+            title: previous.title.slice(0, 990) + " — до смены шаблона",
+          };
+          store.add({ deck: backup, revision: 1, updated: Date.now() });
+        }
+        store.put({ deck, revision: revision + 1, updated: Date.now() });
+      }
     };
     tx.oncomplete = () => resolve();
     tx.onabort = () =>

@@ -1,3 +1,13 @@
+import { check, definitions } from "./schema.ts";
+import {
+  kinds,
+  blankGrid,
+  cell,
+  freezeDecoration,
+  slots,
+  rememberArt,
+  mediaSlides,
+} from "./grid.ts";
 import {
   MAX_DOCUMENT_BYTES,
   newDeck,
@@ -13,6 +23,7 @@ import {
 } from "./model.ts";
 
 export interface Template {
+  format?: 3;
   kind: "presentation" | "layout";
   description: string;
   deck: Deck;
@@ -25,15 +36,17 @@ export function validateTemplate(value: unknown): Template {
     !("kind" in value) ||
     !("description" in value) ||
     Object.keys(value).some(
-      (k) => !["deck", "kind", "description"].includes(k),
+      (k) => !["deck", "kind", "description", "format"].includes(k),
     ) ||
     !["presentation", "layout"].includes(String(value.kind)) ||
+    ("format" in value && value.format !== 3) ||
     typeof value.description !== "string" ||
     value.description.length > 2000
   )
     throw new Error("Ожидается шаблон с полями kind, description и deck.");
   if (new Blob([JSON.stringify(value)]).size > MAX_DOCUMENT_BYTES)
     throw new Error("Шаблон превышает 64 МиБ.");
+  if ("format" in value) check(definitions.Template, value, "Шаблон");
   const deck = validateDeck(value.deck);
   const isDeck = value.kind === "presentation";
   if (deck.slides.length !== (isDeck ? 3 : 1))
@@ -43,13 +56,21 @@ export function validateTemplate(value: unknown): Template {
         : "Компоновка должна содержать один слайд.",
     );
   deck.slides.forEach((s, i) => {
+    if (
+      "format" in value &&
+      (s.kind ?? "normal") !== (isDeck ? kinds[i] : "normal")
+    )
+      throw Error("Неверный порядок схем шаблона");
     s.kind = isDeck ? (["title", "normal", "end"] as const)[i] : "normal";
   });
   if (!isDeck && deck.slides[0].items.some((o) => o.role === "decoration"))
     throw new Error(
       "Компоновка содержит только заменяемые объекты. Измените роль оформления на содержимое.",
     );
+  if ("format" in value && !isDeck && !deck.slides[0].structure)
+    throw Error("Структурному шаблону нужна сетка");
   return {
+    ...("format" in value ? { format: 3 as const } : {}),
     kind: isDeck ? "presentation" : "layout",
     description: value.description,
     deck,
@@ -59,11 +80,36 @@ export function copyDeck(source: Deck, title = source.title) {
   const d = structuredClone(source);
   d.id = crypto.randomUUID();
   d.title = title;
-  for (const s of d.slides) {
+  for (const s of mediaSlides(d)) {
     s.id = crypto.randomUUID();
-    for (const o of s.items) o.id = crypto.randomUUID();
+    const links = new Map<string, string>();
+    for (const o of s.items) {
+      o.id = crypto.randomUUID();
+      for (const k of ["group", "relation"] as const) {
+        if (!o[k]) continue;
+        const original = k + "/" + o[k];
+        if (!links.has(original))
+          links.set(original, "g" + crypto.randomUUID());
+        o[k] = links.get(original);
+      }
+    }
   }
   return d;
+}
+export function instantiate(template: Template) {
+  const deck = copyDeck(template.deck);
+  if (template.format === 3) {
+    delete deck.migrated;
+    rememberArt(deck);
+    for (const s of deck.slides)
+      s.items = s.items.map((o) =>
+        o.role === "decoration"
+          ? freezeDecoration(o, slots(deck.master, s))
+          : o,
+      );
+  }
+  if (!template.format) deck.migrated = true;
+  return deck;
 }
 export function applyLayout(d: Deck, sid: string, template: Template): Deck {
   const slide = d.slides.find((s) => s.id === sid);
@@ -120,7 +166,9 @@ export function applyLayout(d: Deck, sid: string, template: Template): Deck {
         : {
             ...s,
             items: [
-              ...s.items.filter((o) => o.role === "decoration"),
+              ...s.items.map((o) =>
+                o.role === "decoration" ? o : { ...o, slot: "tray" },
+              ),
               ...items,
             ],
           },
@@ -382,3 +430,81 @@ function water(): Deck {
   return validateDeck(stable(d, 9));
 }
 export const waterExample = water();
+
+export function createGridTemplate(
+  kind: Template["kind"],
+  title: string,
+): Template {
+  const deck = newDeck(title);
+  deck.master.name = title;
+  if (kind === "presentation")
+    deck.slides = kinds.map((kind) => ({ ...newSlide(), kind }));
+  else {
+    deck.slides[0].kind = "normal";
+    deck.slides[0].structure = blankGrid("text");
+  }
+  return { format: 3, kind, description: "", deck };
+}
+export function templateFrom(deck: Deck): Template {
+  const selected = kinds.map((k) =>
+    deck.slides.find((s) => (s.kind ?? "normal") === k),
+  );
+  if (selected.some((s) => !s))
+    throw Error("Нужны титульный, обычный и завершающий слайды.");
+  const d = copyDeck(
+    { ...deck, slides: selected as Slide[] },
+    deck.title + " — шаблон",
+  );
+  delete d.master.art;
+  d.master.name = d.title;
+  return validateTemplate({
+    format: 3,
+    kind: "presentation",
+    description: "",
+    deck: d,
+  });
+}
+export const frameTemplate = createGridTemplate(
+  "presentation",
+  "Фиолетовая рамка",
+);
+frameTemplate.deck.id = "a7100000-0011-4000-8000-000000000001";
+for (const [i, k] of kinds.entries()) {
+  const g = frameTemplate.deck.master.schemes[k];
+  frameTemplate.deck.slides[i].id =
+    "a7100000-0011-4000-8000-00000000000" + (i + 2);
+  if (k !== "normal")
+    Object.assign(g.cells[0], {
+      type: "title",
+      value: i === 0 ? "Алексей Дмитриевич" : "Спасибо",
+      padding: [260, 64, 16, 64],
+      border: "#7645aa",
+      width: 14,
+      fill: "#f6f1fc",
+      style: { size: 68, align: "center", color: "#492a69", bold: true },
+    });
+}
+export const twoByTwo = createGridTemplate(
+  "layout",
+  "Описание, изображение и вывод",
+);
+twoByTwo.deck.id = "a7100000-0012-4000-8000-000000000001";
+twoByTwo.deck.slides[0].id = "a7100000-0012-4000-8000-000000000002";
+twoByTwo.deck.slides[0].structure = {
+  rows: [2, 1],
+  cols: [1, 1],
+  padding: [24, 24, 24, 24],
+  cells: [
+    cell(0, 0, "description", "description"),
+    cell(0, 1, "image", "image"),
+    { ...cell(1, 0, "text", "conclusion"), cols: 2 },
+  ].map((c) => ({
+    ...c,
+    padding: [20, 20, 20, 20],
+    width: 2,
+    border: "#aca0be",
+  })),
+};
+const baseTemplate = createGridTemplate("presentation", "По умолчанию");
+stable(baseTemplate.deck, 13);
+builtins.push(frameTemplate, twoByTwo, baseTemplate);

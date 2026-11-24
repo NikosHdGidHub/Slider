@@ -1,3 +1,4 @@
+import { defaultMaster, slots, pose, target } from "./grid";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Item, Slide, Deck } from "./model";
@@ -12,6 +13,8 @@ interface StageProps {
   onNodes?: (id: string, nodes: NonNullable<Item["nodes"]>) => void;
   onEditText?: (id: string) => void;
   diagnostics?: boolean;
+  design?: boolean;
+  onSlot?: (id: string) => void;
   selected?: string;
   onSelect?: (id: string) => void;
   onMove?: (id: string, x: number, y: number) => void;
@@ -21,9 +24,11 @@ interface StageProps {
 function SlideImage({
   src,
   background = false,
+  item,
 }: {
   src: string;
   background?: boolean;
+  item?: Item;
 }) {
   const [failed, setFailed] = useState("");
   if (failed === src) {
@@ -37,6 +42,15 @@ function SlideImage({
   }
   return (
     <img
+      style={
+        item
+          ? {
+              objectFit: item.imageFit ?? "contain",
+              objectPosition:
+                (item.focusX ?? 50) + "% " + (item.focusY ?? 50) + "%",
+            }
+          : undefined
+      }
       draggable={false}
       className={background ? "atlas-background-image" : "atlas-object-image"}
       src={src}
@@ -51,6 +65,8 @@ export function Stage({
   deck,
   onEditText,
   diagnostics,
+  design,
+  onSlot,
   onNodes,
   onText,
   selected,
@@ -58,6 +74,7 @@ export function Stage({
   onMove,
   onResize,
 }: StageProps) {
+  const locations = slots(deck?.master ?? defaultMaster(), slide);
   const host = useRef<HTMLDivElement>(null);
   const fontError = useFonts(host, deck);
   const [scale, setScale] = useState(0);
@@ -67,6 +84,7 @@ export function Stage({
     y: number;
     scale: number;
     pointer: number;
+    bounds: { w: number; h: number };
     resize: boolean;
   } | null>(null);
   useLayoutEffect(() => {
@@ -83,17 +101,28 @@ export function Stage({
     e: ReactPointerEvent<HTMLDivElement | HTMLSpanElement>,
     item: Item,
     resize = false,
+    localScale = 1,
+    locked = false,
   ) {
     if (!onSelect || e.button !== 0 || !e.isPrimary) return;
     e.stopPropagation();
     e.preventDefault();
     onSelect(item.id);
+    if (locked) return;
     (e.target as Element).setPointerCapture(e.pointerId);
     drag.current = {
       item,
       x: e.clientX,
       y: e.clientY,
-      scale: host.current!.getBoundingClientRect().width / 1280,
+      scale: (host.current!.getBoundingClientRect().width / 1280) * localScale,
+      bounds: locations
+        .filter(
+          (v) => v.id === target(item) && v.cell.type === "free" && !item.fixed,
+        )
+        .map((v) => ({ w: v.box.w / v.scale, h: v.box.h / v.scale }))[0] ?? {
+        w: 1280,
+        h: 720,
+      },
       pointer: e.pointerId,
       resize,
     };
@@ -113,8 +142,8 @@ export function Stage({
       const localX = (c * dx + s * dy) * fx,
         localY = (-s * dx + c * dy) * fy;
       const transformed = !!(item.rotation || item.flipX || item.flipY);
-      const maxW = transformed ? 8192 : Math.max(1, 1280 - item.x),
-        maxH = transformed ? 8192 : Math.max(1, 720 - item.y);
+      const maxW = transformed ? 8192 : Math.max(1, run.bounds.w - item.x),
+        maxH = transformed ? 8192 : Math.max(1, run.bounds.h - item.y);
       let w = Math.min(maxW, Math.max(Math.min(24, item.w), item.w + localX));
       let h = Math.min(maxH, Math.max(Math.min(24, item.h), item.h + localY));
       if (item.type === "image") {
@@ -135,8 +164,8 @@ export function Stage({
     } else {
       onMove?.(
         item.id,
-        Math.round(Math.max(0, Math.min(1280 - item.w, item.x + dx))),
-        Math.round(Math.max(0, Math.min(720 - item.h, item.y + dy))),
+        Math.round(Math.max(0, Math.min(run.bounds.w - item.w, item.x + dx))),
+        Math.round(Math.max(0, Math.min(run.bounds.h - item.h, item.y + dy))),
       );
     }
   }
@@ -162,58 +191,194 @@ export function Stage({
       >
         {slide.background && <SlideImage src={slide.background} background />}
         {fontError && <span className="overflow-badge">{fontError}</span>}
-        {slide.items.map((item) => (
-          <div
-            key={item.id}
-            className={
-              "atlas-item" + (selected === item.id ? " atlas-selected" : "")
-            }
-            style={{
-              left: item.x,
-              top: item.y,
-              width: item.w,
-              height: item.h,
-              opacity: item.opacity,
-              transform: `rotate(${item.rotation ?? 0}deg) scale(${item.flipX ? -1 : 1},${item.flipY ? -1 : 1})`,
-              filter: item.shadow
-                ? `drop-shadow(${item.shadow.x}px ${item.shadow.y}px ${item.shadow.blur}px ${item.shadow.color})`
-                : undefined,
-            }}
-            onDoubleClick={() => item.type !== "image" && onEditText?.(item.id)}
-            onPointerDown={(e) => start(e, item)}
-          >
-            {item.type === "image" ? (
-              <SlideImage src={item.src} />
-            ) : (
-              <>
-                {item.type === "shape" && <VectorShape item={item} />}
-                {(item.type === "text" || item.text || item.paragraphs) && (
+        {locations.map((v) => {
+          const c = v.cell;
+          const repeated =
+            c.type === "header" || c.type === "footer"
+              ? (slide[c.type] ?? deck?.[c.type])
+              : undefined;
+          const value =
+            ["area", "image", "free", "empty"].includes(c.type) ||
+            slide.items.some((o) => target(o) === v.id)
+              ? ""
+              : (repeated ?? c.value);
+          const font = c.style;
+          return (
+            <div
+              key={v.id}
+              data-slot={v.id}
+              onPointerDown={(e) => {
+                if (!onSlot || ["area", "empty"].includes(c.type)) return;
+                e.stopPropagation();
+                onSlot(v.id);
+              }}
+              style={{
+                position: "absolute",
+                left: v.outer.x,
+                top: v.outer.y,
+                width: v.outer.w,
+                height: v.outer.h,
+                background: c.fill,
+                boxShadow: c.width
+                  ? "inset 0 0 0 " +
+                    c.width * v.scale +
+                    "px " +
+                    (c.border ?? "#333333")
+                  : undefined,
+                outline:
+                  onSelect && c.type === "free"
+                    ? "2px dashed #74918d"
+                    : undefined,
+                pointerEvents:
+                  onSlot && !["area", "empty"].includes(c.type)
+                    ? "auto"
+                    : "none",
+              }}
+            >
+              {value && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: v.box.x - v.outer.x,
+                    top: v.box.y - v.outer.y,
+                    width: v.box.w / v.scale,
+                    height: v.box.h / v.scale,
+                    transformOrigin: "top left",
+                    transform: "scale(" + v.scale + ")",
+                  }}
+                >
                   <TextBlock
-                    onText={
-                      onText ? (fields) => onText(item.id, fields) : undefined
-                    }
-                    item={item}
                     deck={deck}
-                    editing={!!onSelect || !!diagnostics}
+                    editing={!!onSelect}
+                    item={{
+                      id: v.id,
+                      type: "text",
+                      x: 0,
+                      y: 0,
+                      w: v.box.w / v.scale,
+                      h: v.box.h / v.scale,
+                      text: value,
+                      src: "",
+                      size: 32,
+                      color: "#183e45",
+                      align: "left",
+                      overrides: { ...font, fit: true },
+                    }}
                   />
-                )}
-              </>
-            )}
-            {selected === item.id && onNodes && item.nodes && (
-              <PathHandles
-                item={item}
-                change={(nodes) => onNodes(item.id, nodes)}
-              />
-            )}
-            {selected === item.id && onResize && (
-              <span
-                className="atlas-resize"
-                aria-label="Изменить размер"
-                onPointerDown={(e) => start(e, item, true)}
-              />
-            )}
-          </div>
-        ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {slide.items.map((original) => {
+          const p = pose(original, locations);
+          if (!p) return null;
+          const factor = original.contentScale ?? 1;
+          const item = {
+            ...p.item,
+            w: p.item.w / factor,
+            h: p.item.h / factor,
+          };
+          const hostSlot = !original.fixed
+            ? locations.find((v) => v.id === target(original))
+            : undefined;
+          const clip =
+            hostSlot?.cell.type === "free" ? hostSlot.box : undefined;
+          return (
+            <div
+              key={item.id}
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                clipPath: clip
+                  ? "inset(" +
+                    clip.y +
+                    "px " +
+                    (1280 - clip.x - clip.w) +
+                    "px " +
+                    (720 - clip.y - clip.h) +
+                    "px " +
+                    clip.x +
+                    "px)"
+                  : undefined,
+              }}
+            >
+              <div
+                data-item={item.id}
+                style={{
+                  position: "absolute",
+                  left: p.x + p.item.x * p.k,
+                  top: p.y + p.item.y * p.k,
+                  transformOrigin: "0 0",
+                  transform: "scale(" + p.k * factor + ")",
+                  pointerEvents:
+                    onSelect && (!original.fixed || design) ? "auto" : "none",
+                }}
+              >
+                <div
+                  key={item.id}
+                  className={
+                    "atlas-item" +
+                    (selected === item.id ? " atlas-selected" : "")
+                  }
+                  style={{
+                    left: 0,
+                    top: 0,
+                    width: item.w,
+                    height: item.h,
+                    opacity: item.opacity,
+                    transform: `rotate(${item.rotation ?? 0}deg) scale(${item.flipX ? -1 : 1},${item.flipY ? -1 : 1})`,
+                    filter: item.shadow
+                      ? `drop-shadow(${item.shadow.x}px ${item.shadow.y}px ${item.shadow.blur}px ${item.shadow.color})`
+                      : undefined,
+                  }}
+                  onDoubleClick={() =>
+                    item.type !== "image" && onEditText?.(item.id)
+                  }
+                  onPointerDown={(e) =>
+                    start(e, original, false, p.k, p.fixed && !design)
+                  }
+                >
+                  {item.type === "image" ? (
+                    <SlideImage src={item.src} item={item} />
+                  ) : (
+                    <>
+                      {item.type === "shape" && <VectorShape item={item} />}
+                      {(item.type === "text" ||
+                        item.text ||
+                        item.paragraphs) && (
+                        <TextBlock
+                          onText={
+                            onText
+                              ? (fields) => onText(item.id, fields)
+                              : undefined
+                          }
+                          item={item}
+                          deck={deck}
+                          editing={!!onSelect || !!diagnostics}
+                        />
+                      )}
+                    </>
+                  )}
+                  {selected === item.id && onNodes && item.nodes && (
+                    <PathHandles
+                      item={item}
+                      change={(nodes) => onNodes(item.id, nodes)}
+                    />
+                  )}
+                  {(!p.fixed || design) && selected === item.id && onResize && (
+                    <span
+                      className="atlas-resize"
+                      aria-label="Изменить размер"
+                      onPointerDown={(e) => start(e, original, true, p.k)}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,4 +1,12 @@
 import {
+  defaultMaster,
+  mediaSlides,
+  validateGrid,
+  checkBindings,
+  type Master,
+  type Grid,
+} from "./grid.ts";
+import {
   builtinFonts,
   check,
   definitions,
@@ -56,6 +64,15 @@ export interface Paragraph {
   after?: number;
 }
 export interface Item extends Box {
+  imageFit?: "contain" | "cover";
+  focusX?: number;
+  focusY?: number;
+  priorSlot?: string;
+  slot?: string;
+  group?: string;
+  relation?: string;
+  fixed?: boolean;
+  contentScale?: number;
   id: string;
   type: "text" | "image" | "shape";
   text: string;
@@ -82,6 +99,9 @@ export interface Item extends Box {
   closed?: boolean;
 }
 export interface Slide {
+  structure?: Grid;
+  header?: string;
+  footer?: string;
   id: string;
   color: string;
   background: string | null;
@@ -102,7 +122,11 @@ export interface NamedStyle {
   values: TextStyle;
 }
 export interface Deck {
-  version: 2;
+  version: 3;
+  master: Master;
+  migrated?: boolean;
+  header?: string;
+  footer?: string;
   id: string;
   title: string;
   canvas: { width: 1280; height: 720 };
@@ -139,6 +163,7 @@ export function newDeck(title: string): Deck {
   });
   return {
     version: FORMAT_VERSION,
+    master: defaultMaster(),
     id: crypto.randomUUID(),
     title: title.trim() || "Без названия",
     canvas: { width: 1280, height: 720 },
@@ -313,15 +338,61 @@ export function validateDeck(input: unknown): Deck {
     raw &&
       typeof raw === "object" &&
       "version" in raw &&
-      [1, 2].includes(Number(raw.version)),
+      [1, 2, 3].includes(Number(raw.version)),
     "Неизвестная версия презентации.",
   );
   const legacy = raw.version === 1;
-  check(definitions[legacy ? "Legacy" : "Presentation"], raw, "Презентация");
-  const source = structuredClone(raw) as Deck;
+  if (raw.version === 2) {
+    requireValue(
+      !["master", "header", "footer", "migrated"].some((k) => k in raw),
+      "Поля сеточной модели требуют version=3.",
+    );
+    if ("slides" in raw && Array.isArray(raw.slides))
+      for (const s of raw.slides) {
+        if (s && typeof s === "object") {
+          requireValue(
+            !["structure", "header", "footer"].some((k) => k in s),
+            "Размещение в сетке требует version=3.",
+          );
+          if (Array.isArray(s.items))
+            for (const o of s.items)
+              if (o && typeof o === "object")
+                requireValue(
+                  ![
+                    "slot",
+                    "priorSlot",
+                    "fixed",
+                    "group",
+                    "relation",
+                    "contentScale",
+                    "imageFit",
+                    "focusX",
+                    "focusY",
+                  ].some((k) => k in o),
+                  "Свойства размещения требуют version=3.",
+                );
+        }
+      }
+  }
+  const normalized =
+    raw.version === 2
+      ? { ...raw, version: 3, master: defaultMaster(), migrated: true }
+      : raw;
+  check(
+    definitions[legacy ? "Legacy" : "Presentation"],
+    normalized,
+    "Презентация",
+  );
+  const source = structuredClone(normalized) as Deck;
   const d: Deck = legacy
-    ? { ...newDeck(source.title), id: source.id, slides: source.slides }
+    ? {
+        ...newDeck(source.title),
+        migrated: true,
+        id: source.id,
+        slides: source.slides,
+      }
     : source;
+  for (const g of Object.values(d.master.schemes)) validateGrid(g, false);
   requireValue(d.title.trim(), "Введите название.");
   const ids = new Set<string>();
   function unique(id: string, group: Set<string>, path: string) {
@@ -336,8 +407,23 @@ export function validateDeck(input: unknown): Deck {
     verifyFont(f);
   }
   for (const s of d.theme.styles) unique(s.id, styles, "Стиль");
-  for (const [i, s] of d.slides.entries()) {
+  for (const [kind, layer] of Object.entries(d.master.art ?? {})) {
+    requireValue(
+      layer.kind === kind &&
+        layer.notes === "" &&
+        !layer.structure &&
+        layer.items.every((o) => o.fixed && o.slot !== "tray"),
+      "Слой оформления должен содержать закреплённый декор своей схемы.",
+    );
+  }
+  for (const [i, s] of mediaSlides(d).entries()) {
     const path = "Слайд " + (i + 1);
+    try {
+      if (s.structure) validateGrid(s.structure, true);
+      checkBindings(d, s);
+    } catch (e) {
+      throw Error(path + " — " + (e as Error).message);
+    }
     unique(s.id.toLowerCase(), ids, path);
     if (s.background !== null) {
       try {

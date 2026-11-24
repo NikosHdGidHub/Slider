@@ -1,0 +1,269 @@
+{
+  "format": 3,
+  "kind": "layout",
+  "description": "",
+  "deck": {
+    "version": 3,
+    "master": {
+      "name": "Описание, изображение и вывод",
+      "schemes": {
+        "title": {
+          "rows": [
+            1
+          ],
+          "cols": [
+            1
+          ],
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cells": [
+            {
+              "id": "body",
+              "row": 0,
+              "col": 0,
+              "type": "area",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        "normal": {
+          "rows": [
+            1
+          ],
+          "cols": [
+            1
+          ],
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cells": [
+            {
+              "id": "body",
+              "row": 0,
+              "col": 0,
+              "type": "area",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        "end": {
+          "rows": [
+            1
+          ],
+          "cols": [
+            1
+          ],
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cells": [
+            {
+              "id": "body",
+              "row": 0,
+              "col": 0,
+              "type": "area",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "id": "a7100000-0012-4000-8000-000000000001",
+    "title": "Описание, изображение и вывод",
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "theme": {
+      "palette": [
+        "#163e49",
+        "#e5f4ef",
+        "#f8bd56"
+      ],
+      "styles": [
+        {
+          "id": "title",
+          "label": "Заголовок",
+          "values": {
+            "font": "sans",
+            "size": 64,
+            "bold": true,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "subtitle",
+          "label": "Подзаголовок",
+          "values": {
+            "font": "sans",
+            "size": 44,
+            "bold": false,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "body",
+          "label": "Основной текст",
+          "values": {
+            "font": "sans",
+            "size": 32,
+            "bold": false,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "caption",
+          "label": "Подпись",
+          "values": {
+            "font": "sans",
+            "size": 24,
+            "bold": false,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "accent",
+          "label": "Акцент",
+          "values": {
+            "font": "sans",
+            "size": 38,
+            "bold": true,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "small",
+          "label": "Мелкий текст",
+          "values": {
+            "font": "sans",
+            "size": 18,
+            "bold": false,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        }
+      ]
+    },
+    "resources": {
+      "fonts": []
+    },
+    "slides": [
+      {
+        "id": "a7100000-0012-4000-8000-000000000002",
+        "color": "#ffffff",
+        "background": null,
+        "notes": "",
+        "items": [],
+        "structure": {
+          "rows": [
+            2,
+            1
+          ],
+          "cols": [
+            1,
+            1
+          ],
+          "padding": [
+            24,
+            24,
+            24,
+            24
+          ],
+          "cells": [
+            {
+              "id": "description",
+              "row": 0,
+              "col": 0,
+              "type": "description",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                20,
+                20,
+                20,
+                20
+              ],
+              "width": 2,
+              "border": "#aca0be"
+            },
+            {
+              "id": "image",
+              "row": 0,
+              "col": 1,
+              "type": "image",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                20,
+                20,
+                20,
+                20
+              ],
+              "width": 2,
+              "border": "#aca0be"
+            },
+            {
+              "id": "conclusion",
+              "row": 1,
+              "col": 0,
+              "type": "text",
+              "rows": 1,
+              "cols": 2,
+              "padding": [
+                20,
+                20,
+                20,
+                20
+              ],
+              "width": 2,
+              "border": "#aca0be"
+            }
+          ]
+        },
+        "kind": "normal"
+      }
+    ]
+  }
+}

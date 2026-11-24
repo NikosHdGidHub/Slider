@@ -1,3 +1,6 @@
+import { GridDesigner } from "./GridDesigner";
+import { templateFrom } from "./catalog";
+import { templateInstructions } from "./instructions";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -80,6 +83,7 @@ function App() {
   );
   const [catalogKind, setCatalogKind] =
     useState<Template["kind"]>("presentation");
+  const [art, setArt] = useState(false);
   const [scope, setScope] = useState("");
   const [editingTemplate, setEditingTemplate] = useState<{
     t: Template;
@@ -139,8 +143,12 @@ function App() {
         ...(allowed ? (await entries()).map((e) => e.deck) : []),
       ]);
       download(
-        "atlas-instructions.txt",
-        instructions(templates, result.scope, styleCatalog),
+        page === "templates"
+          ? "atlas-template-instructions.txt"
+          : "atlas-presentation-instructions.txt",
+        page === "templates"
+          ? templateInstructions(templates, result.scope, styleCatalog)
+          : instructions(templates, result.scope, styleCatalog),
         "text/plain",
       );
       notice(result.scope + ". Инструкция скачана.");
@@ -285,6 +293,11 @@ function App() {
         used.add(o.overrides?.font);
         o.paragraphs?.forEach((p) => p.runs.forEach((r) => used.add(r.font)));
       }
+    for (const g of [
+      ...Object.values(d.master.schemes),
+      ...d.slides.flatMap((s) => (s.structure ? [s.structure] : [])),
+    ])
+      for (const c of g.cells) used.add(c.style?.font);
     for (const f of styleLibrary.fonts)
       if (used.has(f.id) && !d.resources.fonts.some((a) => a.id === f.id))
         d.resources.fonts.push(structuredClone(f));
@@ -500,7 +513,9 @@ function App() {
                 onClick={getInstructions}
               >
                 <FileJson size={17} />
-                Скачать инструкцию для ИИ
+                {page === "templates"
+                  ? "Скачать инструкцию для генерации шаблона"
+                  : "Скачать инструкцию для генерации презентации"}
               </button>
             )}
             {page === "library" && (
@@ -621,7 +636,10 @@ function App() {
                 onlineOwner={owner && online}
                 create={insert}
                 view={setWatch}
-                edit={(t, row) => setEditingTemplate({ t, row })}
+                edit={(t, row) => {
+                  setArt(false);
+                  setEditingTemplate({ t, row });
+                }}
                 refresh={async () => {
                   await refreshCatalog();
                 }}
@@ -713,9 +731,39 @@ function App() {
         )
       ) : watch ? (
         <Viewer deck={watch} onClose={() => setWatch(null)} />
+      ) : editingTemplate?.t.format === 3 && !art && allowed ? (
+        <GridDesigner
+          template={editingTemplate.t}
+          set={(t) => setEditingTemplate({ ...editingTemplate, t })}
+          notice={notice}
+          art={() => setArt(true)}
+          back={() => {
+            if (
+              confirm(
+                "Закрыть конструктор? Изменения после последнего сохранения будут потеряны.",
+              )
+            )
+              setEditingTemplate(null);
+          }}
+          save={() =>
+            task("Сохраняем шаблон…", async () => {
+              const t = validateTemplate(editingTemplate.t);
+              t.deck.master.name = t.deck.title;
+              await saveLocal(t, editingTemplate.row);
+              await refreshCatalog();
+              setEditingTemplate(null);
+              setCatalogKind(t.kind);
+              navigate("templates");
+              notice("Шаблон сохранён.");
+            })
+          }
+        />
       ) : editingTemplate && allowed ? (
         <Editor
           key={editingTemplate.t.deck.id}
+          gridTemplateKind={
+            editingTemplate.t.format === 3 ? editingTemplate.t.kind : undefined
+          }
           deck={editingTemplate.t.deck}
           status="Редактор шаблона"
           styleLibrary={styleLibrary}
@@ -730,6 +778,10 @@ function App() {
             )
           }
           back={() => {
+            if (art) {
+              setArt(false);
+              return;
+            }
             if (confirm("Закрыть редактор без сохранения шаблона?"))
               setEditingTemplate(null);
           }}
@@ -751,6 +803,25 @@ function App() {
       ) : doc && allowed ? (
         <Editor
           key={doc.id}
+          saveAs={() =>
+            task("Создаём шаблон…", async () => {
+              await queue.current;
+              if (failure.current) throw failure.current;
+              const t = templateFrom(current.current!);
+              await saveLocal(t);
+              const result = await refreshCatalog();
+              const row = result.rows.find(
+                (r) => r.template.deck.id === t.deck.id,
+              );
+              if (!row) throw Error("Не удалось открыть сохранённый шаблон");
+              setDoc(null);
+              current.current = null;
+              setCatalogKind("presentation");
+              navigate("templates");
+              setArt(false);
+              setEditingTemplate({ t, row });
+            })
+          }
           styleLibrary={styleLibrary}
           templates={visibleRows.map((r) => r.template)}
           deck={doc}

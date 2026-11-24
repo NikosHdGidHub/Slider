@@ -1,3 +1,4 @@
+import { cellTypes } from "./grid.ts";
 // Named definitions are used both by the importer and the downloadable specification.
 type Rule = {
   type?: "string" | "number" | "boolean" | "array" | "object";
@@ -39,6 +40,17 @@ const meanings: Record<string, string> = {
   version: "Номер формата файла.",
   id: "Уникальный идентификатор в своей коллекции.",
   title: "Название презентации.",
+  master: "Главный шаблон с тремя сетками title, normal, end.",
+  structure: "Вложенная сетка в системе координат области слайда.",
+  schemes: "Геометрия титульного, обычного и завершающего слайдов.",
+  slot: "Размещение объекта: free, tray, m/ID либо s/ID.",
+  priorSlot: "Привязка перед переносом в неразмещённое содержимое.",
+  fixed: "Декор главной схемы в абсолютных координатах холста.",
+  group: "Общий идентификатор перемещаемой группы на слайде.",
+  relation: "Общая смысловая связь объектов на слайде.",
+  imageFit: "Вписание изображения целиком либо заполнение с обрезкой.",
+  focusX: "Горизонтальная точка фокуса в процентах.",
+  focusY: "Вертикальная точка фокуса в процентах.",
   canvas: "Виртуальный холст в пикселях.",
   width: "Ширина холста.",
   height: "Высота холста.",
@@ -177,6 +189,12 @@ const common = {
   align: text.align,
 };
 const transform = {
+  priorSlot: str(84),
+  slot: str(84),
+  fixed: bool,
+  group: name,
+  relation: name,
+  contentScale: num(0.00001, 8192),
   role: values("content", "decoration"),
   rotation: num(-360, 360),
   flipX: bool,
@@ -206,30 +224,95 @@ const v1base = obj({
 });
 const source: Rule = { anyOf: [{ const: null }, common.src] };
 const slide = { id: uuid, color, background: source, notes: str(200000) };
-export const FORMAT_VERSION = 2;
+export const FORMAT_VERSION = 3;
 export const definitions: Record<string, Rule> = {
-  Presentation: obj({
-    version: { const: FORMAT_VERSION },
-    id: uuid,
-    title: str(1024),
-    canvas: obj({ width: { const: 1280 }, height: { const: 720 } }),
-    theme: obj({
-      styles: list(ref("NamedStyle"), 0, 128),
-      palette: list(color, 1, 32),
-    }),
-    resources: obj({ fonts: list(ref("Font"), 0, 32) }),
-    slides: list(ref("Slide"), 1, 1000),
+  Template: obj({
+    format: { const: 3 },
+    kind: values("presentation", "layout"),
+    description: str(2000),
+    deck: ref("Presentation"),
   }),
+  Presentation: obj(
+    {
+      version: { const: FORMAT_VERSION },
+      master: ref("Master"),
+      id: uuid,
+      title: str(1024),
+      canvas: obj({ width: { const: 1280 }, height: { const: 720 } }),
+      theme: obj({
+        styles: list(ref("NamedStyle"), 0, 128),
+        palette: list(color, 1, 32),
+      }),
+      resources: obj({ fonts: list(ref("Font"), 0, 32) }),
+      slides: list(ref("Slide"), 1, 1000),
+    },
+    { migrated: bool, header: str(200000), footer: str(200000) },
+  ),
+  Master: obj(
+    {
+      name: str(1024),
+      schemes: obj({
+        title: ref("Grid"),
+        normal: ref("Grid"),
+        end: ref("Grid"),
+      }),
+    },
+    {
+      art: obj(
+        {},
+        { title: ref("Slide"), normal: ref("Slide"), end: ref("Slide") },
+      ),
+    },
+  ),
+  Grid: obj({
+    rows: list(num(0.01, 8192), 1, 24),
+    cols: list(num(0.01, 8192), 1, 24),
+    padding: ref("Insets"),
+    cells: list(ref("Cell"), 1, 576),
+  }),
+  Insets: list(num(0, 1279), 4, 4),
+  Cell: obj(
+    {
+      id: name,
+      row: num(0, 23),
+      col: num(0, 23),
+      rows: num(1, 24),
+      cols: num(1, 24),
+      type: values(...Object.keys(cellTypes)),
+      padding: ref("Insets"),
+    },
+    {
+      fill: color,
+      border: color,
+      width: num(0, 64),
+      value: str(200000),
+      style: ref("TextStyle"),
+    },
+  ),
   Slide: obj(
     { ...slide, items: list(ref("Item"), 0, 500) },
-    { kind: values("title", "normal", "end"), area: obj(box) },
+    {
+      kind: values("title", "normal", "end"),
+      area: obj(box),
+      structure: ref("Grid"),
+      header: str(200000),
+      footer: str(200000),
+    },
   ),
   Item: { anyOf: [ref("Text"), ref("Image"), ref("Shape")] },
   Text: obj(
     { ...common, type: { const: "text" }, src: { const: "" } },
     { ...transform, ...rich },
   ),
-  Image: obj({ ...image, text: { const: "" } }, transform),
+  Image: obj(
+    { ...image, text: { const: "" } },
+    {
+      ...transform,
+      imageFit: values("contain", "cover"),
+      focusX: num(0, 100),
+      focusY: num(0, 100),
+    },
+  ),
   Shape: obj(
     { ...shape, src: { const: "" } },
     {

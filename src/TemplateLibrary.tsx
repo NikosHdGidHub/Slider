@@ -1,7 +1,13 @@
 import { useRef, useState } from "react";
 import { Copy, Plus, Upload } from "lucide-react";
 import { Stage } from "./Stage";
-import { copyDeck, builtins, validateTemplate, type Template } from "./catalog";
+import {
+  copyDeck,
+  instantiate,
+  createGridTemplate,
+  validateTemplate,
+  type Template,
+} from "./catalog";
 import { newDeck, MAX_DOCUMENT_BYTES, readJSON, type Deck } from "./model";
 import {
   deleteTemplate,
@@ -47,6 +53,7 @@ export function TemplateLibrary({
       working(false);
     }
   }
+  const [pending, preview] = useState<Template | null>(null);
   return (
     <section className="template-library">
       <div className="catalog-bar">
@@ -66,11 +73,14 @@ export function TemplateLibrary({
             <button
               className="secondary"
               onClick={() => {
-                const d =
-                  kind === "presentation"
-                    ? copyDeck(builtins[0].deck, "Новый шаблон")
-                    : newDeck("Новая компоновка");
-                edit({ kind, description: "", deck: d });
+                edit(
+                  createGridTemplate(
+                    kind,
+                    kind === "presentation"
+                      ? "Новый главный шаблон"
+                      : "Новый структурный шаблон",
+                  ),
+                );
               }}
             >
               <Plus size={16} />
@@ -118,7 +128,7 @@ export function TemplateLibrary({
                         {kind === "presentation" && (
                           <button
                             className="primary"
-                            onClick={() => act(() => create(copyDeck(d)))}
+                            onClick={() => act(() => create(instantiate(t)))}
                           >
                             Создать презентацию
                           </button>
@@ -178,7 +188,17 @@ export function TemplateLibrary({
                                     if (title)
                                       void act(() =>
                                         saveLocal(
-                                          { ...t, deck: { ...d, title } },
+                                          {
+                                            ...t,
+                                            deck: {
+                                              ...d,
+                                              title,
+                                              master: {
+                                                ...d.master,
+                                                name: title,
+                                              },
+                                            },
+                                          },
                                           row,
                                         ),
                                       );
@@ -219,6 +239,28 @@ export function TemplateLibrary({
             );
           })}
       </div>
+      {pending && (
+        <div className="overlay">
+          <div className="dialog import-preview">
+            <h2>{pending.deck.title}</h2>
+            {pending.deck.slides.map((s) => (
+              <Stage key={s.id} slide={s} deck={pending.deck} />
+            ))}
+            <button onClick={() => preview(null)}>Отмена</button>
+            <button
+              onClick={() =>
+                act(async () => {
+                  await saveLocal({ ...pending, deck: copyDeck(pending.deck) });
+                  setKind(pending.kind);
+                  preview(null);
+                })
+              }
+            >
+              Импортировать шаблон
+            </button>
+          </div>
+        </div>
+      )}
       <input
         hidden
         type="file"
@@ -232,8 +274,7 @@ export function TemplateLibrary({
             if (f.size > MAX_DOCUMENT_BYTES)
               throw new Error("Шаблон превышает 64 МиБ.");
             const t = validateTemplate(readJSON(await f.text()));
-            await saveLocal({ ...t, deck: copyDeck(t.deck) });
-            setKind(t.kind);
+            preview(t);
           });
         }}
       />

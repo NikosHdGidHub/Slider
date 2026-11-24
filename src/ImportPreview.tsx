@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { slots, pose } from "./grid";
 import { Stage } from "./Stage";
 import { builtinFonts } from "./schema";
 import type { Box, Deck, Item } from "./model";
@@ -28,8 +29,23 @@ export function ImportPreview({
     s = deck.slides[index];
   const messages = useMemo(() => {
     const out: string[] = [],
-      boxes = s.items.map(bounds);
-    for (const [i, o] of s.items.entries()) {
+      locations = slots(deck.master, s),
+      visible = s.items.flatMap((o) => {
+        const p = pose(o, locations);
+        return p
+          ? [
+              {
+                ...p.item,
+                x: p.x + p.k * p.item.x,
+                y: p.y + p.k * p.item.y,
+                w: p.k * p.item.w,
+                h: p.k * p.item.h,
+              },
+            ]
+          : [];
+      }),
+      boxes = visible.map(bounds);
+    for (const [i, o] of visible.entries()) {
       const b = boxes[i],
         name = "Объект " + (i + 1);
       if (
@@ -59,7 +75,7 @@ export function ImportPreview({
         if (out.length >= 24) break;
         if (
           overlaps(b, boxes[j]) &&
-          (o.role !== s.items[j].role || o.text || s.items[j].text)
+          (o.role !== visible[j].role || o.text || visible[j].text)
         )
           out.push(
             "Объекты " +

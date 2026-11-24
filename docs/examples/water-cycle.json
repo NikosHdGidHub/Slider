@@ -1,5 +1,100 @@
 {
-  "version": 2,
+  "version": 3,
+  "master": {
+    "name": "По умолчанию",
+    "schemes": {
+      "title": {
+        "rows": [
+          1
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cells": [
+          {
+            "id": "body",
+            "row": 0,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "normal": {
+        "rows": [
+          1
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cells": [
+          {
+            "id": "body",
+            "row": 0,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "end": {
+        "rows": [
+          1
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cells": [
+          {
+            "id": "body",
+            "row": 0,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    }
+  },
   "id": "a7100000-0009-4000-8000-000000000001",
   "title": "Круговорот воды в природе",
   "canvas": {

@@ -1,3 +1,4 @@
+import { mediaSlides } from "./grid.ts";
 import { importSVG } from "./vectorImport";
 import { imageSource, MAX_DOCUMENT_BYTES, validateDeck } from "./model";
 import type { Deck } from "./model";
@@ -132,7 +133,7 @@ export async function embedImages(deck: Deck): Promise<Deck> {
     embedded.set(src, result);
     return result;
   }
-  for (const slide of copy.slides) {
+  for (const slide of mediaSlides(copy)) {
     if (slide.background) slide.background = await embed(slide.background);
     for (const item of slide.items) {
       if (item.type === "image") item.src = await embed(item.src);

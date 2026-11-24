@@ -1,3 +1,4 @@
+import { mediaSlides } from "./grid.ts";
 import { uploadImage, publishDocument } from "./cloud";
 import { imageAddress } from "./storage";
 import { validateDeck, type Deck } from "./model";
@@ -46,7 +47,8 @@ export async function publish(deck: Deck) {
     urls.set(src, url);
     return url;
   }
-  for (const slide of copy.slides) {
+  for (const slide of mediaSlides(copy)) {
+    slide.items = slide.items.filter((o) => o.slot !== "tray");
     if (slide.background) slide.background = await resolve(slide.background);
     for (const item of slide.items)
       if (item.type === "image") item.src = await resolve(item.src);
