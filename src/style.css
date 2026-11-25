@@ -1431,3 +1431,109 @@ h1 {
 .file-preview h2 {
   overflow-wrap: anywhere;
 }
+
+/* Диалог выхода из редактора */
+
+.leave-description {
+  color: #64766b;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.leave-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.leave-action {
+  width: 100%;
+  min-height: 76px;
+  padding: 15px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 13px;
+  text-align: left;
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.leave-action-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.leave-action-content strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.leave-action-content small {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+/* Публикация */
+
+.leave-action-publish {
+  background: #255b44;
+  color: #fff;
+  border: 1px solid #255b44;
+}
+
+.leave-action-publish:hover:not(:disabled) {
+  background: #1d4936;
+  box-shadow: 0 5px 14px #255b4425;
+  transform: translateY(-1px);
+}
+
+/* Локальное сохранение */
+
+.leave-action-local {
+  background: #fff;
+  color: #284b3b;
+  border: 1px solid #d4dbd0;
+}
+
+.leave-action-local:hover:not(:disabled) {
+  background: #f1f5ef;
+  border-color: #a9bdae;
+  transform: translateY(-1px);
+}
+
+/* Вернуться к редактированию */
+
+.leave-action-cancel {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 4px;
+  border-radius: 8px;
+  color: #64766b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.leave-action-cancel:hover {
+  background: #edf2eb;
+  color: #255b44;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leave-action {
+    transition: none;
+  }
+
+  .leave-action:hover:not(:disabled) {
+    transform: none;
+  }
+}

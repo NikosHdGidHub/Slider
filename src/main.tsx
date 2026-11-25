@@ -1225,23 +1225,45 @@ function App() {
               </>
             ) : modal === 'leave' ? (
               <>
-                <p>
+                <p className="leave-description">
                   {baseline
-                    ? 'Есть неопубликованные изменения.'
-                    : 'Методичка ещё не опубликована.'}
+                    ? 'В методичке есть неопубликованные изменения. Что сделать перед выходом?'
+                    : 'Методичка ещё не опубликована. Что сделать перед выходом?'}
                 </p>
-                <button
-                  disabled={!canPublish}
-                  onClick={() => act('publish', true)}
-                >
-                  Опубликовать и выйти
-                </button>
-                <button onClick={() => task('Сохранение…', closeEditor)}>
-                  Оставить локально и выйти
-                </button>
-                <button onClick={() => setModal('')}>
-                  Продолжить редактирование
-                </button>
+
+                <div className="leave-actions">
+                  <button
+                    className="leave-action leave-action-publish"
+                    disabled={!canPublish}
+                    onClick={() => act('publish', true)}
+                  >
+                    <Globe2 size={21} />
+                    <span className="leave-action-content">
+                      <strong>Опубликовать и выйти</strong>
+                      <small>Обновить облачную версию методички</small>
+                    </span>
+                    <ArrowUpRight size={18} />
+                  </button>
+
+                  <button
+                    className="leave-action leave-action-local"
+                    onClick={() => task('Сохранение…', closeEditor)}
+                  >
+                    <FolderOpen size={21} />
+                    <span className="leave-action-content">
+                      <strong>Оставить локально и выйти</strong>
+                      <small>Сохранить только на этом устройстве</small>
+                    </span>
+                  </button>
+
+                  <button
+                    className="leave-action-cancel"
+                    onClick={() => setModal('')}
+                  >
+                    <Pencil size={16} />
+                    Продолжить редактирование
+                  </button>
+                </div>
               </>
             ) : modal === 'preview' && preview ? (
               <ImportPreview
