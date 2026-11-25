@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState } from 'react'
 import {
   slots,
   cellTypes,
@@ -8,9 +8,9 @@ import {
   setStructure,
   switchMaster,
   bind,
-} from "./grid";
-import { validateDeck, type Deck, type Slide, type Item } from "./model";
-import type { Template } from "./catalog";
+} from './grid'
+import { validateDeck, type Deck, type Slide, type Item } from './model'
+import type { Template } from './catalog'
 
 export function PlacementPanel({
   deck,
@@ -22,28 +22,28 @@ export function PlacementPanel({
   notice,
   saveAs,
 }: {
-  deck: Deck;
-  slide: Slide;
-  templates: Template[];
-  update: (d: Deck) => void;
-  select: (id: string) => void;
-  selected: string;
-  notice: (s: string) => void;
-  saveAs?: () => void;
+  deck: Deck
+  slide: Slide
+  templates: Template[]
+  update: (d: Deck) => void
+  select: (id: string) => void
+  selected: string
+  notice: (s: string) => void
+  saveAs?: () => void
 }) {
-  const [marked, mark] = useState<string[]>([]);
+  const [marked, mark] = useState<string[]>([])
   const all = slots(deck.master, slide),
-    tray = slide.items.filter((o) => target(o) === "tray"),
-    item = slide.items.find((o) => o.id === selected);
+    tray = slide.items.filter((o) => target(o) === 'tray'),
+    item = slide.items.find((o) => o.id === selected)
   const name = (o: Item) =>
     o.text.slice(0, 28) ||
-    { shape: "Фигура", image: "Изображение", text: "Текст" }[o.type];
+    { shape: 'Фигура', image: 'Изображение', text: 'Текст' }[o.type]
   function replace(s: Slide) {
-    s = linkCaptions(deck.master, s);
+    s = linkCaptions(deck.master, s)
     update({
       ...deck,
       slides: deck.slides.map((v) => (v.id === s.id ? s : v)),
-    });
+    })
   }
   function assign(o: Item, id: string) {
     replace({
@@ -53,12 +53,12 @@ export function PlacementPanel({
         (o.group &&
           o.group === v.group &&
           target(v) === target(o) &&
-          (id === "tray" || all.find((p) => p.id === id)?.cell.type === "free"))
+          (id === 'tray' || all.find((p) => p.id === id)?.cell.type === 'free'))
           ? bind(v, id)
-          : v,
+          : v
       ),
-    });
-    select(o.id);
+    })
+    select(o.id)
   }
   return (
     <>
@@ -70,34 +70,34 @@ export function PlacementPanel({
           <select
             value=""
             onChange={(e) => {
-              const t = templates.find((t) => t.deck.id === e.target.value);
-              if (!t) return;
+              const t = templates.find((t) => t.deck.id === e.target.value)
+              if (!t) return
               if (
                 !confirm(
                   deck.migrated
-                    ? "Исходная композиция каждого слайда перейдёт в неразмещённое содержимое. В библиотеке сохранится копия прежней методички. Продолжить?"
-                    : "Применить главный шаблон ко всей методичке?",
+                    ? 'Исходная композиция каждого слайда перейдёт в неразмещённое содержимое. В библиотеке сохранится копия прежней методички. Продолжить?'
+                    : 'Применить главный шаблон ко всей методичке?'
                 )
               )
-                return;
+                return
               try {
-                const next = switchMaster(deck, t.deck);
-                update(validateDeck(next));
+                const next = switchMaster(deck, t.deck)
+                update(validateDeck(next))
                 const n = next.slides.reduce(
                   (a, s) =>
-                    a + s.items.filter((o) => target(o) === "tray").length,
-                  0,
-                );
-                notice(n ? "Неразмещённых объектов: " + n : "Шаблон применён.");
-                select("");
+                    a + s.items.filter((o) => target(o) === 'tray').length,
+                  0
+                )
+                notice(n ? 'Неразмещённых объектов: ' + n : 'Шаблон применён.')
+                select('')
               } catch (err) {
-                notice((err as Error).message);
+                notice((err as Error).message)
               }
             }}
           >
             <option value="">Выберите шаблон</option>
             {templates
-              .filter((t) => t.kind === "presentation" && t.format === 3)
+              .filter((t) => t.kind === 'presentation' && t.format === 3)
               .map((t) => (
                 <option key={t.deck.id} value={t.deck.id}>
                   {t.deck.title}
@@ -105,33 +105,33 @@ export function PlacementPanel({
               ))}
           </select>
         </label>
-        {all.some((v) => v.cell.type === "area") && (
+        {all.some((v) => v.cell.type === 'area') && (
           <label>
             Режим области слайда
             <select
               aria-label="Режим области слайда"
-              value={slide.structure ? "structured" : "free"}
+              value={slide.structure ? 'structured' : 'free'}
               onChange={(e) => {
-                if (e.target.value === "structured") return;
-                const t = templates.find((t) => t.deck.id === e.target.value);
+                if (e.target.value === 'structured') return
+                const t = templates.find((t) => t.deck.id === e.target.value)
                 if (
                   t &&
                   slide.items.some(
                     (o) =>
                       !o.fixed &&
-                      !target(o).startsWith("m/") &&
-                      target(o) !== "tray",
+                      !target(o).startsWith('m/') &&
+                      target(o) !== 'tray'
                   ) &&
                   !confirm(
-                    "Текущее размещение будет сброшено. Перенести объекты области в неразмещённое содержимое этого слайда?",
+                    'Текущее размещение будет сброшено. Перенести объекты области в неразмещённое содержимое этого слайда?'
                   )
                 )
-                  return;
+                  return
                 try {
-                  update(validateDeck(setStructure(deck, slide, t?.deck)));
-                  select("");
+                  update(validateDeck(setStructure(deck, slide, t?.deck)))
+                  select('')
                 } catch (err) {
-                  notice((err as Error).message);
+                  notice((err as Error).message)
                 }
               }}
             >
@@ -140,7 +140,7 @@ export function PlacementPanel({
                 <option value="structured">Текущая структура</option>
               )}
               {templates
-                .filter((t) => t.kind === "layout" && t.format === 3)
+                .filter((t) => t.kind === 'layout' && t.format === 3)
                 .map((t) => (
                   <option key={t.deck.id} value={t.deck.id}>
                     {t.deck.title}
@@ -152,37 +152,37 @@ export function PlacementPanel({
         {saveAs && <button onClick={saveAs}>Сохранить как шаблон</button>}
       </details>
       {all
-        .filter((v) => v.cell.type === "header" || v.cell.type === "footer")
+        .filter((v) => v.cell.type === 'header' || v.cell.type === 'footer')
         .map((v) => {
-          const k = v.cell.type as "header" | "footer";
+          const k = v.cell.type as 'header' | 'footer'
           return (
             <details key={v.id}>
               <summary>{cellTypes[k]}</summary>
               <label>
                 Для всей методички
                 <input
-                  value={deck[k] ?? v.cell.value ?? ""}
+                  value={deck[k] ?? v.cell.value ?? ''}
                   onChange={(e) => update({ ...deck, [k]: e.target.value })}
                 />
               </label>
               <label>
                 Для этого слайда
                 <input
-                  value={slide[k] ?? deck[k] ?? v.cell.value ?? ""}
+                  value={slide[k] ?? deck[k] ?? v.cell.value ?? ''}
                   onChange={(e) => replace({ ...slide, [k]: e.target.value })}
                 />
               </label>
               <button
                 onClick={() => {
-                  const next = { ...slide };
-                  delete next[k];
-                  replace(next);
+                  const next = { ...slide }
+                  delete next[k]
+                  replace(next)
                 }}
               >
                 Вернуть общее значение
               </button>
             </details>
-          );
+          )
         })}
       {item && !item.fixed && (
         <label>
@@ -197,10 +197,10 @@ export function PlacementPanel({
               .filter(
                 (v) =>
                   accepts(v.cell.type, item) &&
-                  (v.cell.type === "free" ||
+                  (v.cell.type === 'free' ||
                     !slide.items.some(
-                      (o) => o.id !== item.id && target(o) === v.id,
-                    )),
+                      (o) => o.id !== item.id && target(o) === v.id
+                    ))
               )
               .map((v) => (
                 <option key={v.id} value={v.id}>
@@ -223,40 +223,40 @@ export function PlacementPanel({
                   mark(
                     e.target.checked
                       ? [...marked, o.id]
-                      : marked.filter((id) => id !== o.id),
+                      : marked.filter((id) => id !== o.id)
                   )
                 }
               />
               {name(o)}
             </label>
           ))}
-        {(["group", "relation"] as const).map((key, i) => (
+        {(['group', 'relation'] as const).map((key, i) => (
           <button
             key={key}
             disabled={marked.length < 2}
             onClick={() => {
-              const members = slide.items.filter((o) => marked.includes(o.id));
+              const members = slide.items.filter((o) => marked.includes(o.id))
               if (
                 members.length < 2 ||
-                (key === "group" &&
+                (key === 'group' &&
                   (new Set(members.map(target)).size !== 1 ||
                     all.find((v) => v.id === target(members[0]))?.cell.type !==
-                      "free"))
+                      'free'))
               ) {
-                notice("Для группы выберите объекты одного свободного блока.");
-                return;
+                notice('Для группы выберите объекты одного свободного блока.')
+                return
               }
-              const id = "g" + crypto.randomUUID();
+              const id = 'g' + crypto.randomUUID()
               replace({
                 ...slide,
                 items: slide.items.map((o) =>
-                  marked.includes(o.id) ? { ...o, [key]: id } : o,
+                  marked.includes(o.id) ? { ...o, [key]: id } : o
                 ),
-              });
-              mark([]);
+              })
+              mark([])
             }}
           >
-            {i ? "Связать по смыслу" : "Сгруппировать"}
+            {i ? 'Связать по смыслу' : 'Сгруппировать'}
           </button>
         ))}
         {item?.group && (
@@ -265,10 +265,10 @@ export function PlacementPanel({
               replace({
                 ...slide,
                 items: slide.items.map((o) => {
-                  if (o.group !== item.group) return o;
-                  const copy = { ...o };
-                  delete copy.group;
-                  return copy;
+                  if (o.group !== item.group) return o
+                  const copy = { ...o }
+                  delete copy.group
+                  return copy
                 }),
               })
             }
@@ -278,5 +278,5 @@ export function PlacementPanel({
         )}
       </details>
     </>
-  );
+  )
 }

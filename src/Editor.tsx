@@ -1,6 +1,6 @@
-import { type HistoryControls, useCommands, type Action } from "./StudioTools";
-import { Background } from "./Background";
-import { PlacementPanel } from "./PlacementPanel";
+import { type HistoryControls, useCommands, type Action } from './StudioTools'
+import { Background } from './Background'
+import { PlacementPanel } from './PlacementPanel'
 import {
   slots,
   target,
@@ -9,9 +9,9 @@ import {
   applyKind,
   inheritedBackground,
   freezeDecoration,
-} from "./grid";
-import { shapes } from "./schema";
-import { useEffect, useRef, useState } from "react";
+} from './grid'
+import { shapes } from './schema'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ChevronUp,
@@ -28,18 +28,18 @@ import {
   WifiOff,
   Palette,
   RotateCcw,
-} from "lucide-react";
-import type { StyleLibrary } from "./styleLibrary";
+} from 'lucide-react'
+import type { StyleLibrary } from './styleLibrary'
 import {
   TextPanel,
   ShapePanel,
   GeometryPanel,
   StylesPanel,
   Num,
-} from "./Properties";
-import { applyLayout, type Template } from "./catalog";
-import { importSVG } from "./vectorImport";
-import { Stage } from "./Stage";
+} from './Properties'
+import { applyLayout, type Template } from './catalog'
+import { importSVG } from './vectorImport'
+import { Stage } from './Stage'
 import {
   newSlide,
   newText,
@@ -48,28 +48,28 @@ import {
   type Deck,
   type Item,
   type Slide,
-} from "./model";
-import { optimize } from "./media";
-import { cloudImage } from "./publication";
-import { client } from "./cloud";
+} from './model'
+import { optimize } from './media'
+import { cloudImage } from './publication'
+import { client } from './cloud'
 
 type Props = {
-  history: HistoryControls;
-  deck: Deck;
-  styleLibrary?: StyleLibrary;
-  templates?: Template[];
-  gridTemplateKind?: Template["kind"];
-  saveAs?: () => void;
-  saveTemplate?: () => void;
-  description?: string;
-  describe?: (v: string) => void;
-  change: (f: (d: Deck) => Deck) => void;
-  back: () => void;
-  view: () => void;
-  status: string;
-  action: (id: "export" | "publish" | "offline") => void;
-  notice: (s: string) => void;
-};
+  history: HistoryControls
+  deck: Deck
+  styleLibrary?: StyleLibrary
+  templates?: Template[]
+  gridTemplateKind?: Template['kind']
+  saveAs?: () => void
+  saveTemplate?: () => void
+  description?: string
+  describe?: (v: string) => void
+  change: (f: (d: Deck) => Deck) => void
+  back: () => void
+  view: () => void
+  status: string
+  action: (id: 'export' | 'publish' | 'offline') => void
+  notice: (s: string) => void
+}
 export function Editor({
   deck,
   saveAs,
@@ -87,47 +87,45 @@ export function Editor({
   action,
   notice,
 }: Props) {
-  const clipboard = useRef<Item[]>([]);
+  const clipboard = useRef<Item[]>([])
   const [sid, choose] = useState(deck.slides[0].id),
-    [sel, select] = useState(""),
-    [menu, setMenu] = useState(false);
+    [sel, select] = useState(''),
+    [menu, setMenu] = useState(false)
   const slide = deck.slides.find((s) => s.id === sid) || deck.slides[0],
     idx = deck.slides.indexOf(slide),
-    item = slide.items.find((x) => x.id === sel);
+    item = slide.items.find((x) => x.id === sel)
   const input = useRef<HTMLInputElement>(null),
-    background = useRef(false);
+    background = useRef(false)
   function modify(fn: (s: Slide) => Slide) {
     change((d) => ({
       ...d,
       slides: d.slides.map((s) =>
-        s.id === slide.id ? linkCaptions(d.master, fn(s)) : s,
+        s.id === slide.id ? linkCaptions(d.master, fn(s)) : s
       ),
-    }));
+    }))
   }
-  const chosenSlot = useRef("");
+  const chosenSlot = useRef('')
   function additions(s: Slide, added: Item[]) {
     const available = slots(deck.master, s),
-      used = new Set(s.items.map(target));
+      used = new Set(s.items.map(target))
     return added.map((o) => {
       const match =
         available.find(
           (v) =>
             v.id === chosenSlot.current &&
             accepts(v.cell.type, o) &&
-            (v.cell.type === "free" || !used.has(v.id)),
+            (v.cell.type === 'free' || !used.has(v.id))
         ) ??
         available.find(
           (v) =>
-            v.cell.type !== "free" &&
-            accepts(v.cell.type, o) &&
-            !used.has(v.id),
+            v.cell.type !== 'free' && accepts(v.cell.type, o) && !used.has(v.id)
         ) ??
-        available.find((v) => v.cell.type === "free");
-      if (!match && saveTemplate && gridTemplateKind !== "layout")
-        return { ...o, fixed: true, role: "decoration" as const };
-      if (match) used.add(match.id);
-      return match?.id === "free" ? o : { ...o, slot: match?.id ?? "tray" };
-    });
+        available.find((v) => v.cell.type === 'free')
+      if (!match && saveTemplate && gridTemplateKind !== 'layout')
+        return { ...o, fixed: true, role: 'decoration' as const }
+      if (match) used.add(match.id)
+      return match?.id === 'free' ? o : { ...o, slot: match?.id ?? 'tray' }
+    })
   }
   function patch(id: string, fields: Partial<Item>) {
     modify((s) => ({
@@ -135,307 +133,307 @@ export function Editor({
       items: s.items.map((it) =>
         it.id === id
           ? (Object.fromEntries(
-            Object.entries({ ...it, ...fields }).filter(
-              ([, value]) => value !== undefined,
-            ),
-          ) as unknown as Item)
-          : it,
+              Object.entries({ ...it, ...fields }).filter(
+                ([, value]) => value !== undefined
+              )
+            ) as unknown as Item)
+          : it
       ),
-    }));
+    }))
   }
   function removeItem() {
     if (item)
-      modify((s) => ({ ...s, items: s.items.filter((it) => it.id !== sel) }));
-    select("");
+      modify((s) => ({ ...s, items: s.items.filter((it) => it.id !== sel) }))
+    select('')
   }
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if (
         (e.target as HTMLElement).closest(
-          "input,textarea,select,[contenteditable]",
+          'input,textarea,select,[contenteditable]'
         )
       )
-        return;
+        return
       if (
         item &&
         !item.locked &&
         (!item.fixed || saveTemplate) &&
-        ["Delete", "Backspace"].includes(e.key)
+        ['Delete', 'Backspace'].includes(e.key)
       ) {
-        e.preventDefault();
-        removeItem();
+        e.preventDefault()
+        removeItem()
       }
     }
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  });
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  })
   function reorder(delta: number) {
-    const to = idx + delta;
-    if (to < 0 || to >= deck.slides.length) return;
+    const to = idx + delta
+    if (to < 0 || to >= deck.slides.length) return
     change((d) => {
-      const slides = d.slides.slice();
-      [slides[idx], slides[to]] = [slides[to], slides[idx]];
-      return { ...d, slides };
-    });
+      const slides = d.slides.slice()
+      ;[slides[idx], slides[to]] = [slides[to], slides[idx]]
+      return { ...d, slides }
+    })
   }
   function addSlide() {
-    const normal = deck.slides.find((s) => s.kind === "normal");
+    const normal = deck.slides.find((s) => s.kind === 'normal')
     const fresh = normal
       ? {
-        ...structuredClone(normal),
-        id: crypto.randomUUID(),
-        notes: "",
-        items: normal.items
-          .filter((o) => o.role === "decoration")
-          .map((o) => ({ ...structuredClone(o), id: crypto.randomUUID() })),
-      }
-      : newSlide();
+          ...structuredClone(normal),
+          id: crypto.randomUUID(),
+          notes: '',
+          items: normal.items
+            .filter((o) => o.role === 'decoration')
+            .map((o) => ({ ...structuredClone(o), id: crypto.randomUUID() })),
+        }
+      : newSlide()
     change((d) => ({
       ...d,
       slides: [
         ...d.slides.slice(0, idx + 1),
         deck.master.art
           ? applyKind(
-            deck.master,
-            { ...fresh, ownBackground: false, items: [] },
-            "normal",
-          )
+              deck.master,
+              { ...fresh, ownBackground: false, items: [] },
+              'normal'
+            )
           : fresh,
         ...d.slides.slice(idx + 1),
       ],
-    }));
-    choose(fresh.id);
-    select("");
+    }))
+    choose(fresh.id)
+    select('')
   }
   function delSlide() {
-    if (!confirm("Удалить текущий слайд вместе с объектами и заметками?"))
-      return;
-    const slides = deck.slides.filter((s) => s.id !== slide.id);
-    if (!slides.length) slides.push(newSlide());
-    change((d) => ({ ...d, slides }));
-    choose(slides[Math.min(idx, slides.length - 1)].id);
-    select("");
+    if (!confirm('Удалить текущий слайд вместе с объектами и заметками?'))
+      return
+    const slides = deck.slides.filter((s) => s.id !== slide.id)
+    if (!slides.length) slides.push(newSlide())
+    change((d) => ({ ...d, slides }))
+    choose(slides[Math.min(idx, slides.length - 1)].id)
+    select('')
   }
   function pickImage(bg = false) {
-    background.current = bg;
-    input.current?.click();
+    background.current = bg
+    input.current?.click()
   }
   async function insert(file: File) {
-    const bg = background.current;
+    const bg = background.current
     try {
-      if (!bg && (file.type === "image/svg+xml" || /\.svg$/i.test(file.name))) {
-        const items = await importSVG(file);
+      if (!bg && (file.type === 'image/svg+xml' || /\.svg$/i.test(file.name))) {
+        const items = await importSVG(file)
         const next = {
           ...slide,
           items: [...slide.items, ...additions(slide, items)],
-        };
-        validateDeck({ ...deck, slides: [next] });
-        modify((s) => ({ ...s, items: [...s.items, ...additions(s, items)] }));
-        select(items[0].id);
-        notice("SVG добавлен как редактируемые векторные фигуры.");
-        return;
+        }
+        validateDeck({ ...deck, slides: [next] })
+        modify((s) => ({ ...s, items: [...s.items, ...additions(s, items)] }))
+        select(items[0].id)
+        notice('SVG добавлен как редактируемые векторные фигуры.')
+        return
       }
-      const { src, width, height } = await optimize(file);
-      if (bg) modify((s) => ({ ...s, background: src }));
+      const { src, width, height } = await optimize(file)
+      if (bg) modify((s) => ({ ...s, background: src }))
       else {
         const w = Math.min(700, width, (520 * width) / height),
-          h = (w * height) / width;
+          h = (w * height) / width
         const img: Item = {
           ...newText(),
-          type: "image",
+          type: 'image',
           src,
-          text: "",
+          text: '',
           x: (1280 - w) / 2,
           y: (720 - h) / 2,
           w,
           h,
-        };
-        modify((s) => ({ ...s, items: [...s.items, ...additions(s, [img])] }));
-        select(img.id);
+        }
+        modify((s) => ({ ...s, items: [...s.items, ...additions(s, [img])] }))
+        select(img.id)
       }
       if (client && navigator.onLine)
         cloudImage(src).catch(() =>
           notice(
-            "Изображение сохранено локально. При публикации загрузка повторится.",
-          ),
-        );
+            'Изображение сохранено локально. При публикации загрузка повторится.'
+          )
+        )
     } catch (e) {
-      notice((e as Error).message);
+      notice((e as Error).message)
     }
   }
-  const editable = (o: Item) => !o.locked && (!o.fixed || !!saveTemplate);
+  const editable = (o: Item) => !o.locked && (!o.fixed || !!saveTemplate)
   function commands(o?: Item): Action[] {
-    const actions: Action[] = [];
+    const actions: Action[] = []
     function copy() {
       if (o)
         clipboard.current = structuredClone(
           slide.items.filter(
             (v) =>
-              v.id === o.id || (o.group && o.group === v.group && editable(v)),
-          ),
-        );
+              v.id === o.id || (o.group && o.group === v.group && editable(v))
+          )
+        )
     }
     function paste(source = clipboard.current) {
-      if (!source.length) return;
+      if (!source.length) return
       if (slide.items.length + source.length > 500) {
-        notice("На слайде можно разместить до 500 объектов.");
-        return;
+        notice('На слайде можно разместить до 500 объектов.')
+        return
       }
-      const ids = new Map<string, string>();
+      const ids = new Map<string, string>()
       const copies = source.map((v) => {
-        const x = { ...structuredClone(v), id: crypto.randomUUID() };
-        delete x.slot;
-        delete x.priorSlot;
-        delete x.fixed;
-        for (const k of ["group", "relation"] as const)
+        const x = { ...structuredClone(v), id: crypto.randomUUID() }
+        delete x.slot
+        delete x.priorSlot
+        delete x.fixed
+        for (const k of ['group', 'relation'] as const)
           if (x[k]) {
-            const key = k + x[k];
-            if (!ids.has(key)) ids.set(key, "g" + crypto.randomUUID());
-            x[k] = ids.get(key);
+            const key = k + x[k]
+            if (!ids.has(key)) ids.set(key, 'g' + crypto.randomUUID())
+            x[k] = ids.get(key)
           }
-        return x;
-      });
-      modify((s) => ({ ...s, items: [...s.items, ...additions(s, copies)] }));
-      select(copies[0].id);
+        return x
+      })
+      modify((s) => ({ ...s, items: [...s.items, ...additions(s, copies)] }))
+      select(copies[0].id)
     }
     if (o) {
-      actions.push({ name: "Свойства", run: () => select(o.id) });
+      actions.push({ name: 'Свойства', run: () => select(o.id) })
       if (editable(o)) {
         actions.push(
-          { name: "Копировать", key: "c", run: copy },
+          { name: 'Копировать', key: 'c', run: copy },
           {
-            name: "Вырезать",
-            key: "x",
+            name: 'Вырезать',
+            key: 'x',
             run: () => {
-              copy();
-              const ids = new Set(clipboard.current.map((v) => v.id));
+              copy()
+              const ids = new Set(clipboard.current.map((v) => v.id))
               modify((s) => ({
                 ...s,
                 items: s.items.filter((v) => !ids.has(v.id)),
-              }));
-              select("");
+              }))
+              select('')
             },
           },
           {
-            name: "Дублировать",
+            name: 'Дублировать',
             run: () => {
-              copy();
-              paste();
+              copy()
+              paste()
             },
           },
           {
-            name: "Удалить",
+            name: 'Удалить',
             run: () => {
               modify((s) => ({
                 ...s,
                 items: s.items.filter((v) => v.id !== o.id),
-              }));
-              select("");
+              }))
+              select('')
             },
-          },
-        );
+          }
+        )
         for (const delta of [-1, 1]) {
           const i = slide.items.indexOf(o),
-            adj = slide.items[i + delta];
-          if (adj && target(adj) !== "tray")
+            adj = slide.items[i + delta]
+          if (adj && target(adj) !== 'tray')
             actions.push({
-              name: delta > 0 ? "Выше" : "Ниже",
+              name: delta > 0 ? 'Выше' : 'Ниже',
               run: () => reorderLayer(o.id, adj.id),
-            });
+            })
         }
       }
       if (!o.fixed) {
         actions.push(
           {
-            name: o.locked ? "Разблокировать" : "Заблокировать",
+            name: o.locked ? 'Разблокировать' : 'Заблокировать',
             run: () => patch(o.id, { locked: !o.locked }),
           },
           {
-            name: o.hidden ? "Показать слой" : "Скрыть слой",
+            name: o.hidden ? 'Показать слой' : 'Скрыть слой',
             run: () => patch(o.id, { hidden: !o.hidden }),
-          },
-        );
+          }
+        )
         if (!o.locked)
           actions.push({
-            name: "Переименовать",
+            name: 'Переименовать',
             run: () => {
               const n = prompt(
-                "Название слоя",
-                o.layerName ?? o.text.slice(0, 40),
-              );
-              if (n?.trim()) patch(o.id, { layerName: n.trim().slice(0, 200) });
+                'Название слоя',
+                o.layerName ?? o.text.slice(0, 40)
+              )
+              if (n?.trim()) patch(o.id, { layerName: n.trim().slice(0, 200) })
             },
-          });
+          })
       }
     }
-    actions.push({ name: "Вставить", key: "v", run: () => paste() });
-    return actions;
+    actions.push({ name: 'Вставить', key: 'v', run: () => paste() })
+    return actions
   }
   function reorderLayer(id: string, dest: string) {
     modify((s) => {
       const items = s.items.slice(),
         from = items.findIndex((v) => v.id === id),
-        to = items.findIndex((v) => v.id === dest);
-      if (from < 0 || to < 0 || !editable(items[from])) return s;
-      items.splice(to, 0, items.splice(from, 1)[0]);
-      return { ...s, items };
-    });
+        to = items.findIndex((v) => v.id === dest)
+      if (from < 0 || to < 0 || !editable(items[from])) return s
+      items.splice(to, 0, items.splice(from, 1)[0])
+      return { ...s, items }
+    })
   }
   const actions = commands(item),
-    context = useCommands([...history.actions, ...actions]);
+    context = useCommands([...history.actions, ...actions])
   useEffect(() => {
     document
       .querySelector('.layer-row[aria-pressed="true"]')
-      ?.scrollIntoView({ block: "nearest" });
-  }, [sel]);
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [sel])
   function rows(tray: boolean) {
     return slide.items
-      .filter((o) => (target(o) === "tray") === tray)
+      .filter((o) => (target(o) === 'tray') === tray)
       .reverse()
       .map((o) => (
         <button
           aria-label={
             tray
               ? undefined
-              : "Слой " +
-              (o.layerName ||
-                o.text.slice(0, 38) ||
-                { shape: "Фигура", text: "Текст", image: "Изображение" }[
-                o.type
-                ])
+              : 'Слой ' +
+                (o.layerName ||
+                  o.text.slice(0, 38) ||
+                  { shape: 'Фигура', text: 'Текст', image: 'Изображение' }[
+                    o.type
+                  ])
           }
           className="layer-row"
           key={o.id}
           aria-pressed={o.id === sel}
           draggable={!tray && editable(o)}
           onDragStart={(e) =>
-            e.dataTransfer.setData("application/atlas-layer", o.id)
+            e.dataTransfer.setData('application/atlas-layer', o.id)
           }
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) =>
             reorderLayer(
-              e.dataTransfer.getData("application/atlas-layer"),
-              o.id,
+              e.dataTransfer.getData('application/atlas-layer'),
+              o.id
             )
           }
           onClick={() => select(o.id)}
           onContextMenu={(e) => {
-            select(o.id);
-            context.open(e, commands(o));
+            select(o.id)
+            context.open(e, commands(o))
           }}
         >
           <span aria-hidden="true">
-            {o.type === "text" ? "T" : o.type === "image" ? "▧" : "◇"}
+            {o.type === 'text' ? 'T' : o.type === 'image' ? '▧' : '◇'}
           </span>
           {o.layerName ||
             o.text.slice(0, 38) ||
-            { text: "Текст", shape: "Фигура", image: "Изображение" }[
-            o.type
-            ]}{" "}
-          {o.fixed || o.locked ? "🔒" : ""}
-          {o.hidden ? " · скрыт" : ""}
+            { text: 'Текст', shape: 'Фигура', image: 'Изображение' }[
+              o.type
+            ]}{' '}
+          {o.fixed || o.locked ? '🔒' : ''}
+          {o.hidden ? ' · скрыт' : ''}
         </button>
-      ));
+      ))
   }
   return (
     <div className="editor">
@@ -451,7 +449,7 @@ export function Editor({
           onChange={(e) => change((d) => ({ ...d, title: e.target.value }))}
           onBlur={() => {
             if (!deck.title.trim())
-              change((d) => ({ ...d, title: "Без названия" }));
+              change((d) => ({ ...d, title: 'Без названия' }))
           }}
         />
         <small>
@@ -481,16 +479,16 @@ export function Editor({
               <div className="popover">
                 {(
                   [
-                    ["export", "Экспортировать JSON", FileDown],
-                    ["offline", "Подготовить к офлайн-показу", WifiOff],
-                    ["publish", "Опубликовать", UploadCloud],
+                    ['export', 'Экспортировать JSON', FileDown],
+                    ['offline', 'Подготовить к офлайн-показу', WifiOff],
+                    ['publish', 'Опубликовать', UploadCloud],
                   ] as const
                 ).map(([key, label, Icon]) => (
                   <button
                     key={key}
                     onClick={() => {
-                      setMenu(false);
-                      action(key);
+                      setMenu(false)
+                      action(key)
                     }}
                   >
                     <Icon size={17} />
@@ -510,10 +508,10 @@ export function Editor({
           {deck.slides.map((s, i) => (
             <button
               key={s.id}
-              className={"thumb " + (s.id === slide.id ? "active" : "")}
+              className={'thumb ' + (s.id === slide.id ? 'active' : '')}
               onClick={() => {
-                choose(s.id);
-                select("");
+                choose(s.id)
+                select('')
               }}
             >
               <b>{i + 1}</b>
@@ -531,12 +529,12 @@ export function Editor({
           <div className="tools">
             <button
               onClick={() => {
-                const text = newText();
+                const text = newText()
                 modify((s) => ({
                   ...s,
                   items: [...s.items, ...additions(s, [text])],
-                }));
-                select(text.id);
+                }))
+                select(text.id)
               }}
             >
               <Type />
@@ -544,12 +542,12 @@ export function Editor({
             </button>
             <button
               onClick={() => {
-                const shape = newShape();
+                const shape = newShape()
                 modify((s) => ({
                   ...s,
                   items: [...s.items, ...additions(s, [shape])],
-                }));
-                select(shape.id);
+                }))
+                select(shape.id)
               }}
             >
               <Plus />
@@ -564,10 +562,10 @@ export function Editor({
             className="canvas"
             onContextMenu={(e) => {
               const id = (e.target as Element)
-                .closest("[data-item]")
-                ?.getAttribute("data-item");
-              select(id ?? "");
-              context.open(e, commands(slide.items.find((o) => o.id === id)));
+                .closest('[data-item]')
+                ?.getAttribute('data-item')
+              select(id ?? '')
+              context.open(e, commands(slide.items.find((o) => o.id === id)))
             }}
           >
             <Stage
@@ -576,66 +574,64 @@ export function Editor({
               design={!!saveTemplate}
               selected={sel}
               onSlot={(id) => {
-                chosenSlot.current = id;
-                const dest = slots(deck.master, slide).find(
-                  (v) => v.id === id,
-                )!;
-                const existing = slide.items.find((o) => target(o) === id);
-                if (dest.cell.type === "free") {
-                  select("");
-                  return;
+                chosenSlot.current = id
+                const dest = slots(deck.master, slide).find((v) => v.id === id)!
+                const existing = slide.items.find((o) => target(o) === id)
+                if (dest.cell.type === 'free') {
+                  select('')
+                  return
                 }
                 if (existing) {
-                  select(existing.id);
-                  return;
+                  select(existing.id)
+                  return
                 }
                 if (
-                  dest.cell.type === "header" ||
-                  dest.cell.type === "footer"
+                  dest.cell.type === 'header' ||
+                  dest.cell.type === 'footer'
                 ) {
-                  select("");
+                  select('')
                   notice(
-                    "Введите общее значение или переопределение в панели колонтитула.",
-                  );
-                  return;
+                    'Введите общее значение или переопределение в панели колонтитула.'
+                  )
+                  return
                 }
-                if (dest.cell.type === "image") {
-                  pickImage();
-                  return;
+                if (dest.cell.type === 'image') {
+                  pickImage()
+                  return
                 }
                 const text = {
                   ...newText(),
-                  text: dest.cell.value ?? "",
+                  text: dest.cell.value ?? '',
                   slot: id,
-                };
-                modify((s) => ({ ...s, items: [...s.items, text] }));
-                select(text.id);
+                }
+                modify((s) => ({ ...s, items: [...s.items, text] }))
+                select(text.id)
               }}
               onText={patch}
               onNodes={(id, nodes) => patch(id, { nodes })}
               onEditText={(id) => {
-                select(id);
+                select(id)
                 requestAnimationFrame(() =>
-                  document.getElementById("atlas-edit-text")?.focus(),
-                );
+                  document.getElementById('atlas-edit-text')?.focus()
+                )
               }}
               onSelect={select}
               onMove={(id, x, y) =>
                 modify((s) => {
-                  const a = s.items.find((o) => o.id === id)!;
+                  const a = s.items.find((o) => o.id === id)!
                   return {
                     ...s,
                     items: s.items.map((o) =>
                       o.id === id
                         ? { ...o, x, y }
                         : a.group &&
-                          a.group === o.group &&
-                          editable(o) &&
-                          target(a) === target(o)
+                            a.group === o.group &&
+                            editable(o) &&
+                            target(a) === target(o)
                           ? { ...o, x: o.x + x - a.x, y: o.y + y - a.y }
-                          : o,
+                          : o
                     ),
-                  };
+                  }
                 })
               }
               onResize={(id, w, h, x, y) => patch(id, { w, h, x, y })}
@@ -659,7 +655,7 @@ export function Editor({
               templates={templates}
               update={(next) => change(() => next)}
               select={select}
-              selected={item?.locked ? "" : sel}
+              selected={item?.locked ? '' : sel}
               notice={notice}
               saveAs={saveAs}
             />
@@ -670,7 +666,7 @@ export function Editor({
                 <summary>Нераспределённые элементы</summary>
                 <div className="layer-list">
                   {rows(true)}
-                  {!slide.items.some((o) => target(o) === "tray") && (
+                  {!slide.items.some((o) => target(o) === 'tray') && (
                     <small>Пусто</small>
                   )}
                 </div>
@@ -680,10 +676,10 @@ export function Editor({
                 <div className="layer-list">
                   {rows(false)}
                   <button
-                    onClick={() => select("")}
+                    onClick={() => select('')}
                     onContextMenu={(e) =>
                       context.open(e, [
-                        { name: "Свойства фона", run: () => select("") },
+                        { name: 'Свойства фона', run: () => select('') },
                       ])
                     }
                   >
@@ -714,32 +710,32 @@ export function Editor({
                   .filter((o) => saveTemplate || !o.fixed)
                   .map((o, i) => (
                     <option key={o.id} value={o.id}>
-                      {i + 1}.{" "}
+                      {i + 1}.{' '}
                       {o.text.slice(0, 32) ||
-                        (o.type === "image"
-                          ? "Изображение"
-                          : (shapes[o.shape!] ?? "Текст"))}
-                      {o.role === "decoration" ? " · оформление" : ""}
+                        (o.type === 'image'
+                          ? 'Изображение'
+                          : (shapes[o.shape!] ?? 'Текст'))}
+                      {o.role === 'decoration' ? ' · оформление' : ''}
                     </option>
                   ))}
               </select>
             </label>
           )}
-          <h3>{item ? "Свойства объекта" : "Свойства слайда"}</h3>
+          <h3>{item ? 'Свойства объекта' : 'Свойства слайда'}</h3>
           {item && !editable(item) ? (
             <small>Слой закреплён или заблокирован</small>
           ) : item ? (
             <>
-              {item.type === "image" && (
+              {item.type === 'image' && (
                 <details open>
                   <summary>Кадрирование изображения</summary>
                   <label>
                     Заполнение ячейки
                     <select
-                      value={item.imageFit ?? "contain"}
+                      value={item.imageFit ?? 'contain'}
                       onChange={(e) =>
                         patch(item.id, {
-                          imageFit: e.target.value as Item["imageFit"],
+                          imageFit: e.target.value as Item['imageFit'],
                         })
                       }
                     >
@@ -747,10 +743,10 @@ export function Editor({
                       <option value="cover">Заполнить с обрезкой</option>
                     </select>
                   </label>
-                  {item.imageFit === "cover" &&
-                    (["focusX", "focusY"] as const).map((k, i) => (
+                  {item.imageFit === 'cover' &&
+                    (['focusX', 'focusY'] as const).map((k, i) => (
                       <label key={k}>
-                        {i ? "Фокус по вертикали" : "Фокус по горизонтали"}
+                        {i ? 'Фокус по вертикали' : 'Фокус по горизонтали'}
                         <input
                           type="range"
                           min={0}
@@ -764,10 +760,10 @@ export function Editor({
                     ))}
                 </details>
               )}
-              {item.type === "shape" && (
+              {item.type === 'shape' && (
                 <ShapePanel item={item} patch={(v) => patch(item.id, v)} />
               )}
-              {item.type !== "image" && (
+              {item.type !== 'image' && (
                 <TextPanel
                   key={item.id}
                   deck={deck}
@@ -777,28 +773,28 @@ export function Editor({
               )}
               {(saveTemplate ||
                 slots(deck.master, slide).find((v) => v.id === target(item))
-                  ?.cell.type === "free") && (
-                  <GeometryPanel
-                    item={item}
-                    patch={(v) => {
-                      if (
-                        gridTemplateKind === "presentation" &&
-                        v.role === "decoration"
+                  ?.cell.type === 'free') && (
+                <GeometryPanel
+                  item={item}
+                  patch={(v) => {
+                    if (
+                      gridTemplateKind === 'presentation' &&
+                      v.role === 'decoration'
+                    )
+                      patch(item.id, {
+                        ...freezeDecoration(item, slots(deck.master, slide)),
+                        role: v.role,
+                      })
+                    else if (item.fixed && v.role === 'content') {
+                      const free = slots(deck.master, slide).find(
+                        (p) => p.cell.type === 'free'
                       )
-                        patch(item.id, {
-                          ...freezeDecoration(item, slots(deck.master, slide)),
-                          role: v.role,
-                        });
-                      else if (item.fixed && v.role === "content") {
-                        const free = slots(deck.master, slide).find(
-                          (p) => p.cell.type === "free",
-                        );
-                        patch(item.id, {
-                          role: "content",
-                          fixed: undefined,
-                          slot: free?.id ?? "tray",
-                          ...(free
-                            ? {
+                      patch(item.id, {
+                        role: 'content',
+                        fixed: undefined,
+                        slot: free?.id ?? 'tray',
+                        ...(free
+                          ? {
                               x: (item.x - free.box.x) / free.scale,
                               y: (item.y - free.box.y) / free.scale,
                               w: item.w / free.scale,
@@ -806,12 +802,12 @@ export function Editor({
                               contentScale:
                                 (item.contentScale ?? 1) / free.scale,
                             }
-                            : {}),
-                        });
-                      } else patch(item.id, v);
-                    }}
-                  />
-                )}
+                          : {}),
+                      })
+                    } else patch(item.id, v)
+                  }}
+                />
+              )}
               <div className="field-pair">
                 {[-1, 1].map((delta) => (
                   <button
@@ -820,16 +816,16 @@ export function Editor({
                     onClick={() =>
                       modify((s) => {
                         const items = s.items.slice(),
-                          i = items.findIndex((o) => o.id === sel);
-                        [items[i], items[i + delta]] = [
+                          i = items.findIndex((o) => o.id === sel)
+                        ;[items[i], items[i + delta]] = [
                           items[i + delta],
                           items[i],
-                        ];
-                        return { ...s, items };
+                        ]
+                        return { ...s, items }
                       })
                     }
                   >
-                    {delta < 0 ? "Слой ниже" : "Слой выше"}
+                    {delta < 0 ? 'Слой ниже' : 'Слой выше'}
                   </button>
                 ))}
               </div>
@@ -837,7 +833,7 @@ export function Editor({
                 <Trash2 />
                 Удалить объект
               </button>
-              <button onClick={() => select("")}>
+              <button onClick={() => select('')}>
                 <Palette />
                 Свойства слайда
               </button>
@@ -858,14 +854,14 @@ export function Editor({
                 <label>
                   Роль слайда
                   <select
-                    value={slide.kind ?? "normal"}
+                    value={slide.kind ?? 'normal'}
                     onChange={(e) =>
                       modify((s) =>
                         applyKind(
                           deck.master,
                           s,
-                          e.target.value as NonNullable<Slide["kind"]>,
-                        ),
+                          e.target.value as NonNullable<Slide['kind']>
+                        )
                       )
                     }
                   >
@@ -876,8 +872,8 @@ export function Editor({
                 </label>
               )}
               {!slide.structure &&
-                deck.master.name === "По умолчанию" &&
-                (slide.kind ?? "normal") === "normal" && (
+                deck.master.name === 'По умолчанию' &&
+                (slide.kind ?? 'normal') === 'normal' && (
                   <label>
                     Компоновка
                     <select
@@ -885,27 +881,27 @@ export function Editor({
                       value=""
                       onChange={(e) => {
                         const t = templates.find(
-                          (t) => t.deck.id === e.target.value,
-                        );
-                        if (!t) return;
+                          (t) => t.deck.id === e.target.value
+                        )
+                        if (!t) return
                         if (
-                          slide.items.some((o) => o.role !== "decoration") &&
+                          slide.items.some((o) => o.role !== 'decoration') &&
                           !confirm(
-                            "Перенести прежнее содержимое в неразмещённые объекты и применить компоновку?",
+                            'Перенести прежнее содержимое в неразмещённые объекты и применить компоновку?'
                           )
                         )
-                          return;
+                          return
                         try {
-                          const next = applyLayout(deck, slide.id, t);
-                          change(() => next);
+                          const next = applyLayout(deck, slide.id, t)
+                          change(() => next)
                         } catch (err) {
-                          notice((err as Error).message);
+                          notice((err as Error).message)
                         }
                       }}
                     >
                       <option value="">Выберите компоновку</option>
                       {templates
-                        .filter((t) => t.kind === "layout" && !t.format)
+                        .filter((t) => t.kind === 'layout' && !t.format)
                         .map((t) => (
                           <option key={t.deck.id} value={t.deck.id}>
                             {t.deck.title}
@@ -917,34 +913,34 @@ export function Editor({
               {(deck.migrated ||
                 (saveTemplate &&
                   !deck.slides.some((s) => s.structure) &&
-                  deck.master.name === "По умолчанию")) && (
-                  <details>
-                    <summary>Область прежней компоновки</summary>
-                    {(["x", "y", "w", "h"] as const).map((k) => (
-                      <Num
-                        key={k}
-                        label={k}
-                        value={(slide.area ?? { x: 0, y: 0, w: 1280, h: 720 })[k]}
-                        min={k === "x" || k === "y" ? 0 : 1}
-                        max={k === "x" || k === "w" ? 1280 : 720}
-                        change={(v) =>
-                          modify((s) => ({
-                            ...s,
-                            area: {
-                              x: 0,
-                              y: 0,
-                              w: 1280,
-                              h: 720,
-                              ...s.area,
-                              [k]: v,
-                            },
-                          }))
-                        }
-                      />
-                    ))}
-                  </details>
-                )}
-              {gridTemplateKind !== "layout" && (
+                  deck.master.name === 'По умолчанию')) && (
+                <details>
+                  <summary>Область прежней компоновки</summary>
+                  {(['x', 'y', 'w', 'h'] as const).map((k) => (
+                    <Num
+                      key={k}
+                      label={k}
+                      value={(slide.area ?? { x: 0, y: 0, w: 1280, h: 720 })[k]}
+                      min={k === 'x' || k === 'y' ? 0 : 1}
+                      max={k === 'x' || k === 'w' ? 1280 : 720}
+                      change={(v) =>
+                        modify((s) => ({
+                          ...s,
+                          area: {
+                            x: 0,
+                            y: 0,
+                            w: 1280,
+                            h: 720,
+                            ...s.area,
+                            [k]: v,
+                          },
+                        }))
+                      }
+                    />
+                  ))}
+                </details>
+              )}
+              {gridTemplateKind !== 'layout' && (
                 <>
                   <Background
                     deck={deck}
@@ -958,8 +954,8 @@ export function Editor({
                       modify((s) =>
                         inheritedBackground(
                           s,
-                          deck.master.art?.[s.kind ?? "normal"],
-                        ),
+                          deck.master.art?.[s.kind ?? 'normal']
+                        )
                       )
                     }
                   />
@@ -967,12 +963,12 @@ export function Editor({
                     <button
                       onClick={() =>
                         change((d) => {
-                          const kind = slide.kind ?? "normal",
+                          const kind = slide.kind ?? 'normal',
                             base = d.master.art?.[kind] ?? {
                               ...newSlide(),
                               kind,
-                            };
-                          const sample = inheritedBackground(base, slide);
+                            }
+                          const sample = inheritedBackground(base, slide)
                           return {
                             ...d,
                             master: {
@@ -980,12 +976,12 @@ export function Editor({
                               art: { ...d.master.art, [kind]: sample },
                             },
                             slides: d.slides.map((s) =>
-                              (s.kind ?? "normal") === kind &&
-                                (s.id === slide.id || !s.ownBackground)
+                              (s.kind ?? 'normal') === kind &&
+                              (s.id === slide.id || !s.ownBackground)
                                 ? inheritedBackground(s, sample)
-                                : s,
+                                : s
                             ),
-                          };
+                          }
                         })
                       }
                     >
@@ -1031,11 +1027,11 @@ export function Editor({
         type="file"
         accept="image/png,image/jpeg,image/webp,image/svg+xml"
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (f) void insert(f);
+          const f = e.target.files?.[0]
+          e.target.value = ''
+          if (f) void insert(f)
         }}
       />
     </div>
-  );
+  )
 }

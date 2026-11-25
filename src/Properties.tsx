@@ -1,7 +1,7 @@
-import { fontFamily } from "./Artwork";
-import { useRef, useState } from "react";
-import { installStyle, type StyleLibrary } from "./styleLibrary";
-import { builtinFonts, shapes } from "./schema";
+import { fontFamily } from './Artwork'
+import { useRef, useState } from 'react'
+import { installStyle, type StyleLibrary } from './styleLibrary'
+import { builtinFonts, shapes } from './schema'
 import {
   newShape,
   paragraphs,
@@ -14,8 +14,8 @@ import {
   type Item,
   type Paragraph,
   type TextStyle,
-} from "./model";
-type Change = (fn: (d: Deck) => Deck) => void;
+} from './model'
+type Change = (fn: (d: Deck) => Deck) => void
 export function Num({
   label,
   value,
@@ -24,12 +24,12 @@ export function Num({
   change,
   step = 1,
 }: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  change: (v: number) => void;
-  step?: number;
+  label: string
+  value: number
+  min: number
+  max: number
+  change: (v: number) => void
+  step?: number
 }) {
   return (
     <label>
@@ -41,21 +41,21 @@ export function Num({
         step={step}
         value={Number(value.toFixed(3))}
         onChange={(e) => {
-          if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber))
-            change(Math.min(max, Math.max(min, e.target.valueAsNumber)));
+          if (e.target.value !== '' && Number.isFinite(e.target.valueAsNumber))
+            change(Math.min(max, Math.max(min, e.target.valueAsNumber)))
         }}
       />
     </label>
-  );
+  )
 }
 function Color({
   label,
   value,
   change,
 }: {
-  label: string;
-  value: string;
-  change: (v: string) => void;
+  label: string
+  value: string
+  change: (v: string) => void
 }) {
   return (
     <label>
@@ -66,16 +66,16 @@ function Color({
         onChange={(e) => change(e.target.value)}
       />
     </label>
-  );
+  )
 }
 function Toggle({
   label,
   value,
   change,
 }: {
-  label: string;
-  value: boolean;
-  change: (v: boolean) => void;
+  label: string
+  value: boolean
+  change: (v: boolean) => void
 }) {
   return (
     <label className="toggle">
@@ -86,16 +86,16 @@ function Toggle({
       />
       {label}
     </label>
-  );
+  )
 }
 function CharacterFields({
   values,
   onChange,
   deck,
 }: {
-  values: Characters;
-  onChange: (s: Characters) => void;
-  deck: Deck;
+  values: Characters
+  onChange: (s: Characters) => void
+  deck: Deck
 }) {
   return (
     <>
@@ -103,7 +103,7 @@ function CharacterFields({
         Гарнитура
         <select
           aria-label="Гарнитура"
-          value={values.font ?? "sans"}
+          value={values.font ?? 'sans'}
           onChange={(e) => onChange({ font: e.target.value })}
         >
           {Object.entries(builtinFonts).map(([id, name]) => (
@@ -127,16 +127,16 @@ function CharacterFields({
       />
       <Color
         label="Цвет текста"
-        value={values.color ?? "#163e49"}
+        value={values.color ?? '#163e49'}
         change={(color) => onChange({ color })}
       />
       <div className="switches">
         {(
           [
-            ["bold", "Полужирный"],
-            ["italic", "Курсив"],
-            ["underline", "Подчёркивание"],
-            ["strike", "Зачёркивание"],
+            ['bold', 'Полужирный'],
+            ['italic', 'Курсив'],
+            ['underline', 'Подчёркивание'],
+            ['strike', 'Зачёркивание'],
           ] as const
         ).map(([key, label]) => (
           <Toggle
@@ -149,7 +149,7 @@ function CharacterFields({
       </div>
       <Color
         label="Выделение маркером"
-        value={values.highlight ?? "#fff4aa"}
+        value={values.highlight ?? '#fff4aa'}
         change={(highlight) => onChange({ highlight })}
       />
       <Num
@@ -161,16 +161,16 @@ function CharacterFields({
         change={(tracking) => onChange({ tracking })}
       />
     </>
-  );
+  )
 }
 function StyleFields({
   deck,
   values,
   change,
 }: {
-  deck: Deck;
-  values: TextStyle;
-  change: (v: TextStyle) => void;
+  deck: Deck
+  values: TextStyle
+  change: (v: TextStyle) => void
 }) {
   return (
     <>
@@ -179,8 +179,8 @@ function StyleFields({
         Выравнивание
         <select
           aria-label="Выравнивание"
-          value={values.align ?? "left"}
-          onChange={(e) => change({ align: e.target.value as Item["align"] })}
+          value={values.align ?? 'left'}
+          onChange={(e) => change({ align: e.target.value as Item['align'] })}
         >
           <option value="left">Слева</option>
           <option value="center">По центру</option>
@@ -215,40 +215,40 @@ function StyleFields({
         change={(minSize) => change({ minSize })}
       />
     </>
-  );
+  )
 }
 async function fontFile(file: File): Promise<FontAsset> {
   const format = file.name
-    .split(".")
+    .split('.')
     .pop()
-    ?.toLowerCase() as FontAsset["format"];
+    ?.toLowerCase() as FontAsset['format']
   if (
-    !["woff2", "woff", "ttf", "otf"].includes(format) ||
+    !['woff2', 'woff', 'ttf', 'otf'].includes(format) ||
     !file.size ||
     file.size > 4194304
   )
-    throw new Error("Выберите WOFF2, WOFF, TTF или OTF до 4 МиБ.");
+    throw new Error('Выберите WOFF2, WOFF, TTF или OTF до 4 МиБ.')
   const buffer = await file.arrayBuffer(),
-    digest = await crypto.subtle.digest("SHA-256", buffer);
+    digest = await crypto.subtle.digest('SHA-256', buffer)
   const id =
-    "font-" +
+    'font-' +
     Array.from(new Uint8Array(digest), (b) =>
-      b.toString(16).padStart(2, "0"),
-    ).join("");
+      b.toString(16).padStart(2, '0')
+    ).join('')
   const data = await new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(",")[1]);
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
-  const f = { id, label: file.name.slice(0, 100), format, data };
-  verifyFont(f);
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1])
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(file)
+  })
+  const f = { id, label: file.name.slice(0, 100), format, data }
+  verifyFont(f)
   try {
-    await new FontFace("AtlasTest", buffer).load();
+    await new FontFace('AtlasTest', buffer).load()
   } catch {
-    throw new Error("Браузер не смог прочитать шрифт.");
+    throw new Error('Браузер не смог прочитать шрифт.')
   }
-  return f;
+  return f
 }
 export function StylesPanel({
   deck,
@@ -256,14 +256,14 @@ export function StylesPanel({
   notice,
   library,
 }: {
-  library?: StyleLibrary;
-  deck: Deck;
-  change: Change;
-  notice: (v: string) => void;
+  library?: StyleLibrary
+  deck: Deck
+  change: Change
+  notice: (v: string) => void
 }) {
-  const [id, setID] = useState(deck.theme.styles[0]?.id ?? "");
-  const selected = deck.theme.styles.find((s) => s.id === id);
-  const [previewFont, setPreviewFont] = useState("");
+  const [id, setID] = useState(deck.theme.styles[0]?.id ?? '')
+  const selected = deck.theme.styles.find((s) => s.id === id)
+  const [previewFont, setPreviewFont] = useState('')
   return (
     <details>
       <summary>Шрифты и общие стили</summary>
@@ -273,14 +273,14 @@ export function StylesPanel({
           <Color
             key={index}
             value={value}
-            label={"Цвет палитры " + (index + 1)}
+            label={'Цвет палитры ' + (index + 1)}
             change={(color) =>
               change((d) => ({
                 ...d,
                 theme: {
                   ...d.theme,
                   palette: d.theme.palette.map((v, j) =>
-                    j === index ? color : v,
+                    j === index ? color : v
                   ),
                 },
               }))
@@ -292,7 +292,7 @@ export function StylesPanel({
           onClick={() =>
             change((d) => ({
               ...d,
-              theme: { ...d.theme, palette: [...d.theme.palette, "#ffffff"] },
+              theme: { ...d.theme, palette: [...d.theme.palette, '#ffffff'] },
             }))
           }
         >
@@ -305,25 +305,25 @@ export function StylesPanel({
           type="file"
           accept=".woff2,.woff,.ttf,.otf"
           onChange={async (e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (!file) return;
+            const file = e.target.files?.[0]
+            e.target.value = ''
+            if (!file) return
             try {
-              const f = await fontFile(file);
+              const f = await fontFile(file)
               if (
                 deck.resources.fonts.length >= 32 &&
                 !deck.resources.fonts.some((font) => font.id === f.id)
               )
-                throw new Error("В документе уже 32 шрифта.");
-              setPreviewFont(f.id);
+                throw new Error('В документе уже 32 шрифта.')
+              setPreviewFont(f.id)
               change((d) =>
                 d.resources.fonts.some((v) => v.id === f.id)
                   ? d
-                  : { ...d, resources: { fonts: [...d.resources.fonts, f] } },
-              );
-              notice("Шрифт доступен в списке гарнитур.");
+                  : { ...d, resources: { fonts: [...d.resources.fonts, f] } }
+              )
+              notice('Шрифт доступен в списке гарнитур.')
             } catch (err) {
-              notice((err as Error).message);
+              notice((err as Error).message)
             }
           }}
         />
@@ -345,31 +345,31 @@ export function StylesPanel({
             aria-label="Добавить из библиотеки"
             value=""
             onChange={(e) => {
-              const [kind, id] = e.target.value.split(":");
+              const [kind, id] = e.target.value.split(':')
               try {
                 const next = installStyle(
                   deck,
                   library,
-                  kind === "font" ? { font: id } : { style: id },
-                );
-                change(() => next);
-                notice("Добавлено в документ.");
+                  kind === 'font' ? { font: id } : { style: id }
+                )
+                change(() => next)
+                notice('Добавлено в документ.')
               } catch (err) {
-                notice((err as Error).message);
+                notice((err as Error).message)
               }
             }}
           >
             <option value="">Стиль или шрифт</option>
             <optgroup label="Стили">
               {library.styles.map((s) => (
-                <option key={s.id} value={"style:" + s.id}>
+                <option key={s.id} value={'style:' + s.id}>
                   {s.label} · {s.id}
                 </option>
               ))}
             </optgroup>
             <optgroup label="Шрифты">
               {library.fonts.map((f) => (
-                <option key={f.id} value={"font:" + f.id}>
+                <option key={f.id} value={'font:' + f.id}>
                   {f.label}
                 </option>
               ))}
@@ -394,12 +394,12 @@ export function StylesPanel({
       <button
         onClick={() => {
           if (deck.theme.styles.length >= 128) {
-            notice("В документе уже 128 стилей.");
-            return;
+            notice('В документе уже 128 стилей.')
+            return
           }
-          const label = prompt("Название стиля")?.trim();
-          if (!label) return;
-          const key = "s" + crypto.randomUUID();
+          const label = prompt('Название стиля')?.trim()
+          if (!label) return
+          const key = 's' + crypto.randomUUID()
           change((d) => ({
             ...d,
             theme: {
@@ -409,12 +409,12 @@ export function StylesPanel({
                 {
                   id: key,
                   label: label.slice(0, 100),
-                  values: { font: "sans", size: 32 },
+                  values: { font: 'sans', size: 32 },
                 },
               ],
             },
-          }));
-          setID(key);
+          }))
+          setID(key)
         }}
       >
         Создать стиль
@@ -429,7 +429,7 @@ export function StylesPanel({
               theme: {
                 ...d.theme,
                 styles: d.theme.styles.map((s) =>
-                  s.id === id ? { ...s, values: { ...s.values, ...v } } : s,
+                  s.id === id ? { ...s, values: { ...s.values, ...v } } : s
                 ),
               },
             }))
@@ -437,36 +437,36 @@ export function StylesPanel({
         />
       )}
     </details>
-  );
+  )
 }
 export function TextPanel({
   item,
   deck,
   patch,
 }: {
-  item: Item;
-  deck: Deck;
-  patch: (v: Partial<Item>) => void;
+  item: Item
+  deck: Deck
+  patch: (v: Partial<Item>) => void
 }) {
   const [pi, paragraph] = useState(0),
-    [ri, run] = useState(0);
-  const input = useRef<HTMLTextAreaElement>(null);
+    [ri, run] = useState(0)
+  const input = useRef<HTMLTextAreaElement>(null)
   const parts = paragraphs(item),
     p = Math.min(pi, parts.length - 1),
     r = Math.min(ri, parts[p].runs.length - 1),
     part = parts[p],
-    span = part.runs[r];
+    span = part.runs[r]
   const update = (val: Partial<Paragraph>) =>
-    patch(richText(parts.map((v, i) => (i === p ? { ...v, ...val } : v))));
+    patch(richText(parts.map((v, i) => (i === p ? { ...v, ...val } : v))))
   const marked = (val: Partial<typeof span>) =>
-    update({ runs: part.runs.map((s, i) => (i === r ? { ...s, ...val } : s)) });
-  const style = typography(item, deck);
+    update({ runs: part.runs.map((s, i) => (i === r ? { ...s, ...val } : s)) })
+  const style = typography(item, deck)
   return (
     <>
       <label>
-        {item.paragraphs ? "Текст фрагмента" : "Текст"}
+        {item.paragraphs ? 'Текст фрагмента' : 'Текст'}
         <textarea
-          aria-label={item.paragraphs ? "Текст фрагмента" : "Текст"}
+          aria-label={item.paragraphs ? 'Текст фрагмента' : 'Текст'}
           id="atlas-edit-text"
           ref={input}
           value={item.paragraphs ? span.text : item.text}
@@ -485,8 +485,8 @@ export function TextPanel({
             aria-label="Абзац"
             value={p}
             onChange={(e) => {
-              paragraph(+e.target.value);
-              run(0);
+              paragraph(+e.target.value)
+              run(0)
             }}
           >
             {parts.map((_, i) => (
@@ -513,21 +513,21 @@ export function TextPanel({
         <button
           onClick={() => {
             if (!item.paragraphs && parts.length > 1) {
-              patch(richText(parts));
-              paragraph(0);
-              run(0);
-              return;
+              patch(richText(parts))
+              paragraph(0)
+              run(0)
+              return
             }
             const start = input.current!.selectionStart,
-              end = input.current!.selectionEnd;
+              end = input.current!.selectionEnd
             if (start === end) {
-              update({ runs: [...part.runs, { text: "Фрагмент" }] });
-              run(part.runs.length);
-              return;
+              update({ runs: [...part.runs, { text: 'Фрагмент' }] })
+              run(part.runs.length)
+              return
             }
             const before = span.text.slice(0, start),
               middle = span.text.slice(start, end),
-              after = span.text.slice(end);
+              after = span.text.slice(end)
             update({
               runs: [
                 ...part.runs.slice(0, r),
@@ -536,17 +536,17 @@ export function TextPanel({
                   .map((text) => ({ ...span, text })),
                 ...part.runs.slice(r + 1),
               ],
-            });
-            run(r + (before ? 1 : 0));
+            })
+            run(r + (before ? 1 : 0))
           }}
         >
           Выделить фрагмент
         </button>
         <button
           onClick={() => {
-            patch(richText([...parts, { runs: [{ text: "Абзац" }] }]));
-            paragraph(parts.length);
-            run(0);
+            patch(richText([...parts, { runs: [{ text: 'Абзац' }] }]))
+            paragraph(parts.length)
+            run(0)
           }}
         >
           Добавить абзац
@@ -554,9 +554,9 @@ export function TextPanel({
         <button
           disabled={parts.length === 1}
           onClick={() => {
-            patch(richText(parts.filter((_, i) => i !== p)));
-            paragraph(0);
-            run(0);
+            patch(richText(parts.filter((_, i) => i !== p)))
+            paragraph(0)
+            run(0)
           }}
         >
           Удалить абзац
@@ -564,8 +564,8 @@ export function TextPanel({
         <button
           disabled={part.runs.length === 1}
           onClick={() => {
-            update({ runs: part.runs.filter((_, i) => i !== r) });
-            run(0);
+            update({ runs: part.runs.filter((_, i) => i !== r) })
+            run(0)
           }}
         >
           Удалить фрагмент
@@ -574,13 +574,13 @@ export function TextPanel({
           Список
           <select
             aria-label="Список"
-            value={part.list ?? ""}
+            value={part.list ?? ''}
             onChange={(e) => {
-              const next = { ...part };
+              const next = { ...part }
               if (e.target.value)
-                next.list = e.target.value as Paragraph["list"];
-              else delete next.list;
-              patch(richText(parts.map((v, i) => (i === p ? next : v))));
+                next.list = e.target.value as Paragraph['list']
+              else delete next.list
+              patch(richText(parts.map((v, i) => (i === p ? next : v))))
             }}
           >
             <option value="">Без маркера</option>
@@ -612,7 +612,7 @@ export function TextPanel({
         Стиль текста
         <select
           aria-label="Стиль текста"
-          value={item.style ?? ""}
+          value={item.style ?? ''}
           onChange={(e) => patch({ style: e.target.value || undefined })}
         >
           <option value="">Свой стиль</option>
@@ -633,24 +633,24 @@ export function TextPanel({
                 ...(v.color ? { color: v.color } : {}),
                 ...(v.align ? { align: v.align } : {}),
               }
-            : {};
-          patch({ ...base, overrides: { ...item.overrides, ...v } });
+            : {}
+          patch({ ...base, overrides: { ...item.overrides, ...v } })
         }}
       />
       <button onClick={() => patch({ overrides: undefined })}>
         Сбросить переопределения
       </button>
     </>
-  );
+  )
 }
 export function ShapePanel({
   item,
   patch,
 }: {
-  item: Item;
-  patch: (v: Partial<Item>) => void;
+  item: Item
+  patch: (v: Partial<Item>) => void
 }) {
-  const f = item.fill ?? { type: "solid", color: "#bde6dd" };
+  const f = item.fill ?? { type: 'solid', color: '#bde6dd' }
   return (
     <>
       <label>
@@ -659,15 +659,15 @@ export function ShapePanel({
           aria-label="Форма"
           value={item.shape}
           onChange={(e) => {
-            const shape = e.target.value as Item["shape"];
+            const shape = e.target.value as Item['shape']
             patch({
               shape,
               nodes:
-                shape === "path"
-                  ? (item.nodes ?? newShape("path").nodes)
+                shape === 'path'
+                  ? (item.nodes ?? newShape('path').nodes)
                   : undefined,
-              closed: shape === "path" ? !!item.closed : undefined,
-            });
+              closed: shape === 'path' ? !!item.closed : undefined,
+            })
           }}
         >
           {Object.entries(shapes).map(([id, n]) => (
@@ -683,24 +683,24 @@ export function ShapePanel({
           aria-label="Заливка"
           value={f.type}
           onChange={(e) => {
-            const type = e.target.value as typeof f.type;
+            const type = e.target.value as typeof f.type
             patch({
               fill:
-                type === "none"
+                type === 'none'
                   ? { type }
-                  : type === "solid"
-                    ? { type, color: "#bde6dd" }
+                  : type === 'solid'
+                    ? { type, color: '#bde6dd' }
                     : {
                         type,
                         stops:
-                          "stops" in f
+                          'stops' in f
                             ? f.stops
                             : [
-                                { offset: 0, color: "#bde6dd" },
-                                { offset: 1, color: "#4792a0" },
+                                { offset: 0, color: '#bde6dd' },
+                                { offset: 1, color: '#4792a0' },
                               ],
                       },
-            });
+            })
           }}
         >
           <option value="none">Прозрачная</option>
@@ -709,16 +709,16 @@ export function ShapePanel({
           <option value="radial">Радиальный градиент</option>
         </select>
       </label>
-      {f.type === "solid" && (
+      {f.type === 'solid' && (
         <Color
           label="Цвет заливки"
           value={f.color}
           change={(color) => patch({ fill: { ...f, color } })}
         />
       )}
-      {"stops" in f && (
+      {'stops' in f && (
         <>
-          {f.type === "linear" && (
+          {f.type === 'linear' && (
             <Num
               label="Угол градиента"
               value={f.angle ?? 0}
@@ -730,14 +730,14 @@ export function ShapePanel({
           {f.stops.map((s, i) => (
             <div className="field-pair" key={i}>
               <Color
-                label={"Цвет " + (i + 1)}
+                label={'Цвет ' + (i + 1)}
                 value={s.color}
                 change={(color) =>
                   patch({
                     fill: {
                       ...f,
                       stops: f.stops.map((v, j) =>
-                        j === i ? { ...v, color } : v,
+                        j === i ? { ...v, color } : v
                       ),
                     },
                   })
@@ -754,7 +754,7 @@ export function ShapePanel({
                     fill: {
                       ...f,
                       stops: f.stops.map((v, j) =>
-                        j === i ? { ...v, offset } : v,
+                        j === i ? { ...v, offset } : v
                       ),
                     },
                   })
@@ -778,7 +778,7 @@ export function ShapePanel({
               patch({
                 fill: {
                   ...f,
-                  stops: [...f.stops, { offset: 1, color: "#ffffff" }],
+                  stops: [...f.stops, { offset: 1, color: '#ffffff' }],
                 },
               })
             }
@@ -789,7 +789,7 @@ export function ShapePanel({
       )}
       <Color
         label="Цвет контура"
-        value={item.stroke ?? "#275b68"}
+        value={item.stroke ?? '#275b68'}
         change={(stroke) => patch({ stroke })}
       />
       <Num
@@ -804,12 +804,12 @@ export function ShapePanel({
         value={!!item.dash}
         change={(on) => patch({ dash: on ? [12, 8] : undefined })}
       />
-      {["rounded", "rect"].includes(item.shape!) && (
+      {['rounded', 'rect'].includes(item.shape!) && (
         <Num
           label="Скругление"
           min={0}
           max={4096}
-          value={item.radius ?? (item.shape === "rounded" ? 24 : 0)}
+          value={item.radius ?? (item.shape === 'rounded' ? 24 : 0)}
           change={(radius) => patch({ radius })}
         />
       )}
@@ -818,7 +818,7 @@ export function ShapePanel({
         value={!!item.shadow}
         change={(on) =>
           patch({
-            shadow: on ? { x: 4, y: 6, blur: 8, color: "#799390" } : undefined,
+            shadow: on ? { x: 4, y: 6, blur: 8, color: '#799390' } : undefined,
           })
         }
       />
@@ -829,19 +829,19 @@ export function ShapePanel({
             value={item.shadow.color}
             change={(color) => patch({ shadow: { ...item.shadow!, color } })}
           />
-          {(["x", "y", "blur"] as const).map((k) => (
+          {(['x', 'y', 'blur'] as const).map((k) => (
             <Num
               key={k}
-              label={{ x: "Смещение X", y: "Смещение Y", blur: "Размытие" }[k]}
-              min={k === "blur" ? 0 : -200}
-              max={k === "blur" ? 100 : 200}
+              label={{ x: 'Смещение X', y: 'Смещение Y', blur: 'Размытие' }[k]}
+              min={k === 'blur' ? 0 : -200}
+              max={k === 'blur' ? 100 : 200}
               value={item.shadow![k]}
               change={(v) => patch({ shadow: { ...item.shadow!, [k]: v } })}
             />
           ))}
         </>
       )}
-      {item.shape === "path" && (
+      {item.shape === 'path' && (
         <>
           <Toggle
             label="Замкнуть контур"
@@ -864,12 +864,12 @@ export function ShapePanel({
                               ...p,
                               in: { x: p.x - 12, y: p.y },
                               out: { x: p.x + 12, y: p.y },
-                            },
+                            }
                     ),
                   })
                 }
               >
-                {n.in || n.out ? "Прямой" : "Безье"}
+                {n.in || n.out ? 'Прямой' : 'Безье'}
               </button>
               <button
                 disabled={item.nodes!.length <= 2}
@@ -889,24 +889,24 @@ export function ShapePanel({
         </>
       )}
     </>
-  );
+  )
 }
 export function GeometryPanel({
   item,
   patch,
 }: {
-  item: Item;
-  patch: (v: Partial<Item>) => void;
+  item: Item
+  patch: (v: Partial<Item>) => void
 }) {
   return (
     <details>
       <summary>Геометрия и слой</summary>
       <div className="field-pair">
-        {(["x", "y", "w", "h"] as const).map((k) => (
+        {(['x', 'y', 'w', 'h'] as const).map((k) => (
           <Num
             key={k}
-            label={{ x: "X", y: "Y", w: "Ширина", h: "Высота" }[k]}
-            min={k === "x" || k === "y" ? -8192 : 0.01}
+            label={{ x: 'X', y: 'Y', w: 'Ширина', h: 'Высота' }[k]}
+            min={k === 'x' || k === 'y' ? -8192 : 0.01}
             max={8192}
             value={item[k]}
             change={(v) => patch({ [k]: v })}
@@ -940,9 +940,9 @@ export function GeometryPanel({
       />
       <Toggle
         label="Оформление шаблона"
-        value={item.role === "decoration"}
-        change={(on) => patch({ role: on ? "decoration" : "content" })}
+        value={item.role === 'decoration'}
+        change={(on) => patch({ role: on ? 'decoration' : 'content' })}
       />
     </details>
-  );
+  )
 }

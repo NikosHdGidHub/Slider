@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { MAX_DOCUMENT_BYTES, type Deck, type Slide } from "./model";
-import { originalBackground, optimize } from "./media";
+import { useEffect, useRef, useState } from 'react'
+import { MAX_DOCUMENT_BYTES, type Deck, type Slide } from './model'
+import { originalBackground, optimize } from './media'
 export function Background({
   slide,
   deck,
@@ -8,29 +8,29 @@ export function Background({
   reset,
   notice,
 }: {
-  slide: Slide;
-  deck: Deck;
-  update: (s: Slide) => void;
-  reset?: () => void;
-  notice: (s: string) => void;
+  slide: Slide
+  deck: Deck
+  update: (s: Slide) => void
+  reset?: () => void
+  notice: (s: string) => void
 }) {
   const file = useRef<HTMLInputElement>(null),
     [pending, setFile] = useState<File | null>(null),
-    [original, choose] = useState(true);
+    [original, choose] = useState(true)
   const active = useRef(true),
-    latest = useRef({ slide, update, deck });
-  latest.current = { slide, update, deck };
+    latest = useRef({ slide, update, deck })
+  latest.current = { slide, update, deck }
   useEffect(() => {
-    active.current = true;
+    active.current = true
     return () => {
-      active.current = false;
-    };
-  }, []);
-  const effects = slide.effects ?? {};
+      active.current = false
+    }
+  }, [])
+  const effects = slide.effects ?? {}
   function clear() {
-    const next = { ...slide };
-    delete next.effects;
-    return next;
+    const next = { ...slide }
+    delete next.effects
+    return next
   }
   return (
     <section className="bg-tools">
@@ -49,9 +49,9 @@ export function Background({
         type="file"
         accept="image/png,image/jpeg,image/webp"
         onChange={(e) => {
-          setFile(e.target.files?.[0] ?? null);
-          choose(true);
-          e.target.value = "";
+          setFile(e.target.files?.[0] ?? null)
+          choose(true)
+          e.target.value = ''
         }}
       />
       {pending && (
@@ -63,8 +63,8 @@ export function Background({
           </p>
           <select
             aria-label="Обработка изображения"
-            value={original ? "original" : "optimized"}
-            onChange={(e) => choose(e.target.value === "original")}
+            value={original ? 'original' : 'optimized'}
+            onChange={(e) => choose(e.target.value === 'original')}
           >
             <option value="original">Сохранить оригинал</option>
             <option value="optimized">Оптимизировать изображение</option>
@@ -74,30 +74,30 @@ export function Background({
               try {
                 const src = original
                   ? await originalBackground(pending)
-                  : (await optimize(pending, 64 * 1048576)).src;
+                  : (await optimize(pending, 64 * 1048576)).src
                 if (active.current) {
-                  const { deck: current, slide: page } = latest.current;
+                  const { deck: current, slide: page } = latest.current
                   const projected = {
                     ...current,
                     slides: current.slides.map((v) =>
-                      v.id === page.id ? { ...v, background: src } : v,
+                      v.id === page.id ? { ...v, background: src } : v
                     ),
-                  };
+                  }
                   if (
                     new Blob([JSON.stringify(projected)]).size >
                     MAX_DOCUMENT_BYTES
                   )
                     throw Error(
-                      "С этим фоном JSON превышает 64 МиБ. Выберите оптимизацию или меньший файл.",
-                    );
+                      'С этим фоном JSON превышает 64 МиБ. Выберите оптимизацию или меньший файл.'
+                    )
                   latest.current.update({
                     ...latest.current.slide,
                     background: src,
-                  });
-                  setFile(null);
+                  })
+                  setFile(null)
                 }
               } catch (e) {
-                notice((e as Error).message);
+                notice((e as Error).message)
               }
             }}
           >
@@ -113,11 +113,11 @@ export function Background({
           </button>
           {(
             [
-              ["brightness", "Яркость", 0, 200, 100],
-              ["blur", "Размытие", 0, 40, 0],
-              ["zoom", "Масштаб", 50, 300, 100],
-              ["x", "Положение X", 0, 100, 50],
-              ["y", "Положение Y", 0, 100, 50],
+              ['brightness', 'Яркость', 0, 200, 100],
+              ['blur', 'Размытие', 0, 40, 0],
+              ['zoom', 'Масштаб', 50, 300, 100],
+              ['x', 'Положение X', 0, 100, 50],
+              ['y', 'Положение Y', 0, 100, 50],
             ] as const
           ).map(([key, label, min, max, def]) => (
             <label key={key}>
@@ -139,13 +139,13 @@ export function Background({
           <label>
             Размер фона
             <select
-              value={effects.fit ?? "cover"}
+              value={effects.fit ?? 'cover'}
               onChange={(e) =>
                 update({
                   ...slide,
                   effects: {
                     ...effects,
-                    fit: e.target.value as "cover" | "contain",
+                    fit: e.target.value as 'cover' | 'contain',
                   },
                 })
               }
@@ -161,12 +161,12 @@ export function Background({
       )}
       <button
         onClick={() =>
-          update({ ...clear(), color: "#ffffff", background: null })
+          update({ ...clear(), color: '#ffffff', background: null })
         }
       >
         Сбросить фон
       </button>
       {reset && <button onClick={reset}>Вернуть фон шаблона</button>}
     </section>
-  );
+  )
 }

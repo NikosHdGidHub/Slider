@@ -1,32 +1,32 @@
-import { useRef, useState } from "react";
-import { Copy, Plus, Upload } from "lucide-react";
-import { Stage } from "./Stage";
+import { useRef, useState } from 'react'
+import { Copy, Plus, Upload } from 'lucide-react'
+import { Stage } from './Stage'
 import {
   copyDeck,
   instantiate,
   createGridTemplate,
   validateTemplate,
   type Template,
-} from "./catalog";
-import { newDeck, MAX_DOCUMENT_BYTES, readJSON, type Deck } from "./model";
+} from './catalog'
+import { newDeck, MAX_DOCUMENT_BYTES, readJSON, type Deck } from './model'
 import {
   deleteTemplate,
   saveLocal,
   syncTemplate,
   type CatalogRow,
-} from "./templateStore";
-import { download } from "./instructions";
+} from './templateStore'
+import { download } from './instructions'
 type Props = {
-  kind: Template["kind"];
-  setKind: (kind: Template["kind"]) => void;
-  rows: CatalogRow[];
-  allowed: boolean;
-  onlineOwner: boolean;
-  edit: (t: Template, row?: CatalogRow) => void;
-  create: (d: Deck) => Promise<void>;
-  refresh: () => Promise<void>;
-  notice: (s: string) => void;
-};
+  kind: Template['kind']
+  setKind: (kind: Template['kind']) => void
+  rows: CatalogRow[]
+  allowed: boolean
+  onlineOwner: boolean
+  edit: (t: Template, row?: CatalogRow) => void
+  create: (d: Deck) => Promise<void>
+  refresh: () => Promise<void>
+  notice: (s: string) => void
+}
 export function TemplateLibrary({
   kind,
   setKind,
@@ -38,31 +38,31 @@ export function TemplateLibrary({
   refresh,
   notice,
 }: Props) {
-  const [busy, working] = useState(false);
-  const file = useRef<HTMLInputElement>(null);
+  const [busy, working] = useState(false)
+  const file = useRef<HTMLInputElement>(null)
   async function act(fn: () => Promise<void>) {
-    working(true);
+    working(true)
     try {
-      await fn();
-      await refresh();
+      await fn()
+      await refresh()
     } catch (e) {
-      notice((e as Error).message);
+      notice((e as Error).message)
     } finally {
-      working(false);
+      working(false)
     }
   }
-  const [pending, preview] = useState<Template | null>(null);
+  const [pending, preview] = useState<Template | null>(null)
   return (
     <section className="template-library">
       <div className="catalog-bar">
         <div className="catalog-tabs">
-          {(["presentation", "layout"] as const).map((k, i) => (
+          {(['presentation', 'layout'] as const).map((k, i) => (
             <button
-              className={kind === k ? "active" : ""}
+              className={kind === k ? 'active' : ''}
               key={k}
               onClick={() => setKind(k)}
             >
-              {i ? "Компоновки" : "Презентации"}
+              {i ? 'Компоновки' : 'Презентации'}
             </button>
           ))}
         </div>
@@ -74,11 +74,11 @@ export function TemplateLibrary({
                 edit(
                   createGridTemplate(
                     kind,
-                    kind === "presentation"
-                      ? "Новый главный шаблон"
-                      : "Новый структурный шаблон",
-                  ),
-                );
+                    kind === 'presentation'
+                      ? 'Новый главный шаблон'
+                      : 'Новый структурный шаблон'
+                  )
+                )
               }}
             >
               <Plus size={16} />
@@ -96,45 +96,46 @@ export function TemplateLibrary({
           .filter((r) => r.template.kind === kind)
           .map((row) => {
             const t = row.template,
-              d = t.deck;
+              d = t.deck
             return (
               <article className="template-card" key={d.id}>
                 <button
                   className="template-cover"
-                  aria-label={"Редактировать " + d.title}
+                  aria-label={'Редактировать ' + d.title}
                   onClick={() => {
-                    if (!allowed) return;
+                    if (!allowed) return
 
                     edit(
                       row.builtin
                         ? {
-                          ...t,
-                          deck: copyDeck(d, d.title + " — копия"),
-                        }
+                            ...t,
+                            deck: copyDeck(d, d.title + ' — копия'),
+                          }
                         : structuredClone(t),
-                      row.builtin ? undefined : row,
-                    );
+                      row.builtin ? undefined : row
+                    )
                   }}
-                ><Stage slide={d.slides[0]} deck={d} />
+                >
+                  <Stage slide={d.slides[0]} deck={d} />
                 </button>
                 <div className="template-info">
                   <small>
                     {row.builtin
-                      ? "Встроенный"
+                      ? 'Встроенный'
                       : row.entry?.dirty
                         ? row.entry.cloudRevision
-                          ? "Есть локальные изменения"
-                          : "На устройстве"
+                          ? 'Есть локальные изменения'
+                          : 'На устройстве'
                         : row.remote
-                          ? "На устройстве и в облаке"
-                          : "На устройстве"}
+                          ? 'На устройстве и в облаке'
+                          : 'На устройстве'}
                   </small>
                   <h2>{d.title}</h2>
                   {t.description && <p>{t.description}</p>}
                   {allowed && (
                     <fieldset disabled={busy}>
                       <div className="catalog-actions">
-                        {kind === "presentation" && (
+                        {kind === 'presentation' && (
                           <button
                             className="primary"
                             onClick={() => act(() => create(instantiate(t)))}
@@ -150,8 +151,8 @@ export function TemplateLibrary({
                                 act(() =>
                                   saveLocal({
                                     ...t,
-                                    deck: copyDeck(d, d.title + " — копия"),
-                                  }),
+                                    deck: copyDeck(d, d.title + ' — копия'),
+                                  })
                                 )
                               }
                             >
@@ -161,8 +162,8 @@ export function TemplateLibrary({
                             <button
                               onClick={() =>
                                 download(
-                                  d.title + ".atlas.json",
-                                  JSON.stringify(validateTemplate(t), null, 2),
+                                  d.title + '.atlas.json',
+                                  JSON.stringify(validateTemplate(t), null, 2)
                                 )
                               }
                             >
@@ -173,9 +174,9 @@ export function TemplateLibrary({
                                 <button
                                   onClick={() => {
                                     const title = prompt(
-                                      "Название шаблона",
-                                      d.title,
-                                    )?.trim();
+                                      'Название шаблона',
+                                      d.title
+                                    )?.trim()
                                     if (title)
                                       void act(() =>
                                         saveLocal(
@@ -190,9 +191,9 @@ export function TemplateLibrary({
                                               },
                                             },
                                           },
-                                          row,
-                                        ),
-                                      );
+                                          row
+                                        )
+                                      )
                                   }}
                                 >
                                   Переименовать
@@ -208,12 +209,12 @@ export function TemplateLibrary({
                                   onClick={() => {
                                     if (
                                       confirm(
-                                        "Удалить шаблон «" +
-                                        d.title +
-                                        "» и его сохранённые копии? Созданные уроки сохранятся.",
+                                        'Удалить шаблон «' +
+                                          d.title +
+                                          '» и его сохранённые копии? Созданные уроки сохранятся.'
                                       )
                                     )
-                                      void act(() => deleteTemplate(row));
+                                      void act(() => deleteTemplate(row))
                                   }}
                                 >
                                   Удалить шаблон
@@ -227,7 +228,7 @@ export function TemplateLibrary({
                   )}
                 </div>
               </article>
-            );
+            )
           })}
       </div>
       {pending && (
@@ -241,9 +242,9 @@ export function TemplateLibrary({
             <button
               onClick={() =>
                 act(async () => {
-                  await saveLocal({ ...pending, deck: copyDeck(pending.deck) });
-                  setKind(pending.kind);
-                  preview(null);
+                  await saveLocal({ ...pending, deck: copyDeck(pending.deck) })
+                  setKind(pending.kind)
+                  preview(null)
                 })
               }
             >
@@ -258,17 +259,17 @@ export function TemplateLibrary({
         ref={file}
         accept=".json"
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (!f) return;
+          const f = e.target.files?.[0]
+          e.target.value = ''
+          if (!f) return
           void act(async () => {
             if (f.size > MAX_DOCUMENT_BYTES)
-              throw new Error("Шаблон превышает 64 МиБ.");
-            const t = validateTemplate(readJSON(await f.text()));
-            preview(t);
-          });
+              throw new Error('Шаблон превышает 64 МиБ.')
+            const t = validateTemplate(readJSON(await f.text()))
+            preview(t)
+          })
         }}
       />
     </section>
-  );
+  )
 }

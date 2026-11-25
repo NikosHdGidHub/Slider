@@ -7,11 +7,7 @@
     "height": 720
   },
   "theme": {
-    "palette": [
-      "#163e49",
-      "#eff8f4",
-      "#db9d36"
-    ],
+    "palette": ["#163e49", "#eff8f4", "#db9d36"],
     "styles": [
       {
         "id": "title",

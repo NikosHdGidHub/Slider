@@ -1,122 +1,170 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
-export type Action = { name: string; run: () => void; key?: string };
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+export type Action = { name: string; run: () => void; key?: string }
 function typing(target: EventTarget | null) {
   return (
     target instanceof Element &&
     !!target.closest(
-      "input,textarea,select,[contenteditable=true],[contenteditable=plaintext-only]",
+      'input,textarea,select,[contenteditable=true],[contenteditable=plaintext-only]'
     )
-  );
+  )
 }
+
 export function useHistory<T>(value: T, write: (v: T) => void, key?: string) {
-  const current = useRef(value);
-  current.current = value;
-  const stacks = useRef({ past: [] as T[], future: [] as T[] }),
-    gesture = useRef(false),
-    recorded = useRef(false);
-  const scope = useRef(key);
+  const current = useRef(value)
+  const stacks = useRef({
+    past: [] as T[],
+    future: [] as T[],
+  })
+
+  const gesture = useRef(false)
+  const recorded = useRef(false)
+  const scope = useRef(key)
+
+  current.current = value
+
+  // Новый документ — новая история.
   if (scope.current !== key) {
-    scope.current = key;
-    stacks.current = { past: [], future: [] };
-    recorded.current = false;
+    scope.current = key
+    stacks.current = { past: [], future: [] }
+    gesture.current = false
+    recorded.current = false
   }
+
   useEffect(() => {
     const start = () => {
-      gesture.current = true;
-      recorded.current = false;
-    },
-      end = () => {
-        gesture.current = false;
-      };
-    window.addEventListener("pointerdown", start, true);
-    window.addEventListener("pointerup", end, true);
-    window.addEventListener("pointercancel", end, true);
+      gesture.current = true
+      recorded.current = false
+    }
+
+    const end = () => {
+      gesture.current = false
+      recorded.current = false
+    }
+
+    window.addEventListener('pointerdown', start, true)
+    window.addEventListener('pointerup', end, true)
+    window.addEventListener('pointercancel', end, true)
+
     return () => {
-      window.removeEventListener("pointerdown", start, true);
-      window.removeEventListener("pointerup", end, true);
-      window.removeEventListener("pointercancel", end, true);
-    };
-  }, []);
-  const { past, future } = stacks.current;
+      window.removeEventListener('pointerdown', start, true)
+      window.removeEventListener('pointerup', end, true)
+      window.removeEventListener('pointercancel', end, true)
+    }
+  }, [])
+
   function set(next: T) {
-    if (next === current.current) return;
+    const previous = current.current
+
+    if (next === previous) return
+
     if (!gesture.current || !recorded.current) {
-      past.push(current.current);
-      if (past.length > 60) past.shift();
-      recorded.current = true;
+      stacks.current.past.push(previous)
+
+      if (stacks.current.past.length > 60) {
+        stacks.current.past.shift()
+      }
+
+      recorded.current = true
     }
-    future.length = 0;
-    current.current = next;
-    write(next);
+
+    // После нового действия повтор старой отмены невозможен.
+    stacks.current.future = []
+
+    current.current = next
+    write(next)
   }
+
   function step(redo: boolean) {
-    const from = redo ? future : past,
-      to = redo ? past : future;
-    if (from.length) {
-      to.push(value);
-      write(from.pop()!);
-    }
+    const { past, future } = stacks.current
+    const source = redo ? future : past
+    const destination = redo ? past : future
+
+    if (source.length === 0) return
+
+    const previous = source.pop()!
+    destination.push(current.current)
+
+    // Синхронизируем историю до обновления React.
+    current.current = previous
+    recorded.current = false
+
+    write(previous)
   }
+
   const actions: Action[] = [
-    ...(past.length
-      ? [{ name: "Отменить", key: "z", run: () => step(false) }]
+    ...(stacks.current.past.length
+      ? [
+          {
+            name: 'Отменить',
+            key: 'z',
+            run: () => step(false),
+          },
+        ]
       : []),
-    ...(future.length
-      ? [{ name: "Повторить", key: "shift+z", run: () => step(true) }]
+    ...(stacks.current.future.length
+      ? [
+          {
+            name: 'Повторить',
+            key: 'shift+z',
+            run: () => step(true),
+          },
+        ]
       : []),
-  ];
+  ]
+
   return {
     set,
     update: (fn: (v: T) => T) => set(fn(current.current)),
     actions,
-  };
+  }
 }
+
 export function useCommands(actions: Action[]) {
   const [point, show] = useState<{
-    x: number;
-    y: number;
-    actions: Action[];
-  } | null>(null);
+    x: number
+    y: number
+    actions: Action[]
+  } | null>(null)
   useEffect(() => {
     function key(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        show(null);
-        return;
+      if (e.key === 'Escape') {
+        show(null)
+        return
       }
-      if (typing(e.target) || !(e.ctrlKey || e.metaKey)) return;
+      if (typing(e.target) || !(e.ctrlKey || e.metaKey)) return
       const action = actions.find(
-        (a) => a.key === (e.shiftKey ? "shift+" : "") + e.key.toLowerCase(),
-      );
+        (a) => a.key === (e.shiftKey ? 'shift+' : '') + e.key.toLowerCase()
+      )
       if (action) {
-        e.preventDefault();
-        action.run();
+        e.preventDefault()
+        action.run()
       }
     }
     function close(e: PointerEvent) {
-      if (!(e.target as Element).closest(".studio-menu")) show(null);
+      if (!(e.target as Element).closest('.studio-menu')) show(null)
     }
-    window.addEventListener("keydown", key);
-    window.addEventListener("pointerdown", close);
+    window.addEventListener('keydown', key)
+    window.addEventListener('pointerdown', close)
     return () => {
-      window.removeEventListener("keydown", key);
-      window.removeEventListener("pointerdown", close);
-    };
-  }, [actions]);
+      window.removeEventListener('keydown', key)
+      window.removeEventListener('pointerdown', close)
+    }
+  }, [actions])
   return {
     open: (e: MouseEvent, list: Action[]) => {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault()
+      e.stopPropagation()
       show({
         x: Math.max(0, Math.min(e.clientX, innerWidth - 215)),
         y: Math.max(
           0,
           Math.min(
             e.clientY,
-            innerHeight - Math.min(innerHeight, list.length * 40 + 12),
-          ),
+            innerHeight - Math.min(innerHeight, list.length * 40 + 12)
+          )
         ),
         actions: list,
-      });
+      })
     },
     menu: point && (
       <div
@@ -129,8 +177,8 @@ export function useCommands(actions: Action[]) {
             role="menuitem"
             key={a.name}
             onClick={() => {
-              show(null);
-              a.run();
+              show(null)
+              a.run()
             }}
           >
             {a.name}
@@ -138,10 +186,7 @@ export function useCommands(actions: Action[]) {
         ))}
       </div>
     ),
-  };
+  }
 }
 
-export type HistoryControls = Pick<
-  ReturnType<typeof useHistory>,
-  "actions"
->;
+export type HistoryControls = Pick<ReturnType<typeof useHistory>, 'actions'>

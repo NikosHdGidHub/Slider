@@ -1,38 +1,38 @@
-import { newDeck, newSlide, newText, type Slide } from "./model";
-import relief from "./assets/relief.webp";
-export const example = newDeck("Как читать рельеф");
+import { newDeck, newSlide, newText, type Slide } from './model'
+import relief from './assets/relief.webp'
+export const example = newDeck('Как читать рельеф')
 const pages = [
   [
-    "Рельеф на карте",
-    "Как линии превращаются в горы",
-    "Попросите учеников найти самую высокую часть массива и объяснить свой выбор.",
+    'Рельеф на карте',
+    'Как линии превращаются в горы',
+    'Попросите учеников найти самую высокую часть массива и объяснить свой выбор.',
   ],
   [
-    "Горизонтали",
-    "Каждая линия соединяет точки одинаковой высоты.",
-    "Предложите проследить пальцем одну горизонталь, не переходя на соседнюю.",
+    'Горизонтали',
+    'Каждая линия соединяет точки одинаковой высоты.',
+    'Предложите проследить пальцем одну горизонталь, не переходя на соседнюю.',
   ],
   [
-    "Крутизна склона",
-    "Чем ближе горизонтали друг к другу, тем круче склон.",
-    "Сравните два участка карты. Где подъём потребует больше усилий?",
+    'Крутизна склона',
+    'Чем ближе горизонтали друг к другу, тем круче склон.',
+    'Сравните два участка карты. Где подъём потребует больше усилий?',
   ],
   [
-    "Проверьте себя",
-    "Как выбрать самый пологий путь к вершине?",
-    "Обсудите варианты маршрута и попросите обосновать решение.",
+    'Проверьте себя',
+    'Как выбрать самый пологий путь к вершине?',
+    'Обсудите варианты маршрута и попросите обосновать решение.',
   ],
-];
+]
 example.slides = pages.map(([title, body, notes], i): Slide => {
-  const slide = newSlide();
-  slide.color = "#dce2c1";
-  slide.notes = notes;
+  const slide = newSlide()
+  slide.color = '#dce2c1'
+  slide.notes = notes
   slide.items = [
     {
       ...newText(),
-      type: "image",
+      type: 'image',
       src: relief,
-      text: "",
+      text: '',
       x: 575,
       y: 88,
       w: 705,
@@ -40,13 +40,13 @@ example.slides = pages.map(([title, body, notes], i): Slide => {
     },
     {
       ...newText(),
-      text: "ГЕОГРАФИЯ  /  " + String(i + 1).padStart(2, "0"),
+      text: 'ГЕОГРАФИЯ  /  ' + String(i + 1).padStart(2, '0'),
       x: 55,
       y: 82,
       w: 500,
       h: 50,
       size: 24,
-      color: "#315748",
+      color: '#315748',
     },
     {
       ...newText(),
@@ -56,7 +56,7 @@ example.slides = pages.map(([title, body, notes], i): Slide => {
       w: 590,
       h: 210,
       size: 75,
-      color: "#183f34",
+      color: '#183f34',
     },
     {
       ...newText(),
@@ -66,8 +66,8 @@ example.slides = pages.map(([title, body, notes], i): Slide => {
       w: 520,
       h: 200,
       size: 36,
-      color: "#315748",
+      color: '#315748',
     },
-  ];
-  return slide;
-});
+  ]
+  return slide
+})
