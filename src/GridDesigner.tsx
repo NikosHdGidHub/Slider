@@ -247,11 +247,6 @@ export function GridDesigner({
       </header>
       <div className="grid-work">
         <section>
-          <h1>
-            {structural
-              ? 'Структурный шаблон слайда'
-              : 'Главный шаблон презентации'}
-          </h1>
           {!structural && (
             <div className="catalog-tabs">
               {kinds.map((v, i) => (

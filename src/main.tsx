@@ -3,7 +3,14 @@ import { useHistory } from './StudioTools'
 import { GridDesigner } from './GridDesigner'
 import { templateFrom } from './catalog'
 import { templateInstructions } from './instructions'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useLayoutEffect,
+  useState,
+  type FormEvent,
+} from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   BookOpen,
@@ -139,6 +146,37 @@ function App() {
     doc ? doc.id + '/' + editorSession : undefined
   )
   const [preview, setPreview] = useState<Deck | null>(null)
+
+  const homeScroll = useRef<Record<string, number>>({})
+
+  const homeVisible =
+    !doc &&
+    !watch &&
+    !editingTemplate &&
+    !hash.startsWith('#p/') &&
+    !hash.startsWith('#transfer')
+
+  useLayoutEffect(() => {
+    if (!homeVisible) return
+
+    window.scrollTo({
+      top: homeScroll.current[page] ?? 0,
+      behavior: 'instant',
+    })
+
+    const rememberScroll = () => {
+      homeScroll.current[page] = window.scrollY
+    }
+
+    window.addEventListener('scroll', rememberScroll, {
+      passive: true,
+    })
+
+    return () => {
+      window.removeEventListener('scroll', rememberScroll)
+    }
+  }, [homeVisible, page])
+
   const access = useRef(allowed)
   access.current = allowed
   async function refreshCatalog() {

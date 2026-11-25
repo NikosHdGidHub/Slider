@@ -1816,3 +1816,68 @@ h1 {
 .editor .edit-head button.primary:disabled {
   opacity: 0.55;
 }
+
+/* Рабочие экраны без общей прокрутки */
+
+html:has(.editor),
+html:has(.grid-designer),
+body:has(.editor),
+body:has(.grid-designer) {
+  overflow: hidden;
+}
+
+.editor,
+.grid-designer {
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor > .edit-head,
+.grid-designer > .edit-head {
+  flex: 0 0 auto;
+}
+
+.editor > .edit-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+}
+
+/* Независимая прокрутка боковых панелей */
+
+.editor .strip,
+.editor .inspector,
+.grid-designer .inspector {
+  position: static;
+  min-height: 0;
+  max-height: none;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Рабочая область конструктора шаблонов */
+
+.grid-designer > .grid-work {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+}
+
+.grid-designer .grid-work > section {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.grid-designer .grid-work > aside.inspector {
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
