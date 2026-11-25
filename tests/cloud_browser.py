@@ -215,11 +215,7 @@ def flow(browser, url, tmp):
     def click(n):
         btn(n).click()
 
-    def action(n):
-        click("Действия с методичкой")
-        click(n)
-
-    click("Создать методичку")
+    page.locator(".account").get_by_role("button", name="Войти").click()
     page.get_by_label("Электронная почта").fill("owner@example.org")
     page.get_by_label("Пароль").fill("local-fixture")
     page.locator(".dialog").get_by_role("button", name="Войти", exact=True).click()
@@ -255,7 +251,8 @@ def flow(browser, url, tmp):
     assert not any(k.startswith("images/") for k in files)
     title = page.get_by_label("Название методички").input_value()
     click("В библиотеку")
-    click("Оставить локально и выйти")
+    if btn("Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     click("Мои файлы")
     expect(page.locator(".file-card")).to_have_count(1)
     page.reload()
@@ -349,11 +346,12 @@ def flow(browser, url, tmp):
     b("Продолжить редактирование").click()
     b("В библиотеку").click()
     reject_publish = True
-    b("Опубликовать и выйти").click()
+    second.get_by_role("button", name="Опубликовать и выйти", exact=False).click()
     expect(second.get_by_text("Не удалось опубликовать методичку.", exact=False)).to_be_visible()
     expect(b("Продолжить редактирование")).to_be_visible()
     reject_publish = False
-    b("Опубликовать и выйти").click()
+    second.get_by_role("button", name="Опубликовать и выйти", exact=False).click()
+    b("Мои методички").click()
     expect(second.locator(".cards .card")).to_have_count(1)
     assert len([k for k in files if k.startswith("presentations/")]) == 1
     assert len([k for k in files if k.startswith("images/")]) == 1
@@ -362,7 +360,6 @@ def flow(browser, url, tmp):
     assert updated["title"]=="Версия со второго устройства"
     assert any((s.get("background") or "").startswith("https://") for s in updated["slides"])
     b("Редактировать Версия со второго устройства").click()
-    b("Действия с методичкой").click()
     b("Подготовить к офлайн-показу").click()
     expect(second.get_by_text("Готово к офлайн-показу.",exact=False)).to_be_visible()
     expect(b("Опубликовано")).to_be_disabled()
@@ -495,6 +492,7 @@ def flow(browser, url, tmp):
     click("Загрузить опубликованную версию")
     expect(btn("Опубликовано")).to_be_disabled()
     click("В библиотеку")
+    click("Мои методички")
     expect(page.locator(".cards")).to_contain_text("до синхронизации")
     click("Опубликованные")
     click("Снять с публикации")

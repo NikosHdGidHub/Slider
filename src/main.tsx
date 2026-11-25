@@ -1,16 +1,14 @@
+import {
+  desktopEditingMessage,
+  isPhone,
+  useLibraryScroll,
+} from './libraryNavigation'
 import { rememberImage } from './storage'
 import { useHistory } from './StudioTools'
 import { GridDesigner } from './GridDesigner'
 import { templateFrom } from './catalog'
 import { templateInstructions } from './instructions'
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useLayoutEffect,
-  useState,
-  type FormEvent,
-} from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   BookOpen,
@@ -113,6 +111,9 @@ function App() {
     [libraryError, libError] = useState(''),
     importer = useRef<HTMLInputElement>(null)
   const allowed = localMode || owner
+  const phone = isPhone()
+  const editorOrigin = useRef('library')
+  const libraryContent = useRef<HTMLElement>(null)
   const [signedInOwner, setSignedInOwner] = useState<boolean | null>(
     client ? null : false
   )
@@ -147,35 +148,27 @@ function App() {
   )
   const [preview, setPreview] = useState<Deck | null>(null)
 
-  const homeScroll = useRef<Record<string, number>>({})
-
   const homeVisible =
-    !doc &&
+    !(doc && allowed && !phone) &&
     !watch &&
-    !editingTemplate &&
+    !(editingTemplate && allowed && !phone) &&
     !hash.startsWith('#p/') &&
-    !hash.startsWith('#transfer')
+    hash !== receiveHash &&
+    hash !== '#transfer' &&
+    !hash.startsWith('#transfer/')
+  useLibraryScroll(
+    libraryContent,
+    homeVisible,
+    page === 'templates' ? page + '/' + catalogKind : page
+  )
 
-  useLayoutEffect(() => {
-    if (!homeVisible) return
-
-    window.scrollTo({
-      top: homeScroll.current[page] ?? 0,
-      behavior: 'instant',
-    })
-
-    const rememberScroll = () => {
-      homeScroll.current[page] = window.scrollY
+  function allowEditing() {
+    if (phone) {
+      notice(desktopEditingMessage)
+      return false
     }
-
-    window.addEventListener('scroll', rememberScroll, {
-      passive: true,
-    })
-
-    return () => {
-      window.removeEventListener('scroll', rememberScroll)
-    }
-  }, [homeVisible, page])
+    return allowed
+  }
 
   const access = useRef(allowed)
   access.current = allowed
@@ -473,6 +466,8 @@ function App() {
     }
   }, [documentId, online, owner])
   function open(d: Deck, revision: number) {
+    if (!allowEditing()) return
+    if (!current.current) editorOrigin.current = page
     setEditorSession((value) => value + 1)
     openedPublication.current = localStorage.getItem(marker(d.id)) || ''
     setBaseline(openedPublication.current)
@@ -629,19 +624,25 @@ function App() {
     current.current = null
     setDoc(null)
     setModal('')
-    navigate('library')
+    navigate(editorOrigin.current)
     await refresh()
   }
   async function insert(d: Deck) {
+    if (!allowEditing()) return
     await saveEntry(d, 0)
     await refresh()
     open(d, 1)
     setModal('')
   }
   function need(name: string) {
+    if (phone) {
+      allowEditing()
+      return
+    }
     dialog(allowed ? name : 'login')
   }
   async function importData(raw: string) {
+    if (!allowEditing()) return
     const d = validateDeck(raw)
     const used = new Set<string | undefined>(
       d.theme.styles.map((s) => s.values.font)
@@ -668,6 +669,10 @@ function App() {
   }
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (phone && modal !== 'login') {
+      allowEditing()
+      return
+    }
     if (!allowed && modal !== 'login') {
       dialog('login')
       return
@@ -818,7 +823,7 @@ function App() {
     ([key]) => allowed || !['templates', 'files'].includes(key)
   )
   const home = (
-    <div className="shell">
+    <div className="shell" hidden={!homeVisible}>
       <aside className={'sidebar ' + (drawer ? 'opened' : '')}>
         <div className="brand">
           <span className="brand-icon">
@@ -894,7 +899,7 @@ function App() {
             {online ? 'На этом устройстве' : 'Офлайн'}
           </div>
         </header>
-        <main className="library">
+        <main className="library" ref={libraryContent}>
           <div className="title-row">
             <h1>
               {page === 'library'
@@ -926,13 +931,16 @@ function App() {
                 <QrCode size={18} /> Получить методичку с телефона
               </button>
             )}
-            {allowed && page === 'library' && (
+            {allowed && !phone && page === 'library' && (
               <button className="primary" onClick={() => need('create')}>
                 <Plus size={18} />
                 Создать методичку
               </button>
             )}
           </div>
+          {phone && ['library', 'templates', 'files'].includes(page) && (
+            <p className="phone-edit-message">{desktopEditingMessage}</p>
+          )}
           {page === 'library' ? (
             <>
               <article className="feature">
@@ -972,7 +980,7 @@ function App() {
                   <h2>
                     Локальная библиотека <span>{list.length}</span>
                   </h2>
-                  {allowed && (
+                  {allowed && !phone && (
                     <button
                       className="secondary"
                       onClick={() => need('import')}
@@ -1002,15 +1010,17 @@ function App() {
                           </small>
                         </button>
                         <div className="card-actions">
-                          <button
-                            className="icon"
-                            type="button"
-                            title="Редактировать методичку"
-                            aria-label={'Редактировать ' + en.deck.title}
-                            onClick={() => open(en.deck, en.revision)}
-                          >
-                            <Pencil size={16} />
-                          </button>
+                          {!phone && (
+                            <button
+                              className="icon"
+                              type="button"
+                              title="Редактировать методичку"
+                              aria-label={'Редактировать ' + en.deck.title}
+                              onClick={() => open(en.deck, en.revision)}
+                            >
+                              <Pencil size={16} />
+                            </button>
+                          )}
 
                           <button
                             className="icon"
@@ -1060,10 +1070,12 @@ function App() {
                 setKind={setCatalogKind}
                 rows={visibleRows}
                 allowed={allowed}
+                editable={allowed && !phone}
                 onlineOwner={owner && online}
                 create={insert}
+                view={setWatch}
                 edit={(t, row) => {
-                  setEditingTemplate({ t, row })
+                  if (allowEditing()) setEditingTemplate({ t, row })
                 }}
                 refresh={async () => {
                   await refreshCatalog()
@@ -1074,8 +1086,10 @@ function App() {
           ) : page === 'files' && allowed ? (
             <FileLibrary
               entries={allowed ? list : []}
-              openLesson={(entry) => open(entry.deck, entry.revision)}
-              openJSON={importData}
+              openLesson={(entry) =>
+                phone ? setWatch(entry.deck) : open(entry.deck, entry.revision)
+              }
+              openJSON={phone ? undefined : importData}
               online={online}
               owner={owner}
               allowed={allowed}
@@ -1120,41 +1134,44 @@ function App() {
                         </strong>
                         <a href={link(id)}>{link(id)}</a>
                       </div>
-                      <button
-                        className="icon"
-                        aria-label="Редактировать"
-                        onClick={() =>
-                          task('Открываем методичку…', async () => {
-                            const remote = validateDeck(await readPublic(id))
-                            if (remote.id !== id)
-                              throw Error(
-                                'Идентификатор публикации не совпадает со ссылкой.'
-                              )
-                            const hash = await fingerprint(remote)
-                            const local = (await entries()).find(
-                              (e) => e.deck.id === id
-                            )
-                            if (local) {
-                              if (
-                                (await fingerprint(local.deck)) !== hash &&
-                                !confirm(
-                                  'На устройстве есть свой черновик. Открыть его с сохранением локальных изменений?'
+                      {!phone && (
+                        <button
+                          className="icon"
+                          aria-label="Редактировать"
+                          onClick={() =>
+                            task('Открываем методичку…', async () => {
+                              if (!allowEditing()) return
+                              const remote = validateDeck(await readPublic(id))
+                              if (remote.id !== id)
+                                throw Error(
+                                  'Идентификатор публикации не совпадает со ссылкой.'
                                 )
+                              const hash = await fingerprint(remote)
+                              const local = (await entries()).find(
+                                (e) => e.deck.id === id
                               )
-                                return
-                              open(local.deck, local.revision)
-                            } else {
-                              localStorage.setItem(marker(id), hash)
-                              await insert(remote)
-                              notice(
-                                'Создан черновик из публикации. Нераспределённые элементы исходного черновика доступны только на исходном устройстве.'
-                              )
-                            }
-                          })
-                        }
-                      >
-                        <Pencil size={16} />
-                      </button>
+                              if (local) {
+                                if (
+                                  (await fingerprint(local.deck)) !== hash &&
+                                  !confirm(
+                                    'На устройстве есть свой черновик. Открыть его с сохранением локальных изменений?'
+                                  )
+                                )
+                                  return
+                                open(local.deck, local.revision)
+                              } else {
+                                localStorage.setItem(marker(id), hash)
+                                await insert(remote)
+                                notice(
+                                  'Создан черновик из публикации. Нераспределённые элементы исходного черновика доступны только на исходном устройстве.'
+                                )
+                              }
+                            })
+                          }
+                        >
+                          <Pencil size={16} />
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           if (confirm('Снять методичку с публикации?'))
@@ -1231,8 +1248,9 @@ function App() {
           onPrepare={prepareForOffline}
           onClose={() => setWatch(null)}
         />
-      ) : editingTemplate?.t.format === 3 && allowed ? (
+      ) : editingTemplate?.t.format === 3 && allowed && !phone ? (
         <GridDesigner
+          key={editingTemplate.t.deck.id}
           libraryAvailable={owner && online}
           template={editingTemplate.t}
           set={templateHistory.set}
@@ -1259,7 +1277,7 @@ function App() {
             })
           }
         />
-      ) : editingTemplate && allowed ? (
+      ) : editingTemplate && allowed && !phone ? (
         <Editor
           libraryAvailable={owner && online}
           key={editingTemplate.t.deck.id}
@@ -1294,10 +1312,16 @@ function App() {
             })
           }
           view={() => setWatch(editingTemplate.t.deck)}
+          exportTemplate={() =>
+            download(
+              editingTemplate.t.deck.title + '.atlas.json',
+              JSON.stringify(editingTemplate.t, null, 2)
+            )
+          }
           action={() => {}}
           notice={notice}
         />
-      ) : doc && allowed ? (
+      ) : doc && allowed && !phone ? (
         <Editor
           key={doc.id + '/' + editorSession}
           history={lessonHistory}
@@ -1342,9 +1366,8 @@ function App() {
           }
           notice={notice}
         />
-      ) : (
-        home
-      )}
+      ) : null}
+      {home}
       {modal && (
         <div className="overlay">
           <section
@@ -1399,13 +1422,17 @@ function App() {
                 <div className="leave-actions">
                   <button
                     className="leave-action leave-action-publish"
+                    aria-labelledby="sync-load-label"
+                    aria-describedby="sync-load-hint"
                     onClick={() => task('Синхронизация…', syncPublication)}
                   >
                     <Globe2 size={21} />
 
                     <span className="leave-action-content">
-                      <strong>Загрузить опубликованную версию</strong>
-                      <small>
+                      <strong id="sync-load-label">
+                        Загрузить опубликованную версию
+                      </strong>
+                      <small id="sync-load-hint">
                         Открыть актуальную методичку из облака. Текущий черновик
                         сохранится отдельной копией.
                       </small>
@@ -1416,14 +1443,18 @@ function App() {
 
                   <button
                     className="leave-action leave-action-local"
+                    aria-labelledby="sync-publish-label"
+                    aria-describedby="sync-publish-hint"
                     disabled={!canPublish}
                     onClick={() => act('publish')}
                   >
                     <FolderOpen size={21} />
 
                     <span className="leave-action-content">
-                      <strong>Опубликовать текущий черновик</strong>
-                      <small>
+                      <strong id="sync-publish-label">
+                        Опубликовать текущий черновик
+                      </strong>
+                      <small id="sync-publish-hint">
                         Заменить облачную публикацию версией с этого устройства.
                       </small>
                     </span>
@@ -1449,25 +1480,37 @@ function App() {
                 <div className="leave-actions">
                   <button
                     className="leave-action leave-action-publish"
+                    aria-labelledby="leave-publish-label"
+                    aria-describedby="leave-publish-hint"
                     disabled={!canPublish}
                     onClick={() => act('publish', true)}
                   >
                     <Globe2 size={21} />
                     <span className="leave-action-content">
-                      <strong>Опубликовать и выйти</strong>
-                      <small>Обновить облачную версию методички</small>
+                      <strong id="leave-publish-label">
+                        Опубликовать и выйти
+                      </strong>
+                      <small id="leave-publish-hint">
+                        Обновить облачную версию методички
+                      </small>
                     </span>
                     <ArrowUpRight size={18} />
                   </button>
 
                   <button
                     className="leave-action leave-action-local"
+                    aria-labelledby="leave-local-label"
+                    aria-describedby="leave-local-hint"
                     onClick={() => task('Сохранение…', closeEditor)}
                   >
                     <FolderOpen size={21} />
                     <span className="leave-action-content">
-                      <strong>Оставить локально и выйти</strong>
-                      <small>Сохранить только на этом устройстве</small>
+                      <strong id="leave-local-label">
+                        Оставить локально и выйти
+                      </strong>
+                      <small id="leave-local-hint">
+                        Сохранить только на этом устройстве
+                      </small>
                     </span>
                   </button>
 

@@ -33,3 +33,13 @@ python tests/browser.py
 ```
 
 Скрипт создаёт временный HTTP-сервер, тестовые профили и JSON внутри временного каталога. Переменной CHROMIUM_PATH можно указать путь к системному Chromium. Практическая проверка публичных прав и отзыва ссылки описана в SUPABASE_SETUP.md.
+
+## Проверить рабочие экраны
+
+После production-сборки запустите Playwright-сценарий компоновки. Чтобы сохранить полный набор снимков, задайте путь к директории в переменной `ATLAS_WORKSPACE_CAPTURES`.
+
+```sh
+python tests/workspace_browser.py
+ATLAS_WORKSPACE_CAPTURES=/tmp/atlas-workspace python tests/workspace_browser.py
+python tests/studio_tools.py
+```

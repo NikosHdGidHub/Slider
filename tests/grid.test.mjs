@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { newDeck, newText, newShape, validateDeck } from '../src/model.ts'
 import {
-  builtins,
-  frameTemplate,
+  baseTemplate,
+  createGridTemplate,
   twoByTwo,
   templateFrom,
   instantiate,
@@ -27,6 +27,10 @@ import {
   applyKind,
 } from '../src/grid.ts'
 import { templateInstructions } from '../src/instructions.ts'
+
+const frameTemplate = createGridTemplate('presentation', 'Рамка для тестов')
+for (const role of ['title', 'normal', 'end'])
+  frameTemplate.deck.master.schemes[role] = blankGrid('title')
 const read = (name) => readFileSync(new URL(name, import.meta.url), 'utf8')
 const image = () => ({
   ...newText(),
@@ -231,7 +235,7 @@ test('custom structure fonts survive collisions and repeated master switches reu
   assert.equal(deck.theme.styles.length, d.theme.styles.length + 1)
 })
 test('save as template selects first occurrence of each role and produces independent references', () => {
-  const d = instantiate(frameTemplate)
+  const d = instantiate(baseTemplate)
   const [title, normal, end] = d.slides
   normal.items = [newText(), newText()].map((o) => ({
     ...o,
@@ -259,27 +263,22 @@ test('save as template selects first occurrence of each role and produces indepe
   assert.throws(() => templateFrom({ ...d, slides: [normal] }))
 })
 test('template guide and reference responses agree with the live importer', () => {
-  const guide = templateInstructions(builtins, 'Встроенные шаблоны')
-  assert.equal(read('../docs/grid/template-instructions.txt'), guide + '\n')
+  const guide = templateInstructions([frameTemplate], 'Локально')
+  assert.match(guide, /Рамка для тестов/)
   for (const name of Object.keys(cellTypes))
     assert.ok(guide.includes('"' + name + '"'))
   const samples = guide
     .split('\n')
     .filter((s) => s.startsWith('{"format"'))
     .map((s) => validateTemplate(JSON.parse(s)))
-  assert.deepEqual(samples, [frameTemplate, twoByTwo])
-  for (const [i, name] of ['main-frame', 'structure-2x2'].entries())
-    assert.deepEqual(
-      JSON.parse(read('../docs/grid/' + name + '.json')),
-      samples[i]
-    )
+  assert.deepEqual(samples, [baseTemplate, twoByTwo].map(validateTemplate))
 })
 
 test('new slides recover master decorations after deleting the template sample and reimporting', () => {
   const t = structuredClone(frameTemplate)
   const s = t.deck.slides[1]
   s.color = '#fafafa'
-  s.items = [{ ...newShape('circle'), role: 'decoration' }]
+  s.items = [{ ...newShape('circle'), role: 'decoration', fixed: true }]
   const deck = instantiate(t)
   deck.slides = deck.slides.filter((o) => o.kind !== 'normal')
   const restored = validateDeck(JSON.stringify(deck))

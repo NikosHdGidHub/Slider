@@ -237,7 +237,7 @@ export function FileLibrary({
 }: {
   entries: Entry[]
   openLesson: (entry: Entry) => void
-  openJSON: (text: string) => Promise<void>
+  openJSON?: (text: string) => Promise<void>
   owner: boolean
   online: boolean
   allowed: boolean

@@ -2,11 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  builtins,
+  createGridTemplate,
   validateTemplate,
   copyDeck,
   applyLayout,
-  waterExample,
 } from '../src/catalog.ts'
 import {
   validateDeck,
@@ -16,8 +15,19 @@ import {
   typography,
   richText,
 } from '../src/model.ts'
-import { instructions, referenceDecks } from '../src/instructions.ts'
-import { shapes } from '../src/schema.ts'
+import { instructions } from '../src/instructions.ts'
+import { schema } from '../src/schema.ts'
+
+const waterExample = validateDeck(
+  readFileSync(new URL('./fixtures/water-cycle.json', import.meta.url), 'utf8')
+)
+const frame = createGridTemplate('presentation', 'Контрольная рамка')
+frame.deck.slides[0].items.push(newShape('rect'))
+const plain = createGridTemplate('presentation', 'Контрольная презентация')
+const layout = createGridTemplate('layout', 'Контрольная компоновка')
+layout.deck.slides[0].items = Array.from({ length: 3 }, () =>
+  newShape('rounded')
+)
 
 test('v1 сохраняет геометрию, шрифт, переносы и порядок, исходник не изменяется', () => {
   const d = newDeck('Урок'),
@@ -106,7 +116,7 @@ test('Rich Text, независимое наследование и оформл
   assert.deepEqual(validateDeck(JSON.stringify(d)), d)
 })
 test('шаблоны отделены от копий, проверка числа слайдов сохраняет работу', () => {
-  const t = structuredClone(builtins[0]),
+  const t = structuredClone(frame),
     copy = copyDeck(t.deck)
   assert.notEqual(copy.slides[0].items[0].id, t.deck.slides[0].items[0].id)
   t.deck.slides.splice(1, 1)
@@ -114,13 +124,13 @@ test('шаблоны отделены от копий, проверка числ
   assert.equal(t.deck.slides.length, 2)
   t.deck.slides = []
   assert.equal(copy.slides.length, 3)
-  assert.throws(() => validateTemplate({ ...builtins[2], deck: copy }), /один/)
+  assert.throws(() => validateTemplate({ ...layout, deck: copy }), /один/)
 })
 test('смена компоновки сохраняет оформление, шрифты темы и заметки', () => {
-  const d = copyDeck(builtins[1].deck),
+  const d = copyDeck(plain.deck),
     s = d.slides[1]
   s.notes = 'Для преподавателя'
-  const next = applyLayout(d, s.id, builtins[2]),
+  const next = applyLayout(d, s.id, layout),
     n = next.slides[1]
   assert.equal(n.notes, s.notes)
   assert.equal(n.color, s.color)
@@ -130,18 +140,18 @@ test('смена компоновки сохраняет оформление, �
   )
   assert.deepEqual(next.theme, d.theme)
   assert.equal(n.items.filter((o) => o.shape === 'rounded').length, 3)
-  assert.throws(() => applyLayout(d, d.slides[0].id, builtins[2]))
+  assert.throws(() => applyLayout(d, d.slides[0].id, layout))
 })
-test('генератор отражает текущий каталог, исключает адреса и выводит импортируемые эталоны', () => {
+test('генератор отражает текущий каталог, исключает приватные адреса и согласует ссылки на шрифты', () => {
   const t = {
-    ...builtins[0],
+    ...frame,
     description: 'Тест-запись',
-    deck: copyDeck(builtins[0].deck, 'Мой экземпляр'),
+    deck: copyDeck(frame.deck, 'Мой экземпляр'),
   }
   t.deck.slides[0].background =
     'https://example.org/private?token=privateToken123'
   const fonts = ['Sans', 'Serif'].map((name, i) => {
-    const entry = structuredClone(builtins[i])
+    const entry = structuredClone([frame, plain][i])
     entry.deck.resources.fonts = [
       {
         id: 'localFont',
@@ -164,37 +174,23 @@ test('генератор отражает текущий каталог, иск�
     entries[1].deck.theme.styles[0].values.font,
     entries[1].fontIds[0]
   )
-  const before = instructions([...builtins, t], 'Локально')
+  const emptyLayout = createGridTemplate('layout', 'Пустая компоновка')
+  const before = instructions([frame, plain, emptyLayout, t], 'Локально')
   assert.match(before, /Тест-запись/)
   assert.doesNotMatch(before, /privateToken123/)
   t.description = 'Обновление'
   assert.match(instructions([t], 'Локально'), /Обновление/)
-  assert.doesNotMatch(instructions(builtins, 'Локально'), /Мой экземпляр/)
-  const docs = before
-    .split('\n')
-    .filter((s) => s.startsWith('{"version"'))
-    .map(validateDeck)
-  assert.equal(docs.length, referenceDecks().length)
-  assert.deepEqual(docs[0], waterExample)
-  assert.deepEqual(
-    new Set(docs.at(-1).slides.map((s) => s.items[0].shape)),
-    new Set(Object.keys(shapes))
-  )
-  assert.deepEqual(
-    validateDeck(
-      readFileSync(
-        new URL('./fixtures/water-cycle.json', import.meta.url),
-        'utf8'
-      )
-    ),
-    waterExample
+  assert.doesNotMatch(
+    instructions([frame, emptyLayout], 'Локально'),
+    /Мой экземпляр/
   )
 })
 
-test('скачиваемый пример инструкции совпадает с актуальным генератором', () => {
-  const actual = readFileSync(
-    new URL('./fixtures/atlas-instructions.txt', import.meta.url),
-    'utf8'
-  )
-  assert.equal(actual, instructions(builtins, 'Встроенные шаблоны') + '\n')
+test('инструкция включает актуальную схему и отражает пустой каталог', () => {
+  const guide = instructions([], 'Локально')
+  const [embedded, next] = guide
+    .split('C. Машиночитаемая схема\n\n')[1]
+    .split('\n\nG. Каталог презентаций (данные)\n\n')
+  assert.equal(embedded, JSON.stringify(schema, null, 2))
+  assert.equal(JSON.parse(next.split('\n\n')[0]).length, 0)
 })

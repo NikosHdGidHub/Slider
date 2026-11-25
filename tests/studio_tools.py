@@ -22,19 +22,21 @@ def exercise(p, url, tmp):
     p.on("dialog", lambda d: d.accept())
 
     def export():
-        click("Действия с методичкой")
         with p.expect_download() as ev:
             click("Экспортировать JSON")
         return json.loads(Path(ev.value.path()).read_text())
 
     click("Шаблоны")
     click("Создать шаблон")
+    p.get_by_label("Название шаблона").fill("Контрольная рамка")
+    click("Сохранить шаблон")
+    click("Создать шаблон")
     p.get_by_label("Название шаблона").fill("Три фотографии")
-    click("Фон")
+    p.locator(".inspector summary").get_by_text("Фон", exact=True).click()
     files = [
         ROOT / "public/icons/atlas-192.png",
         ROOT / "public/icons/atlas-512.png",
-        ROOT / "docs/grid/slides/title.png",
+        ROOT / "public/icons/atlas-512.png",
     ]
     import struct, zlib
 
@@ -67,7 +69,6 @@ def exercise(p, url, tmp):
             assert p.locator(".grid-board img").evaluate("el=>el.naturalWidth") == 1920
         p.get_by_label("Яркость").fill(str(75 + i))
         p.get_by_label("Размытие").fill(str(i + 1))
-    click("Таблица")
     click("Добавить строку")
     p.keyboard.press("Control+z")
     expect(p.locator(".grid-cell")).to_have_count(1)
@@ -101,7 +102,7 @@ def exercise(p, url, tmp):
         s["color"] == "#112233" for s in export()["slides"] if s.get("kind") == "normal"
     )
     p.get_by_label("Цвет фона").fill("#123456")
-    p.get_by_label("Сменить главный шаблон").select_option(label="Фиолетовая рамка")
+    p.get_by_label("Сменить главный шаблон").select_option(label="Контрольная рамка")
     assert export()["slides"][2]["color"] == "#123456"
     click("Вернуть фон шаблона")
     assert export()["slides"][2]["color"] == "#ffffff"

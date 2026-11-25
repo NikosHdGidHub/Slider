@@ -103,7 +103,6 @@ def run(page, ctx, url, files):
         == "rgb(117, 59, 52)"
     )
     styles.get_by_label("Гарнитура", exact=True).select_option(label=files[1].name)
-    click("Действия с методичкой")
     click("Подготовить к офлайн-показу")
     expect(page.locator(".toast")).to_contain_text("Готово к офлайн")
     ctx.set_offline(True)
@@ -116,7 +115,6 @@ def run(page, ctx, url, files):
         )
         >= 4
     )
-    click("Действия с методичкой")
     with page.expect_download() as d:
         click("Экспортировать JSON")
     actual = json.loads(Path(d.value.path()).read_text())

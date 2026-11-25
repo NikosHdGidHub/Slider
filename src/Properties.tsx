@@ -1,3 +1,4 @@
+import { PropertySection } from './Workspace'
 import { fontFamily } from './Artwork'
 import { useRef, useState } from 'react'
 import { installStyle, type StyleLibrary } from './styleLibrary'
@@ -265,10 +266,8 @@ export function StylesPanel({
   const selected = deck.theme.styles.find((s) => s.id === id)
   const [previewFont, setPreviewFont] = useState('')
   return (
-    <details>
-      <summary>Шрифты и общие стили</summary>
-      <details>
-        <summary>Палитра темы</summary>
+    <PropertySection id="styles" title="Шрифты и общие стили">
+      <PropertySection id="theme" title="Палитра темы">
         {deck.theme.palette.map((value, index) => (
           <Color
             key={index}
@@ -298,7 +297,7 @@ export function StylesPanel({
         >
           Добавить цвет палитры
         </button>
-      </details>
+      </PropertySection>
       <label>
         Загрузить шрифт
         <input
@@ -436,7 +435,7 @@ export function StylesPanel({
           }
         />
       )}
-    </details>
+    </PropertySection>
   )
 }
 export function TextPanel({
@@ -462,7 +461,7 @@ export function TextPanel({
     update({ runs: part.runs.map((s, i) => (i === r ? { ...s, ...val } : s)) })
   const style = typography(item, deck)
   return (
-    <>
+    <PropertySection id="text" title="Текст и оформление" initial>
       <label>
         {item.paragraphs ? 'Текст фрагмента' : 'Текст'}
         <textarea
@@ -477,8 +476,7 @@ export function TextPanel({
           }
         />
       </label>
-      <details>
-        <summary>Абзацы и фрагменты</summary>
+      <PropertySection id="paragraphs" title="Абзацы и фрагменты">
         <label>
           Абзац
           <select
@@ -607,7 +605,7 @@ export function TextPanel({
           deck={deck}
           onChange={marked}
         />
-      </details>
+      </PropertySection>
       <label>
         Стиль текста
         <select
@@ -640,7 +638,7 @@ export function TextPanel({
       <button onClick={() => patch({ overrides: undefined })}>
         Сбросить переопределения
       </button>
-    </>
+    </PropertySection>
   )
 }
 export function ShapePanel({
@@ -653,196 +651,204 @@ export function ShapePanel({
   const f = item.fill ?? { type: 'solid', color: '#bde6dd' }
   return (
     <>
-      <label>
-        Форма
-        <select
-          aria-label="Форма"
-          value={item.shape}
-          onChange={(e) => {
-            const shape = e.target.value as Item['shape']
-            patch({
-              shape,
-              nodes:
-                shape === 'path'
-                  ? (item.nodes ?? newShape('path').nodes)
-                  : undefined,
-              closed: shape === 'path' ? !!item.closed : undefined,
-            })
-          }}
-        >
-          {Object.entries(shapes).map(([id, n]) => (
-            <option key={id} value={id}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Заливка
-        <select
-          aria-label="Заливка"
-          value={f.type}
-          onChange={(e) => {
-            const type = e.target.value as typeof f.type
-            patch({
-              fill:
-                type === 'none'
-                  ? { type }
-                  : type === 'solid'
-                    ? { type, color: '#bde6dd' }
-                    : {
-                        type,
-                        stops:
-                          'stops' in f
-                            ? f.stops
-                            : [
-                                { offset: 0, color: '#bde6dd' },
-                                { offset: 1, color: '#4792a0' },
-                              ],
-                      },
-            })
-          }}
-        >
-          <option value="none">Прозрачная</option>
-          <option value="solid">Сплошная</option>
-          <option value="linear">Линейный градиент</option>
-          <option value="radial">Радиальный градиент</option>
-        </select>
-      </label>
-      {f.type === 'solid' && (
-        <Color
-          label="Цвет заливки"
-          value={f.color}
-          change={(color) => patch({ fill: { ...f, color } })}
-        />
-      )}
-      {'stops' in f && (
-        <>
-          {f.type === 'linear' && (
-            <Num
-              label="Угол градиента"
-              value={f.angle ?? 0}
-              min={-360}
-              max={360}
-              change={(angle) => patch({ fill: { ...f, angle } })}
-            />
-          )}
-          {f.stops.map((s, i) => (
-            <div className="field-pair" key={i}>
-              <Color
-                label={'Цвет ' + (i + 1)}
-                value={s.color}
-                change={(color) =>
-                  patch({
-                    fill: {
-                      ...f,
-                      stops: f.stops.map((v, j) =>
-                        j === i ? { ...v, color } : v
-                      ),
-                    },
-                  })
-                }
-              />
-              <Num
-                label="Позиция"
-                value={s.offset}
-                min={f.stops[i - 1]?.offset ?? 0}
-                max={f.stops[i + 1]?.offset ?? 1}
-                step={0.01}
-                change={(offset) =>
-                  patch({
-                    fill: {
-                      ...f,
-                      stops: f.stops.map((v, j) =>
-                        j === i ? { ...v, offset } : v
-                      ),
-                    },
-                  })
-                }
-              />
-              <button
-                disabled={f.stops.length <= 2}
-                onClick={() =>
-                  patch({
-                    fill: { ...f, stops: f.stops.filter((_, j) => i !== j) },
-                  })
-                }
-              >
-                Убрать
-              </button>
-            </div>
-          ))}
-          <button
-            disabled={f.stops.length >= 16}
-            onClick={() =>
+      <PropertySection id="shape" title="Фигура, заливка и границы" initial>
+        <label>
+          Форма
+          <select
+            aria-label="Форма"
+            value={item.shape}
+            onChange={(e) => {
+              const shape = e.target.value as Item['shape']
               patch({
-                fill: {
-                  ...f,
-                  stops: [...f.stops, { offset: 1, color: '#ffffff' }],
-                },
+                shape,
+                nodes:
+                  shape === 'path'
+                    ? (item.nodes ?? newShape('path').nodes)
+                    : undefined,
+                closed: shape === 'path' ? !!item.closed : undefined,
               })
-            }
+            }}
           >
-            Добавить цвет
-          </button>
-        </>
-      )}
-      <Color
-        label="Цвет контура"
-        value={item.stroke ?? '#275b68'}
-        change={(stroke) => patch({ stroke })}
-      />
-      <Num
-        label="Толщина контура"
-        min={0}
-        max={100}
-        value={item.strokeWidth ?? 0}
-        change={(strokeWidth) => patch({ strokeWidth })}
-      />
-      <Toggle
-        label="Пунктир"
-        value={!!item.dash}
-        change={(on) => patch({ dash: on ? [12, 8] : undefined })}
-      />
-      {['rounded', 'rect'].includes(item.shape!) && (
-        <Num
-          label="Скругление"
-          min={0}
-          max={4096}
-          value={item.radius ?? (item.shape === 'rounded' ? 24 : 0)}
-          change={(radius) => patch({ radius })}
-        />
-      )}
-      <Toggle
-        label="Тень"
-        value={!!item.shadow}
-        change={(on) =>
-          patch({
-            shadow: on ? { x: 4, y: 6, blur: 8, color: '#799390' } : undefined,
-          })
-        }
-      />
-      {item.shadow && (
-        <>
+            {Object.entries(shapes).map(([id, n]) => (
+              <option key={id} value={id}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Заливка
+          <select
+            aria-label="Заливка"
+            value={f.type}
+            onChange={(e) => {
+              const type = e.target.value as typeof f.type
+              patch({
+                fill:
+                  type === 'none'
+                    ? { type }
+                    : type === 'solid'
+                      ? { type, color: '#bde6dd' }
+                      : {
+                          type,
+                          stops:
+                            'stops' in f
+                              ? f.stops
+                              : [
+                                  { offset: 0, color: '#bde6dd' },
+                                  { offset: 1, color: '#4792a0' },
+                                ],
+                        },
+              })
+            }}
+          >
+            <option value="none">Прозрачная</option>
+            <option value="solid">Сплошная</option>
+            <option value="linear">Линейный градиент</option>
+            <option value="radial">Радиальный градиент</option>
+          </select>
+        </label>
+        {f.type === 'solid' && (
           <Color
-            label="Цвет тени"
-            value={item.shadow.color}
-            change={(color) => patch({ shadow: { ...item.shadow!, color } })}
+            label="Цвет заливки"
+            value={f.color}
+            change={(color) => patch({ fill: { ...f, color } })}
           />
-          {(['x', 'y', 'blur'] as const).map((k) => (
-            <Num
-              key={k}
-              label={{ x: 'Смещение X', y: 'Смещение Y', blur: 'Размытие' }[k]}
-              min={k === 'blur' ? 0 : -200}
-              max={k === 'blur' ? 100 : 200}
-              value={item.shadow![k]}
-              change={(v) => patch({ shadow: { ...item.shadow!, [k]: v } })}
+        )}
+        {'stops' in f && (
+          <>
+            {f.type === 'linear' && (
+              <Num
+                label="Угол градиента"
+                value={f.angle ?? 0}
+                min={-360}
+                max={360}
+                change={(angle) => patch({ fill: { ...f, angle } })}
+              />
+            )}
+            {f.stops.map((s, i) => (
+              <div className="field-pair" key={i}>
+                <Color
+                  label={'Цвет ' + (i + 1)}
+                  value={s.color}
+                  change={(color) =>
+                    patch({
+                      fill: {
+                        ...f,
+                        stops: f.stops.map((v, j) =>
+                          j === i ? { ...v, color } : v
+                        ),
+                      },
+                    })
+                  }
+                />
+                <Num
+                  label="Позиция"
+                  value={s.offset}
+                  min={f.stops[i - 1]?.offset ?? 0}
+                  max={f.stops[i + 1]?.offset ?? 1}
+                  step={0.01}
+                  change={(offset) =>
+                    patch({
+                      fill: {
+                        ...f,
+                        stops: f.stops.map((v, j) =>
+                          j === i ? { ...v, offset } : v
+                        ),
+                      },
+                    })
+                  }
+                />
+                <button
+                  disabled={f.stops.length <= 2}
+                  onClick={() =>
+                    patch({
+                      fill: { ...f, stops: f.stops.filter((_, j) => i !== j) },
+                    })
+                  }
+                >
+                  Убрать
+                </button>
+              </div>
+            ))}
+            <button
+              disabled={f.stops.length >= 16}
+              onClick={() =>
+                patch({
+                  fill: {
+                    ...f,
+                    stops: [...f.stops, { offset: 1, color: '#ffffff' }],
+                  },
+                })
+              }
+            >
+              Добавить цвет
+            </button>
+          </>
+        )}
+        <Color
+          label="Цвет контура"
+          value={item.stroke ?? '#275b68'}
+          change={(stroke) => patch({ stroke })}
+        />
+        <Num
+          label="Толщина контура"
+          min={0}
+          max={100}
+          value={item.strokeWidth ?? 0}
+          change={(strokeWidth) => patch({ strokeWidth })}
+        />
+        <Toggle
+          label="Пунктир"
+          value={!!item.dash}
+          change={(on) => patch({ dash: on ? [12, 8] : undefined })}
+        />
+        {['rounded', 'rect'].includes(item.shape!) && (
+          <Num
+            label="Скругление"
+            min={0}
+            max={4096}
+            value={item.radius ?? (item.shape === 'rounded' ? 24 : 0)}
+            change={(radius) => patch({ radius })}
+          />
+        )}
+      </PropertySection>
+      <PropertySection id="shape-shadow" title="Тени и эффекты">
+        <Toggle
+          label="Тень"
+          value={!!item.shadow}
+          change={(on) =>
+            patch({
+              shadow: on
+                ? { x: 4, y: 6, blur: 8, color: '#799390' }
+                : undefined,
+            })
+          }
+        />
+        {item.shadow && (
+          <>
+            <Color
+              label="Цвет тени"
+              value={item.shadow.color}
+              change={(color) => patch({ shadow: { ...item.shadow!, color } })}
             />
-          ))}
-        </>
-      )}
+            {(['x', 'y', 'blur'] as const).map((k) => (
+              <Num
+                key={k}
+                label={
+                  { x: 'Смещение X', y: 'Смещение Y', blur: 'Размытие' }[k]
+                }
+                min={k === 'blur' ? 0 : -200}
+                max={k === 'blur' ? 100 : 200}
+                value={item.shadow![k]}
+                change={(v) => patch({ shadow: { ...item.shadow!, [k]: v } })}
+              />
+            ))}
+          </>
+        )}
+      </PropertySection>
       {item.shape === 'path' && (
-        <>
+        <PropertySection id="path" title="Контур фигуры" initial>
           <Toggle
             label="Замкнуть контур"
             value={!!item.closed}
@@ -886,7 +892,7 @@ export function ShapePanel({
           >
             Добавить узел
           </button>
-        </>
+        </PropertySection>
       )}
     </>
   )
@@ -899,8 +905,7 @@ export function GeometryPanel({
   patch: (v: Partial<Item>) => void
 }) {
   return (
-    <details>
-      <summary>Геометрия и слой</summary>
+    <PropertySection id="geometry" title="Геометрия и слой">
       <div className="field-pair">
         {(['x', 'y', 'w', 'h'] as const).map((k) => (
           <Num
@@ -943,6 +948,6 @@ export function GeometryPanel({
         value={item.role === 'decoration'}
         change={(on) => patch({ role: on ? 'decoration' : 'content' })}
       />
-    </details>
+    </PropertySection>
   )
 }

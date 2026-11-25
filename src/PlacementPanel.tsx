@@ -1,3 +1,4 @@
+import { PropertySection } from './Workspace'
 import { useState } from 'react'
 import {
   slots,
@@ -62,8 +63,7 @@ export function PlacementPanel({
   }
   return (
     <>
-      <details open>
-        <summary>Шаблоны слайда</summary>
+      <PropertySection id="slide-templates" title="Шаблоны слайда" initial>
         <small>Главный шаблон · {deck.master.name}</small>
         <label>
           Сменить главный шаблон
@@ -150,14 +150,13 @@ export function PlacementPanel({
           </label>
         )}
         {saveAs && <button onClick={saveAs}>Сохранить как шаблон</button>}
-      </details>
+      </PropertySection>
       {all
         .filter((v) => v.cell.type === 'header' || v.cell.type === 'footer')
         .map((v) => {
           const k = v.cell.type as 'header' | 'footer'
           return (
-            <details key={v.id}>
-              <summary>{cellTypes[k]}</summary>
+            <PropertySection key={v.id} id={k} title={cellTypes[k]}>
               <label>
                 Для всей методички
                 <input
@@ -181,102 +180,105 @@ export function PlacementPanel({
               >
                 Вернуть общее значение
               </button>
-            </details>
+            </PropertySection>
           )
         })}
       {item && !item.fixed && (
-        <label>
-          Размещение объекта
-          <select
-            aria-label="Размещение объекта"
-            value={target(item)}
-            onChange={(e) => assign(item, e.target.value)}
-          >
-            <option value="tray">Неразмещённое содержимое</option>
-            {all
-              .filter(
-                (v) =>
-                  accepts(v.cell.type, item) &&
-                  (v.cell.type === 'free' ||
-                    !slide.items.some(
-                      (o) => o.id !== item.id && target(o) === v.id
-                    ))
-              )
-              .map((v) => (
-                <option key={v.id} value={v.id}>
-                  {cellTypes[v.cell.type]} · {v.cell.row + 1},{v.cell.col + 1}
-                </option>
-              ))}
-          </select>
-        </label>
+        <PropertySection id="placement" title="Размещение" initial>
+          <label>
+            Размещение объекта
+            <select
+              aria-label="Размещение объекта"
+              value={target(item)}
+              onChange={(e) => assign(item, e.target.value)}
+            >
+              <option value="tray">Неразмещённое содержимое</option>
+              {all
+                .filter(
+                  (v) =>
+                    accepts(v.cell.type, item) &&
+                    (v.cell.type === 'free' ||
+                      !slide.items.some(
+                        (o) => o.id !== item.id && target(o) === v.id
+                      ))
+                )
+                .map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {cellTypes[v.cell.type]} · {v.cell.row + 1},{v.cell.col + 1}
+                  </option>
+                ))}
+            </select>
+          </label>
+        </PropertySection>
       )}
-      <details>
-        <summary>Группы и связи</summary>
-        {slide.items
-          .filter((o) => !o.fixed)
-          .map((o) => (
-            <label className="toggle" key={o.id}>
-              <input
-                type="checkbox"
-                checked={marked.includes(o.id)}
-                onChange={(e) =>
-                  mark(
-                    e.target.checked
-                      ? [...marked, o.id]
-                      : marked.filter((id) => id !== o.id)
-                  )
+      {!!slide.items.some((o) => !o.fixed) && (
+        <PropertySection id="groups" title="Группы и связи">
+          {slide.items
+            .filter((o) => !o.fixed)
+            .map((o) => (
+              <label className="toggle" key={o.id}>
+                <input
+                  type="checkbox"
+                  checked={marked.includes(o.id)}
+                  onChange={(e) =>
+                    mark(
+                      e.target.checked
+                        ? [...marked, o.id]
+                        : marked.filter((id) => id !== o.id)
+                    )
+                  }
+                />
+                {name(o)}
+              </label>
+            ))}
+          {(['group', 'relation'] as const).map((key, i) => (
+            <button
+              key={key}
+              disabled={marked.length < 2}
+              onClick={() => {
+                const members = slide.items.filter((o) => marked.includes(o.id))
+                if (
+                  members.length < 2 ||
+                  (key === 'group' &&
+                    (new Set(members.map(target)).size !== 1 ||
+                      all.find((v) => v.id === target(members[0]))?.cell
+                        .type !== 'free'))
+                ) {
+                  notice('Для группы выберите объекты одного свободного блока.')
+                  return
                 }
-              />
-              {name(o)}
-            </label>
+                const id = 'g' + crypto.randomUUID()
+                replace({
+                  ...slide,
+                  items: slide.items.map((o) =>
+                    marked.includes(o.id) ? { ...o, [key]: id } : o
+                  ),
+                })
+                mark([])
+              }}
+            >
+              {i ? 'Связать по смыслу' : 'Сгруппировать'}
+            </button>
           ))}
-        {(['group', 'relation'] as const).map((key, i) => (
-          <button
-            key={key}
-            disabled={marked.length < 2}
-            onClick={() => {
-              const members = slide.items.filter((o) => marked.includes(o.id))
-              if (
-                members.length < 2 ||
-                (key === 'group' &&
-                  (new Set(members.map(target)).size !== 1 ||
-                    all.find((v) => v.id === target(members[0]))?.cell.type !==
-                      'free'))
-              ) {
-                notice('Для группы выберите объекты одного свободного блока.')
-                return
+          {item?.group && (
+            <button
+              onClick={() =>
+                replace({
+                  ...slide,
+                  items: slide.items.map((o) => {
+                    if (o.group !== item.group) return o
+                    const copy = { ...o }
+                    delete copy.group
+                    return copy
+                  }),
+                })
               }
-              const id = 'g' + crypto.randomUUID()
-              replace({
-                ...slide,
-                items: slide.items.map((o) =>
-                  marked.includes(o.id) ? { ...o, [key]: id } : o
-                ),
-              })
-              mark([])
-            }}
-          >
-            {i ? 'Связать по смыслу' : 'Сгруппировать'}
-          </button>
-        ))}
-        {item?.group && (
-          <button
-            onClick={() =>
-              replace({
-                ...slide,
-                items: slide.items.map((o) => {
-                  if (o.group !== item.group) return o
-                  const copy = { ...o }
-                  delete copy.group
-                  return copy
-                }),
-              })
-            }
-          >
-            Разгруппировать
-          </button>
-        )}
-      </details>
+            >
+              Разгруппировать
+            </button>
+          )}
+        </PropertySection>
+      )}
     </>
   )
 }

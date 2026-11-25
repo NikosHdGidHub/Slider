@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 export type Action = { name: string; run: () => void; key?: string }
-function typing(target: EventTarget | null) {
+export function isTyping(target: EventTarget | null) {
   return (
     target instanceof Element &&
     !!target.closest(
@@ -131,7 +131,7 @@ export function useCommands(actions: Action[]) {
         show(null)
         return
       }
-      if (typing(e.target) || !(e.ctrlKey || e.metaKey)) return
+      if (isTyping(e.target) || !(e.ctrlKey || e.metaKey)) return
       // ВАЖНО ДЛЯ ВСЕХ БУДУЩИХ ИНСТРУМЕНТОВ РЕДАКТОРА:
       //
       // Горячие клавиши определяем по физическому коду (KeyboardEvent.code),

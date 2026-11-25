@@ -28,10 +28,6 @@ def run(page, ctx, browser, url, temp):
     def click(name):
         page.get_by_role("button", name=name, exact=True).click()
 
-    def action(name):
-        click("Действия с методичкой")
-        click(name)
-
     def create():
         click("Создать методичку")
         page.get_by_label("Название", exact=True).fill("Тестовый урок")
@@ -79,8 +75,10 @@ def run(page, ctx, browser, url, temp):
     click("Слайд")
     click("Удалить слайд")
     expect(page.locator(".thumb")).to_have_count(2)
-    action("Подготовить к офлайн-показу")
-    expect(page.get_by_text("Готово к офлайн-показу.", exact=False)).to_be_visible()
+    click("Показать")
+    click("Подготовить к офлайн-показу")
+    expect(page.get_by_role("button", name="Готово к офлайн-показу")).to_be_visible()
+    click("Закрыть")
     ctx.set_offline(True)
     page.reload()
     click_by_title = page.get_by_role("button", name="Редактировать Тестовый урок", exact=True).first
@@ -92,7 +90,7 @@ def run(page, ctx, browser, url, temp):
     expect(page.locator(".canvas img")).to_be_visible()
     page.get_by_role("textbox", name="Заметки преподавателя").fill("Офлайн-заметка")
     with page.expect_download() as download:
-        action("Экспортировать JSON")
+        click("Экспортировать JSON")
     output = Path(temp) / "lesson.json"
     download.value.save_as(output)
     doc = json.loads(output.read_text())

@@ -21,6 +21,8 @@ type Props = {
   setKind: (kind: Template['kind']) => void
   rows: CatalogRow[]
   allowed: boolean
+  editable: boolean
+  view: (d: Deck) => void
   onlineOwner: boolean
   edit: (t: Template, row?: CatalogRow) => void
   create: (d: Deck) => Promise<void>
@@ -32,6 +34,8 @@ export function TemplateLibrary({
   setKind,
   rows,
   allowed,
+  editable,
+  view,
   onlineOwner,
   edit,
   create,
@@ -66,7 +70,7 @@ export function TemplateLibrary({
             </button>
           ))}
         </div>
-        {allowed && (
+        {editable && (
           <>
             <button
               className="secondary"
@@ -101,9 +105,11 @@ export function TemplateLibrary({
               <article className="template-card" key={d.id}>
                 <button
                   className="template-cover"
-                  aria-label={'Редактировать ' + d.title}
+                  aria-label={
+                    (editable ? 'Редактировать ' : 'Смотреть ') + d.title
+                  }
                   onClick={() => {
-                    if (!allowed) return
+                    if (!editable) return view(d)
 
                     edit(
                       row.builtin
@@ -135,7 +141,7 @@ export function TemplateLibrary({
                   {allowed && (
                     <fieldset disabled={busy}>
                       <div className="catalog-actions">
-                        {kind === 'presentation' && (
+                        {editable && kind === 'presentation' && (
                           <button
                             className="primary"
                             onClick={() => act(() => create(instantiate(t)))}
@@ -146,19 +152,21 @@ export function TemplateLibrary({
                         <details>
                           <summary>Действия</summary>
                           <div>
-                            <button
-                              onClick={() =>
-                                act(() =>
-                                  saveLocal({
-                                    ...t,
-                                    deck: copyDeck(d, d.title + ' — копия'),
-                                  })
-                                )
-                              }
-                            >
-                              <Copy size={15} />
-                              Копировать
-                            </button>
+                            {editable && (
+                              <button
+                                onClick={() =>
+                                  act(() =>
+                                    saveLocal({
+                                      ...t,
+                                      deck: copyDeck(d, d.title + ' — копия'),
+                                    })
+                                  )
+                                }
+                              >
+                                <Copy size={15} />
+                                Копировать
+                              </button>
+                            )}
                             <button
                               onClick={() =>
                                 download(

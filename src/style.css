@@ -214,8 +214,7 @@ h1 {
 .primary,
 .secondary,
 .feature-copy button,
-.pub button,
-.editor .tools button {
+.pub button {
   border-radius: 7px;
   padding: 11px 15px;
   font-size: 14px;
@@ -227,8 +226,7 @@ h1 {
   color: white;
 }
 .secondary,
-.pub button,
-.editor .tools button {
+.pub button {
   border: 1px solid #d4dbd0;
   background: #fff;
 }
@@ -319,8 +317,7 @@ h1 {
   font-size: clamp(24px, 2.1vw, 34px);
   letter-spacing: -0.8px;
 }
-.section-title h2 span,
-.strip h3 span {
+.section-title h2 span {
   font:
     13px Arial,
     sans-serif;
@@ -462,6 +459,9 @@ h1 {
 }
 .dialog {
   width: min(440px, 92vw);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
   background: #fcfdf9;
   border-radius: 15px;
   padding: 29px;
@@ -473,9 +473,7 @@ h1 {
   margin: 17px 0;
 }
 .dialog form,
-.dialog label,
-.inspector label,
-.notes {
+.dialog label {
   display: grid;
   gap: 8px;
 }
@@ -491,8 +489,7 @@ h1 {
 .dialog > p {
   margin-bottom: 13px;
 }
-.dialog label,
-.inspector label {
+.dialog label {
   font-size: 14px;
 }
 .dialog textarea {
@@ -533,126 +530,6 @@ h1 {
 .toast button {
   color: white;
 }
-.edit-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  border-bottom: 1px solid #d6ddd2;
-  background: white;
-}
-.edit-head input {
-  border-color: transparent;
-  font-size: 19px;
-  font-weight: 600;
-  min-width: 0;
-  flex: 1;
-}
-.edit-head small {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #557259;
-}
-.edit-grid {
-  display: grid;
-  grid-template-columns: 165px minmax(0, 1fr) 218px;
-  min-height: calc(100vh - 68px);
-}
-.strip,
-.inspector {
-  background: #f6f8f2;
-  padding: 20px 13px;
-}
-.strip {
-  border-right: 1px solid #d6ddd2;
-}
-.inspector {
-  border-left: 1px solid #d6ddd2;
-}
-.strip h3,
-.inspector h3,
-.notes strong {
-  font-size: 15px;
-  margin-bottom: 17px;
-}
-.thumb {
-  display: flex;
-  width: 100%;
-  padding: 5px;
-  margin-bottom: 8px;
-  border: 2px solid transparent;
-  border-radius: 7px;
-  gap: 5px;
-}
-.thumb b {
-  font-size: 12px;
-}
-.thumb.active {
-  background: #e5eddf;
-  border-color: #497658;
-}
-.thumb > div {
-  flex: 1;
-}
-.full {
-  width: 100%;
-}
-.bench {
-  min-width: 0;
-  padding: 20px clamp(14px, 2vw, 36px);
-  background: #ecf0e8;
-}
-.tools {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-.tools svg,
-.inspector button svg {
-  width: 16px;
-  height: 16px;
-}
-.canvas {
-  box-shadow: 0 4px 14px #24362420;
-}
-.notes {
-  margin-top: 24px;
-}
-.notes strong {
-  margin-bottom: 0;
-}
-.notes textarea {
-  min-height: 110px;
-  line-height: 1.55;
-}
-.inspector {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  align-items: stretch;
-}
-.inspector h3 {
-  margin-bottom: 4px;
-}
-.inspector button {
-  justify-content: flex-start;
-  padding: 8px 4px;
-  font-size: 14px;
-}
-.inspector hr {
-  border: 0;
-  border-top: 1px solid #d6ddd2;
-  width: 100%;
-}
-.inspector input[type='color'] {
-  width: 100%;
-  height: 39px;
-  padding: 3px;
-}
-.inspector textarea {
-  min-height: 80px;
-}
 .menu-anchor {
   position: relative;
 }
@@ -690,22 +567,6 @@ h1 {
   }
   .feature {
     min-height: 260px;
-  }
-  .edit-grid {
-    grid-template-columns: 112px minmax(0, 1fr) 175px;
-  }
-  .strip,
-  .inspector {
-    padding: 12px 8px;
-  }
-  .bench {
-    padding: 12px;
-  }
-  .edit-head {
-    gap: 6px;
-  }
-  .edit-head small {
-    font-size: 12px;
   }
 }
 @media (max-width: 710px) {
@@ -764,30 +625,6 @@ h1 {
   .section-title {
     align-items: flex-start;
     flex-wrap: wrap;
-  }
-  .edit-grid {
-    grid-template-columns: 78px minmax(0, 1fr);
-  }
-  .inspector {
-    grid-column: 2;
-  }
-  .edit-head {
-    padding: 7px;
-  }
-  .edit-head small {
-    display: none;
-  }
-  .edit-head input {
-    font-size: 15px;
-  }
-  .edit-head .primary {
-    padding: 8px;
-  }
-  .bench .tools {
-    flex-wrap: wrap;
-  }
-  .thumb {
-    padding: 0;
   }
   .collection {
     margin-top: 24px;
@@ -882,20 +719,10 @@ h1 {
   padding: 6px;
 }
 .catalog-actions summary,
-.inspector summary,
 .import-preview summary {
   cursor: pointer;
   font-weight: 600;
   padding: 8px 0;
-}
-.inspector details {
-  border-top: 1px solid #d4ded8;
-  margin: 10px 0;
-}
-.inspector .toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 .toggle input[type='checkbox'] {
   width: auto;
@@ -926,56 +753,15 @@ h1 {
   overflow: visible;
   pointer-events: none;
 }
-.inspector {
-  min-height: 0;
-  overflow-y: auto;
-}
-.inspector label {
-  display: block;
-}
-.inspector select {
-  width: 100%;
-}
-@media (min-width: 1000px) {
-  .edit-grid {
-    grid-template-columns: 160px minmax(0, 1fr) 280px;
-    align-items: start;
-  }
-  .inspector,
-  .strip {
-    position: sticky;
-    top: 0;
-    max-height: calc(100vh - 12px);
-    overflow-y: auto;
-  }
-  .inspector,
-  .strip {
-    min-height: calc(100vh - 68px);
-  }
-}
 .atlas-slide-text [contenteditable] {
   outline: 2px solid #25879d;
   cursor: text;
   user-select: text;
 }
-.grid-work {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 310px);
-  gap: 20px;
-  padding: 22px;
-  background: #f3f6f1;
-  min-height: 90vh;
-}
-.grid-work section {
-  min-width: 0;
-}
-.grid-work h1 {
-  font-size: clamp(22px, 3vw, 38px);
-  margin: 12px 0 20px;
-}
 .grid-board {
   position: relative;
-  margin: 16px 0;
+  width: 100%;
+  height: 100%;
   isolation: isolate;
 }
 .grid-cell {
@@ -986,8 +772,13 @@ h1 {
   align-items: start;
   justify-content: start;
   border-radius: 0;
+  overflow: hidden;
 }
 .grid-cell span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: 12px system-ui;
   background: #edf7f3;
   color: #294a40;
@@ -1024,96 +815,6 @@ h1 {
   grid-template-columns: 1fr 1fr;
   gap: 5px;
 }
-.grid-work textarea,
-.grid-work input,
-.grid-work select {
-  width: 100%;
-}
-.grid-work textarea {
-  min-height: 60px;
-}
-.grid-work label {
-  display: block;
-}
-.grid-work button {
-  padding: 6px;
-}
-.grid-work .grid-cell {
-  padding: 4px;
-}
-.grid-work .inspector {
-  max-height: 86vh;
-  overflow-y: auto;
-}
-.grid-work .field-pair label {
-  min-width: 100%;
-}
-@media (max-width: 760px) {
-  .grid-work {
-    grid-template-columns: 1fr;
-    padding: 12px;
-  }
-  .grid-work .inspector {
-    position: static;
-  }
-}
-
-/* Workspace controls share neutral surfaces while the slide retains its own theme. */
-.editor,
-.grid-designer {
-  --panel: #292c31;
-  --edge: #4a5059;
-  --ink: #e4e7ec;
-  background: #202226;
-  color: var(--ink);
-}
-.editor .edit-head,
-.grid-designer .edit-head,
-.editor .inspector,
-.grid-designer .inspector,
-.editor .strip,
-.editor .tools,
-.editor .bench,
-.grid-work,
-.editor .notes {
-  background: var(--panel);
-  color: var(--ink);
-  border-color: var(--edge);
-}
-:is(.editor, .grid-designer)
-  :is(.edit-head, .inspector, .tools, .strip, .catalog-tabs)
-  :is(button, select, input, textarea),
-.grid-work section > button,
-.studio-menu button {
-  background: #353940;
-  color: #eef0f4;
-  border: 1px solid #555c66;
-  border-radius: 5px;
-}
-:is(.editor, .grid-designer)
-  :is(.inspector, .edit-head, .strip, .notes, .grid-work)
-  :is(label, small, h1, h2, h3, summary) {
-  color: #dfe5ed;
-}
-:is(.editor, .grid-designer) .inspector details {
-  background: #2c3036;
-  border-color: #525964;
-}
-:is(.editor, .grid-designer) .inspector :is(input, select, textarea),
-.editor .notes textarea {
-  color-scheme: dark;
-}
-:is(.editor, .grid-designer) button[aria-pressed='true'],
-.editor .thumb.active,
-.grid-designer .catalog-tabs button.active {
-  outline: 2px solid #85b9ff;
-  outline-offset: -2px;
-}
-.editor .canvas,
-.grid-designer .grid-board {
-  background: #16181c;
-  box-shadow: 0 2px 12px #12141855;
-}
 .layer-list {
   display: grid;
   gap: 2px;
@@ -1133,7 +834,7 @@ h1 {
   position: fixed;
   z-index: 1200;
   width: min(210px, 100vw);
-  max-height: 100vh;
+  max-height: 100dvh;
   overflow: auto;
   background: #26292e;
   padding: 5px;
@@ -1142,6 +843,8 @@ h1 {
   box-shadow: 0 4px 14px #0006;
 }
 .studio-menu button {
+  color: #eef0f4;
+  justify-content: flex-start;
   width: 100%;
   text-align: left;
   padding: 6px 10px;
@@ -1153,13 +856,6 @@ h1 {
 .bg-tools {
   display: grid;
   gap: 6px;
-}
-.edit-head {
-  flex-wrap: wrap;
-}
-.editor button:disabled,
-.grid-designer button:disabled {
-  opacity: 0.55;
 }
 .files-library {
   display: grid;
@@ -1729,155 +1425,4 @@ h1 {
     width: 100%;
     justify-content: center;
   }
-}
-
-/* Кнопка синхронизации: предупреждающая пульсация */
-
-/* Кнопка синхронизации */
-
-.editor .edit-head button.sync-attention {
-  flex: 0 0 auto;
-  min-width: 165px;
-  min-height: 42px;
-
-  padding: 10px 18px;
-  border-radius: 9px;
-
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-
-  background: #f5c842;
-  color: #533800;
-  border: 1px solid #e7a82c;
-
-  animation: sync-alert 2.2s ease-in-out infinite;
-}
-
-@keyframes sync-alert {
-  0%,
-  100% {
-    background: #f5c842;
-    color: #533800;
-    border-color: #e7a82c;
-    box-shadow: 0 0 0 0 rgba(245, 200, 66, 0.18);
-  }
-
-  50% {
-    background: #dc4848;
-    color: #ffffff;
-    border-color: #bd3030;
-    box-shadow: 0 0 0 5px rgba(220, 72, 72, 0.12);
-  }
-}
-
-.edit-head button.sync-attention:hover:not(:disabled) {
-  filter: brightness(0.96);
-}
-
-.edit-head button.sync-attention:focus-visible {
-  outline: 3px solid #255b44;
-  outline-offset: 3px;
-}
-
-/* Учитываем настройки уменьшения анимации */
-
-@media (prefers-reduced-motion: reduce) {
-  .edit-head button.sync-attention {
-    animation: none;
-    background: #f5c842;
-    color: #533800;
-    border-color: #e7a82c;
-  }
-}
-
-/* Зелёные кнопки публикации в тёмном редакторе */
-
-.editor .edit-head button.primary {
-  flex-shrink: 0;
-  min-height: 42px;
-  padding: 10px 18px;
-  border-radius: 9px;
-
-  background: #255b44;
-  color: #ffffff;
-  border: 1px solid #347858;
-
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.editor .edit-head button.primary:hover:not(:disabled) {
-  background: #307555;
-  border-color: #408c68;
-}
-
-.editor .edit-head button.primary:disabled {
-  opacity: 0.55;
-}
-
-/* Рабочие экраны без общей прокрутки */
-
-html:has(.editor),
-html:has(.grid-designer),
-body:has(.editor),
-body:has(.grid-designer) {
-  overflow: hidden;
-}
-
-.editor,
-.grid-designer {
-  height: 100dvh;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.editor > .edit-head,
-.grid-designer > .edit-head {
-  flex: 0 0 auto;
-}
-
-.editor > .edit-grid {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: auto;
-  overflow: hidden;
-}
-
-/* Независимая прокрутка боковых панелей */
-
-.editor .strip,
-.editor .inspector,
-.grid-designer .inspector {
-  position: static;
-  min-height: 0;
-  max-height: none;
-  height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-/* Рабочая область конструктора шаблонов */
-
-.grid-designer > .grid-work {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: auto;
-  overflow: hidden;
-}
-
-.grid-designer .grid-work > section {
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.grid-designer .grid-work > aside.inspector {
-  min-height: 0;
-  max-height: none;
-  overflow-y: auto;
 }

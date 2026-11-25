@@ -1,6 +1,26 @@
+import {
+  ArrowLeft,
+  Captions,
+  Columns3,
+  FileDown,
+  Merge,
+  PanelTop,
+  Rows3,
+  Save,
+  SplitSquareHorizontal,
+} from 'lucide-react'
+import { CanvasViewport } from './CanvasViewport'
+import {
+  HistoryButtons,
+  IconButton,
+  PropertySection,
+  Workspace,
+} from './Workspace'
+import { Editor } from './Editor'
+import { download } from './instructions'
 import { useCommands, type HistoryControls, type Action } from './StudioTools'
 import { Background } from './Background'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Stage } from './Stage'
 import {
   cell,
@@ -56,8 +76,7 @@ function Padding({
   update: (v: Insets) => void
 }) {
   return (
-    <details>
-      <summary>{label}</summary>
+    <PropertySection id={label} title={label}>
       <div className="grid-fields">
         {['Все стороны', 'Сверху', 'Справа', 'Снизу', 'Слева'].map((n, i) => (
           <label key={n}>
@@ -83,7 +102,7 @@ function Padding({
           </label>
         ))}
       </div>
-    </details>
+    </PropertySection>
   )
 }
 export function GridDesigner({
@@ -107,7 +126,17 @@ export function GridDesigner({
   const [kind, choose] = useState<Kind>('title'),
     [selected, select] = useState(''),
     [merge, merging] = useState(false)
-  const [tab, setTab] = useState('table')
+  const [objects, setObjects] = useState(false)
+  const [inspectorRequest, requestInspector] = useState(0)
+  const cellProperties = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!merge) return
+    const cancel = (e: KeyboardEvent) => {
+      if (e.code === 'Escape') merging(false)
+    }
+    window.addEventListener('keydown', cancel)
+    return () => window.removeEventListener('keydown', cancel)
+  }, [merge])
   const canvas = useRef<HTMLDivElement>(null)
   const structural = template.kind === 'layout',
     deck = template.deck,
@@ -192,7 +221,14 @@ export function GridDesigner({
         name: 'Свойства ячейки',
         run: () => {
           select(o.id)
-          setTab('table')
+          requestInspector((value) => value + 1)
+          requestAnimationFrame(() => {
+            const section = cellProperties.current?.closest('details')
+            if (section) section.open = true
+            requestAnimationFrame(() =>
+              section?.querySelector('summary')?.focus()
+            )
+          })
         },
       },
       { name: 'Копировать настройки', key: 'c', run: copy },
@@ -214,44 +250,116 @@ export function GridDesigner({
       },
     ]
   }
-  const context = useCommands([...history.actions, ...commands(c)])
+  const context = useCommands(
+    objects ? [] : [...history.actions, ...commands(c)]
+  )
   const drag = useRef<{
     axis: 'rows' | 'cols'
     index: number
     start: number
     base: Grid
   } | null>(null)
+  const exportTemplate = () =>
+    download(
+      deck.title + '.atlas.json',
+      JSON.stringify(template, null, 2),
+      'application/json'
+    )
+
+  function splitCell() {
+    const cells = g.cells.filter((o) => o.id !== c.id)
+    for (let row = 0; row < c.rows; row++)
+      for (let col = 0; col < c.cols; col++)
+        cells.push(
+          row || col
+            ? cell(c.row + row, c.col + col)
+            : { ...c, rows: 1, cols: 1 }
+        )
+    change({ ...g, cells })
+  }
+
+  if (objects) {
+    return (
+      <Editor
+        deck={deck}
+        initialSlideId={s.id}
+        gridTemplateKind={template.kind}
+        libraryAvailable={libraryAvailable}
+        history={history}
+        change={(update) => set({ ...template, deck: update(deck) })}
+        status="Редактор оформления"
+        exitLabel="К сетке шаблона"
+        back={() => setObjects(false)}
+        headerTools={
+          <IconButton label="В библиотеку" onClick={back}>
+            <ArrowLeft />
+          </IconButton>
+        }
+        saveTemplate={save}
+        exportTemplate={exportTemplate}
+        action={() => {}}
+        view={() => {}}
+        notice={notice}
+      />
+    )
+  }
+
   return (
-    <main className="grid-designer">
+    <>
       {context.menu}
-      <header className="edit-head">
-        <button onClick={back}>В библиотеку</button>
-        <input
-          aria-label="Название шаблона"
-          maxLength={200}
-          value={deck.title}
-          onChange={(e) =>
-            set({
-              ...template,
-              deck: {
-                ...deck,
-                title: e.target.value,
-                master: { ...deck.master, name: e.target.value },
-              },
-            })
-          }
-        />
-        <button className="primary" onClick={save}>
-          Сохранить шаблон
-        </button>
-      </header>
-      <div className="grid-work">
-        <section>
-          {!structural && (
-            <div className="catalog-tabs">
+      <Workspace
+        scope="grid"
+        inspectorRequest={inspectorRequest}
+        header={
+          <>
+            <IconButton label="В библиотеку" onClick={back}>
+              <ArrowLeft />
+            </IconButton>
+            <input
+              aria-label="Название шаблона"
+              maxLength={200}
+              value={deck.title}
+              onChange={(e) =>
+                set({
+                  ...template,
+                  deck: {
+                    ...deck,
+                    title: e.target.value,
+                    master: { ...deck.master, name: e.target.value },
+                  },
+                })
+              }
+            />
+            <small className="edit-status" role="status">
+              {structural ? 'Шаблон компоновки' : 'Главный шаблон'}
+            </small>
+            <IconButton
+              label="Оформление и объекты"
+              onClick={() => setObjects(true)}
+            >
+              <Captions />
+            </IconButton>
+            <button
+              className="primary"
+              aria-label="Сохранить шаблон"
+              title="Сохранить шаблон"
+              onClick={save}
+            >
+              <Save size={16} />
+              <span>Сохранить шаблон</span>
+            </button>
+            <IconButton label="Экспортировать JSON" onClick={exportTemplate}>
+              <FileDown />
+            </IconButton>
+          </>
+        }
+        navigationLabel="Схемы"
+        navigation={
+          !structural ? (
+            <div className="workspace-schemes">
               {kinds.map((v, i) => (
                 <button
-                  className={v === kind ? 'active' : ''}
+                  aria-pressed={v === kind}
                   key={v}
                   onClick={() => {
                     choose(v)
@@ -259,11 +367,306 @@ export function GridDesigner({
                     merging(false)
                   }}
                 >
+                  <PanelTop size={16} />
                   {['Титульный', 'Обычный', 'Завершающий'][i]}
                 </button>
               ))}
             </div>
-          )}
+          ) : undefined
+        }
+        tools={
+          <>
+            <div
+              className="workspace-tool-group"
+              role="group"
+              aria-label="Сетка"
+            >
+              <IconButton
+                label="Добавить строку"
+                onClick={() => change(editTrack(g, 'rows', 0, false))}
+                disabled={g.rows.length >= 24}
+              >
+                <Rows3 />
+              </IconButton>
+              <IconButton
+                label="Добавить столбец"
+                onClick={() => change(editTrack(g, 'cols', 0, false))}
+                disabled={g.cols.length >= 24}
+              >
+                <Columns3 />
+              </IconButton>
+              <IconButton
+                label="Объединить ячейки"
+                aria-pressed={merge}
+                title={merge ? 'Выберите последнюю ячейку' : undefined}
+                onClick={() => merging(!merge)}
+              >
+                <Merge />
+              </IconButton>
+              <IconButton
+                label="Разделить ячейку"
+                disabled={c.rows === 1 && c.cols === 1}
+                onClick={splitCell}
+              >
+                <SplitSquareHorizontal />
+              </IconButton>
+              {merge && (
+                <span role="status" className="merge-status">
+                  Выберите последнюю ячейку
+                </span>
+              )}
+            </div>
+            <HistoryButtons history={history} />
+          </>
+        }
+        properties={
+          <>
+            <PropertySection id="grid-tracks" title="Сетка" initial>
+              {(['rows', 'cols'] as const).map((axis) => (
+                <div key={axis} className="field-pair">
+                  <button
+                    disabled={g[axis].length === 1}
+                    onClick={() =>
+                      change(
+                        editTrack(
+                          g,
+                          axis,
+                          axis === 'rows' ? c.row : c.col,
+                          true
+                        )
+                      )
+                    }
+                  >
+                    Удалить {axis === 'rows' ? 'строку' : 'столбец'}
+                  </button>
+                  <label>
+                    Вес {axis === 'rows' ? 'строки' : 'столбца'}
+                    <input
+                      type="number"
+                      min=".01"
+                      step=".1"
+                      value={g[axis][axis === 'rows' ? c.row : c.col]}
+                      onChange={(e) =>
+                        change({
+                          ...g,
+                          [axis]: g[axis].map((x, i) =>
+                            i === (axis === 'rows' ? c.row : c.col)
+                              ? Math.min(8192, Math.max(0.01, +e.target.value))
+                              : x
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+              ))}
+              <Padding
+                label="Отступы сетки"
+                value={g.padding}
+                update={(padding) => change({ ...g, padding })}
+              />
+            </PropertySection>
+            <PropertySection
+              id="grid-cell"
+              title={'Ячейка ' + (c.row + 1) + ' × ' + (c.col + 1)}
+              initial
+            >
+              <div ref={cellProperties} className="grid-cell-fields">
+                <label>
+                  Тип ячейки
+                  <select
+                    value={c.type}
+                    onChange={(e) =>
+                      patch({ type: e.target.value as CellType })
+                    }
+                  >
+                    {Object.entries(cellTypes)
+                      .filter(
+                        ([k]) =>
+                          !structural ||
+                          !['area', 'header', 'footer'].includes(k)
+                      )
+                      .map(([k, n]) => (
+                        <option key={k} value={k}>
+                          {n}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                {!['area', 'empty', 'image', 'free'].includes(c.type) && (
+                  <>
+                    <label>
+                      Исходный текст
+                      <textarea
+                        value={c.value ?? ''}
+                        onChange={(e) => patch({ value: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Размер текста
+                      <input
+                        type="number"
+                        value={c.style?.size ?? 32}
+                        min={1}
+                        max={1024}
+                        onChange={(e) =>
+                          patch({
+                            style: {
+                              ...c.style,
+                              size: Math.min(
+                                1024,
+                                Math.max(1, +e.target.value)
+                              ),
+                            },
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Гарнитура
+                      <select
+                        value={c.style?.font ?? 'sans'}
+                        onChange={(e) =>
+                          patch({ style: { ...c.style, font: e.target.value } })
+                        }
+                      >
+                        {[
+                          ...Object.entries(builtinFonts),
+                          ...deck.resources.fonts.map((f) => [f.id, f.label]),
+                        ].map(([k, n]) => (
+                          <option key={k} value={k}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Выравнивание
+                      <select
+                        value={c.style?.align ?? 'left'}
+                        onChange={(e) =>
+                          patch({
+                            style: {
+                              ...c.style,
+                              align: e.target.value as
+                                | 'left'
+                                | 'center'
+                                | 'right',
+                            },
+                          })
+                        }
+                      >
+                        <option value="left">По левому краю</option>
+                        <option value="center">По центру</option>
+                        <option value="right">По правому краю</option>
+                      </select>
+                    </label>
+                    <label>
+                      Начертание
+                      <select
+                        value={c.style?.bold ? 'bold' : 'regular'}
+                        onChange={(e) =>
+                          patch({
+                            style: {
+                              ...c.style,
+                              bold: e.target.value === 'bold',
+                            },
+                          })
+                        }
+                      >
+                        <option value="regular">Обычное</option>
+                        <option value="bold">Полужирное</option>
+                      </select>
+                    </label>
+                    <label>
+                      Цвет текста
+                      <input
+                        type="color"
+                        value={c.style?.color ?? '#183e45'}
+                        onChange={(e) =>
+                          patch({
+                            style: { ...c.style, color: e.target.value },
+                          })
+                        }
+                      />
+                    </label>
+                  </>
+                )}
+                <label>
+                  Фон ячейки
+                  <input
+                    type="color"
+                    value={c.fill ?? '#ffffff'}
+                    onChange={(e) => patch({ fill: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Цвет рамки
+                  <input
+                    type="color"
+                    value={c.border ?? '#663399'}
+                    onChange={(e) => patch({ border: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Толщина рамки
+                  <input
+                    type="number"
+                    min="0"
+                    max="64"
+                    value={c.width ?? 0}
+                    onChange={(e) =>
+                      patch({
+                        width: Math.min(64, Math.max(0, +e.target.value)),
+                      })
+                    }
+                  />
+                </label>
+                <Padding
+                  label="Отступы ячейки"
+                  value={c.padding}
+                  update={(padding) => patch({ padding })}
+                />
+              </div>
+            </PropertySection>
+            {!structural && (
+              <PropertySection id="grid-background" title="Фон">
+                <Background
+                  libraryAvailable={libraryAvailable}
+                  deck={deck}
+                  key={s.id}
+                  slide={s}
+                  notice={notice}
+                  update={(next) =>
+                    set({
+                      ...template,
+                      deck: {
+                        ...deck,
+                        slides: deck.slides.map((v) =>
+                          v.id === s.id ? next : v
+                        ),
+                      },
+                    })
+                  }
+                />
+              </PropertySection>
+            )}
+            <PropertySection id="grid-description" title="Описание">
+              <label>
+                Описание шаблона
+                <textarea
+                  value={template.description}
+                  maxLength={2000}
+                  onChange={(e) =>
+                    set({ ...template, description: e.target.value })
+                  }
+                />
+              </label>
+            </PropertySection>
+          </>
+        }
+      >
+        <CanvasViewport editable>
           <div ref={canvas} className="grid-board">
             <Stage
               deck={structural ? { ...deck, master: defaultMaster() } : deck}
@@ -326,6 +729,7 @@ export function GridDesigner({
                           }
                     }
                     onPointerDown={(e) => {
+                      if (e.button !== 0 || !e.isPrimary) return
                       e.currentTarget.setPointerCapture(e.pointerId)
                       drag.current = {
                         axis,
@@ -358,278 +762,15 @@ export function GridDesigner({
                       change(next)
                     }}
                     onPointerUp={() => (drag.current = null)}
+                    onPointerCancel={() => (drag.current = null)}
                     onLostPointerCapture={() => (drag.current = null)}
                   />
                 ))
               })
             )}
           </div>
-          <label>
-            Описание шаблона
-            <textarea
-              value={template.description}
-              maxLength={2000}
-              onChange={(e) =>
-                set({ ...template, description: e.target.value })
-              }
-            />
-          </label>
-        </section>
-        <aside className="inspector">
-          {!structural && (
-            <nav>
-              <button
-                aria-pressed={tab === 'table'}
-                onClick={() => setTab('table')}
-              >
-                Таблица
-              </button>
-              <button aria-pressed={tab === 'bg'} onClick={() => setTab('bg')}>
-                Фон
-              </button>
-            </nav>
-          )}
-          {tab === 'bg' && !structural ? (
-            <Background
-              libraryAvailable={libraryAvailable}
-              deck={deck}
-              key={s.id}
-              slide={s}
-              notice={notice}
-              update={(next) =>
-                set({
-                  ...template,
-                  deck: {
-                    ...deck,
-                    slides: deck.slides.map((v) => (v.id === s.id ? next : v)),
-                  },
-                })
-              }
-            />
-          ) : (
-            <>
-              <h2>Сетка</h2>
-              {(['rows', 'cols'] as const).map((axis) => (
-                <div key={axis} className="field-pair">
-                  <button
-                    onClick={() => change(editTrack(g, axis, 0, false))}
-                    disabled={g[axis].length >= 24}
-                  >
-                    Добавить {axis === 'rows' ? 'строку' : 'столбец'}
-                  </button>
-                  <button
-                    disabled={g[axis].length === 1}
-                    onClick={() =>
-                      change(
-                        editTrack(
-                          g,
-                          axis,
-                          axis === 'rows' ? c.row : c.col,
-                          true
-                        )
-                      )
-                    }
-                  >
-                    Удалить {axis === 'rows' ? 'строку' : 'столбец'}
-                  </button>
-                  <label>
-                    Вес {axis === 'rows' ? 'строки' : 'столбца'}
-                    <input
-                      type="number"
-                      min=".01"
-                      step=".1"
-                      value={g[axis][axis === 'rows' ? c.row : c.col]}
-                      onChange={(e) =>
-                        change({
-                          ...g,
-                          [axis]: g[axis].map((x, i) =>
-                            i === (axis === 'rows' ? c.row : c.col)
-                              ? Math.min(8192, Math.max(0.01, +e.target.value))
-                              : x
-                          ),
-                        })
-                      }
-                    />
-                  </label>
-                </div>
-              ))}
-              <Padding
-                label="Отступы сетки"
-                value={g.padding}
-                update={(padding) => change({ ...g, padding })}
-              />
-              <h2>
-                Ячейка {c.row + 1} × {c.col + 1}
-              </h2>
-              <button onClick={() => merging(!merge)}>
-                {merge ? 'Выберите последнюю ячейку' : 'Объединить ячейки'}
-              </button>
-              {(c.rows > 1 || c.cols > 1) && (
-                <button
-                  onClick={() => {
-                    const cells = g.cells.filter((o) => o !== c)
-                    for (let y = 0; y < c.rows; y++)
-                      for (let x = 0; x < c.cols; x++)
-                        cells.push(
-                          x || y
-                            ? cell(c.row + y, c.col + x)
-                            : { ...c, rows: 1, cols: 1 }
-                        )
-                    change({ ...g, cells })
-                  }}
-                >
-                  Разделить ячейку
-                </button>
-              )}
-              <label>
-                Тип ячейки
-                <select
-                  value={c.type}
-                  onChange={(e) => patch({ type: e.target.value as CellType })}
-                >
-                  {Object.entries(cellTypes)
-                    .filter(
-                      ([k]) =>
-                        !structural || !['area', 'header', 'footer'].includes(k)
-                    )
-                    .map(([k, n]) => (
-                      <option key={k} value={k}>
-                        {n}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              {!['area', 'empty', 'image', 'free'].includes(c.type) && (
-                <>
-                  <label>
-                    Исходный текст
-                    <textarea
-                      value={c.value ?? ''}
-                      onChange={(e) => patch({ value: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Размер текста
-                    <input
-                      type="number"
-                      value={c.style?.size ?? 32}
-                      min={1}
-                      max={1024}
-                      onChange={(e) =>
-                        patch({
-                          style: {
-                            ...c.style,
-                            size: Math.min(1024, Math.max(1, +e.target.value)),
-                          },
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Гарнитура
-                    <select
-                      value={c.style?.font ?? 'sans'}
-                      onChange={(e) =>
-                        patch({ style: { ...c.style, font: e.target.value } })
-                      }
-                    >
-                      {[
-                        ...Object.entries(builtinFonts),
-                        ...deck.resources.fonts.map((f) => [f.id, f.label]),
-                      ].map(([k, n]) => (
-                        <option key={k} value={k}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Выравнивание
-                    <select
-                      value={c.style?.align ?? 'left'}
-                      onChange={(e) =>
-                        patch({
-                          style: {
-                            ...c.style,
-                            align: e.target.value as
-                              | 'left'
-                              | 'center'
-                              | 'right',
-                          },
-                        })
-                      }
-                    >
-                      <option value="left">По левому краю</option>
-                      <option value="center">По центру</option>
-                      <option value="right">По правому краю</option>
-                    </select>
-                  </label>
-                  <label>
-                    Начертание
-                    <select
-                      value={c.style?.bold ? 'bold' : 'regular'}
-                      onChange={(e) =>
-                        patch({
-                          style: {
-                            ...c.style,
-                            bold: e.target.value === 'bold',
-                          },
-                        })
-                      }
-                    >
-                      <option value="regular">Обычное</option>
-                      <option value="bold">Полужирное</option>
-                    </select>
-                  </label>
-                  <label>
-                    Цвет текста
-                    <input
-                      type="color"
-                      value={c.style?.color ?? '#183e45'}
-                      onChange={(e) =>
-                        patch({ style: { ...c.style, color: e.target.value } })
-                      }
-                    />
-                  </label>
-                </>
-              )}
-              <label>
-                Фон ячейки
-                <input
-                  type="color"
-                  value={c.fill ?? '#ffffff'}
-                  onChange={(e) => patch({ fill: e.target.value })}
-                />
-              </label>
-              <label>
-                Цвет рамки
-                <input
-                  type="color"
-                  value={c.border ?? '#663399'}
-                  onChange={(e) => patch({ border: e.target.value })}
-                />
-              </label>
-              <label>
-                Толщина рамки
-                <input
-                  type="number"
-                  min="0"
-                  max="64"
-                  value={c.width ?? 0}
-                  onChange={(e) =>
-                    patch({ width: Math.min(64, Math.max(0, +e.target.value)) })
-                  }
-                />
-              </label>
-              <Padding
-                label="Отступы ячейки"
-                value={c.padding}
-                update={(padding) => patch({ padding })}
-              />
-            </>
-          )}
-        </aside>
-      </div>
-    </main>
+        </CanvasViewport>
+      </Workspace>
+    </>
   )
 }

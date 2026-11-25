@@ -1,4 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Download,
+  Maximize,
+  PanelRight,
+  Presentation,
+  X,
+} from 'lucide-react'
+import { CanvasViewport } from './CanvasViewport'
+import { ResizeHandle } from './Workspace'
+import { clamp, usePreference } from './workspacePreferences'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { createPortal } from 'react-dom'
 import type { Deck } from './model'
 import { Stage } from './Stage'
@@ -23,7 +42,20 @@ export function Viewer({
   const [tools, setTools] = useState(true)
   const [preparing, setPreparing] = useState(false)
   const [prepared, setPrepared] = useState(false)
+  const [notesOpen, setNotesOpen] = usePreference('viewer.notes', true)
+  const [notesWidth, setNotesWidth] = usePreference(
+    'viewer.notes-width',
+    380,
+    [240, 720]
+  )
+  const [notesSize, setNotesSize] = usePreference(
+    'viewer.notes-size',
+    100,
+    [80, 180]
+  )
   const surface = useRef<HTMLElement>(null)
+  const notes = useRef<HTMLDivElement>(null)
+  const strip = useRef<HTMLElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const slide = deck.slides[index]
   const go = useCallback(
@@ -40,6 +72,18 @@ export function Viewer({
     showControls()
     return () => clearTimeout(timer.current)
   }, [mode, showControls])
+
+  useLayoutEffect(() => {
+    if (notes.current) notes.current.scrollTop = 0
+    const list = strip.current
+    const active = list?.querySelector('[aria-current="step"]')
+    if (!list || !active) return
+    const bounds = list.getBoundingClientRect()
+    const item = active.getBoundingClientRect()
+    if (item.left < bounds.left) list.scrollLeft += item.left - bounds.left - 4
+    else if (item.right > bounds.right)
+      list.scrollLeft += item.right - bounds.right + 4
+  }, [index, mode])
 
   async function full(el: HTMLElement) {
     try {
@@ -98,8 +142,7 @@ export function Viewer({
         e.preventDefault()
         go(-1)
       }
-      if (e.key.toLowerCase() === 'f')
-        void full(screen.document.documentElement)
+      if (e.code === 'KeyF') void full(screen.document.documentElement)
     }
     screen.addEventListener('pagehide', closed)
     screen.addEventListener('keydown', projectKey)
@@ -115,6 +158,12 @@ export function Viewer({
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.altKey || e.ctrlKey || e.metaKey) return
+      if (
+        e.target instanceof Node &&
+        notes.current?.contains(e.target) &&
+        [' ', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)
+      )
+        return
       if (
         ['ArrowRight', 'PageDown'].includes(e.key) ||
         (e.key === ' ' && !(e.target instanceof HTMLButtonElement))
@@ -151,7 +200,7 @@ export function Viewer({
         disabled={index === 0}
         onClick={() => go(-1)}
       >
-        Назад
+        <ArrowLeft size={17} />
       </button>
       <span>
         {index + 1} / {deck.slides.length}
@@ -162,7 +211,7 @@ export function Viewer({
         disabled={index === deck.slides.length - 1}
         onClick={() => go(1)}
       >
-        Далее
+        <ArrowRight size={17} />
       </button>
     </>
   )
@@ -179,17 +228,35 @@ export function Viewer({
           <header className="atlas-viewer-head">
             <div>
               <small>Режим преподавателя</small>
-              <h1>{deck.title}</h1>
+              <h1 title={deck.title}>{deck.title}</h1>
             </div>
             <div className="atlas-viewer-actions">
-              <button type="button" onClick={projector}>
-                {screen ? 'К окну проектора' : 'Открыть экран учеников'}
+              <button
+                type="button"
+                onClick={projector}
+                title={screen ? 'К окну проектора' : 'Открыть экран учеников'}
+                aria-label={
+                  screen ? 'К окну проектора' : 'Открыть экран учеников'
+                }
+              >
+                <Presentation size={17} />
+                <span>
+                  {screen ? 'К окну проектора' : 'Открыть экран учеников'}
+                </span>
               </button>
               {onPrepare && (
                 <button
                   type="button"
                   className="atlas-offline-button"
                   disabled={preparing}
+                  title="Подготовить к офлайн-показу"
+                  aria-label={
+                    preparing
+                      ? 'Подготавливаем…'
+                      : prepared
+                        ? 'Готово к офлайн-показу'
+                        : 'Подготовить к офлайн-показу'
+                  }
                   onClick={async () => {
                     setPreparing(true)
                     setError('')
@@ -208,37 +275,115 @@ export function Viewer({
                     }
                   }}
                 >
-                  {preparing
-                    ? 'Подготавливаем…'
-                    : prepared
-                      ? 'Готово к офлайн-показу'
-                      : 'Подготовить к офлайн-показу'}
+                  <Download size={17} />
+                  <span>
+                    {preparing
+                      ? 'Подготавливаем…'
+                      : prepared
+                        ? 'Готово к офлайн-показу'
+                        : 'Подготовить к офлайн-показу'}
+                  </span>
                 </button>
               )}
-              <button className="atlas-primary" type="button" onClick={present}>
-                Только слайды
+              <button
+                className="atlas-primary"
+                type="button"
+                onClick={present}
+                title="Только слайды"
+                aria-label="Только слайды"
+              >
+                <Maximize size={17} />
+                <span>Только слайды</span>
               </button>
-              <button type="button" onClick={onClose}>
-                Закрыть
+              <button
+                type="button"
+                onClick={onClose}
+                title="Закрыть"
+                aria-label="Закрыть"
+              >
+                <X size={18} />
               </button>
             </div>
           </header>
-          <div className="atlas-teacher-grid">
+          <div
+            className="atlas-teacher-grid"
+            data-notes={notesOpen || undefined}
+            style={{ '--teacher-notes': notesWidth + 'px' } as CSSProperties}
+          >
             <div className="atlas-preview-panel">
-              <Stage deck={deck} slide={slide} />
-              <nav className="atlas-switch" aria-label="Листать слайды">
-                {navigation}
-              </nav>
+              <CanvasViewport>
+                <Stage deck={deck} slide={slide} />
+              </CanvasViewport>
             </div>
-            <aside className="atlas-note">
-              <small>Слайд {index + 1}</small>
-              <h2>Заметки преподавателя</h2>
-              <p>
-                {slide.notes || 'Для этого слайда заметки пока не добавлены.'}
-              </p>
-            </aside>
+            {notesOpen && (
+              <aside className="atlas-note" aria-label="Заметки преподавателя">
+                <ResizeHandle
+                  side="right"
+                  label="Ширина заметок преподавателя"
+                  value={notesWidth}
+                  min={240}
+                  max={720}
+                  change={setNotesWidth}
+                />
+                <div className="atlas-note-head">
+                  <h2>Заметки преподавателя</h2>
+                  <div role="group" aria-label="Размер текста заметок">
+                    <button
+                      type="button"
+                      aria-label="Уменьшить текст заметок"
+                      title="Уменьшить текст заметок"
+                      disabled={notesSize <= 80}
+                      onClick={() =>
+                        setNotesSize(clamp(notesSize - 10, 80, 180))
+                      }
+                    >
+                      A−
+                    </button>
+                    <output>{notesSize}%</output>
+                    <button
+                      type="button"
+                      aria-label="Увеличить текст заметок"
+                      title="Увеличить текст заметок"
+                      disabled={notesSize >= 180}
+                      onClick={() =>
+                        setNotesSize(clamp(notesSize + 10, 80, 180))
+                      }
+                    >
+                      A+
+                    </button>
+                  </div>
+                </div>
+                <div
+                  ref={notes}
+                  className="atlas-note-scroll"
+                  tabIndex={0}
+                  aria-label="Текст заметок"
+                >
+                  <p style={{ fontSize: notesSize / 100 + 'rem' }}>
+                    {slide.notes ||
+                      'Для этого слайда заметки пока не добавлены.'}
+                  </p>
+                </div>
+              </aside>
+            )}
           </div>
-          <nav className="atlas-slide-strip" aria-label="Выбор слайда">
+          <nav className="atlas-switch" aria-label="Листать слайды">
+            {navigation}
+            <button
+              type="button"
+              aria-expanded={notesOpen}
+              title={notesOpen ? 'Свернуть заметки' : 'Показать заметки'}
+              aria-label={notesOpen ? 'Свернуть заметки' : 'Показать заметки'}
+              onClick={() => setNotesOpen(!notesOpen)}
+            >
+              <PanelRight size={17} />
+            </button>
+          </nav>
+          <nav
+            ref={strip}
+            className="atlas-slide-strip"
+            aria-label="Выбор слайда"
+          >
             {deck.slides.map((s, i) => (
               <button
                 key={s.id}
