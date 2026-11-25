@@ -142,24 +142,6 @@ export function TemplateLibrary({
                             Создать презентацию
                           </button>
                         )}
-                        <button
-                          className="secondary"
-                          onClick={() =>
-                            edit(
-                              row.builtin
-                                ? {
-                                  ...t,
-                                  deck: copyDeck(d, d.title + " — копия"),
-                                }
-                                : structuredClone(t),
-                              row.builtin ? undefined : row,
-                            )
-                          }
-                        >
-                          {row.builtin
-                            ? "Редактировать копию"
-                            : "Редактировать"}
-                        </button>
                         <details>
                           <summary>Действия</summary>
                           <div>

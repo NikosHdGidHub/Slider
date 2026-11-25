@@ -18,6 +18,7 @@ import {
   Layers3,
   FolderOpen,
   FileJson,
+  Pencil,
   Trash2,
   Link2,
   LogOut,
@@ -605,19 +606,27 @@ function App() {
                             {new Date(en.updated).toLocaleDateString("ru-RU")}
                           </small>
                         </button>
-                        <button
-                          className="secondary"
-                          onClick={() => open(en.deck, en.revision)}
-                        >
-                          Редактировать
-                        </button>
-                        <button
-                          className="icon"
-                          title="Удалить локальную методичку"
-                          onClick={() => remove(en)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="card-actions">
+                          <button
+                            className="icon"
+                            type="button"
+                            title="Редактировать методичку"
+                            aria-label={"Редактировать " + en.deck.title}
+                            onClick={() => open(en.deck, en.revision)}
+                          >
+                            <Pencil size={16} />
+                          </button>
+
+                          <button
+                            className="icon"
+                            type="button"
+                            title="Удалить локальную методичку"
+                            aria-label={"Удалить " + en.deck.title}
+                            onClick={() => remove(en)}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </article>
                     ))}
                   </div>

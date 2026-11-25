@@ -22,9 +22,9 @@ export function useHistory<T>(value: T, write: (v: T) => void, key?: string) {
   }
   useEffect(() => {
     const start = () => {
-        gesture.current = true;
-        recorded.current = false;
-      },
+      gesture.current = true;
+      recorded.current = false;
+    },
       end = () => {
         gesture.current = false;
       };
@@ -69,24 +69,6 @@ export function useHistory<T>(value: T, write: (v: T) => void, key?: string) {
     set,
     update: (fn: (v: T) => T) => set(fn(current.current)),
     actions,
-    buttons: (
-      <>
-        <button
-          title="Отменить (Ctrl/Cmd+Z)"
-          disabled={!past.length}
-          onClick={() => step(false)}
-        >
-          Отменить
-        </button>
-        <button
-          title="Повторить (Ctrl/Cmd+Shift+Z)"
-          disabled={!future.length}
-          onClick={() => step(true)}
-        >
-          Повторить
-        </button>
-      </>
-    ),
   };
 }
 export function useCommands(actions: Action[]) {
@@ -161,5 +143,5 @@ export function useCommands(actions: Action[]) {
 
 export type HistoryControls = Pick<
   ReturnType<typeof useHistory>,
-  "buttons" | "actions"
+  "actions"
 >;

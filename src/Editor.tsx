@@ -441,7 +441,6 @@ export function Editor({
     <div className="editor">
       {context.menu}
       <header className="edit-head">
-        {history.buttons}
         <button className="icon" title="В библиотеку" onClick={back}>
           <ArrowLeft />
         </button>

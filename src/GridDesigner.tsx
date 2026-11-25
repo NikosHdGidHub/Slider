@@ -225,7 +225,6 @@ export function GridDesigner({
     <main className="grid-designer">
       {context.menu}
       <header className="edit-head">
-        {history.buttons}
         <button onClick={back}>В библиотеку</button>
         <input
           aria-label="Название шаблона"
