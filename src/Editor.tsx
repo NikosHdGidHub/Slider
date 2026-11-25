@@ -68,7 +68,7 @@ type Props = {
   back: () => void
   view: () => void
   status: string
-  action: (id: 'export' | 'publish' | 'offline') => void
+  action: (id: 'export' | 'publish') => void
   notice: (s: string) => void
 }
 export function Editor({
@@ -93,8 +93,7 @@ export function Editor({
 }: Props) {
   const clipboard = useRef<Item[]>([])
   const [sid, choose] = useState(deck.slides[0].id),
-    [sel, select] = useState(''),
-    [menu, setMenu] = useState(false)
+    [sel, select] = useState('')
   const slide = deck.slides.find((s) => s.id === sid) || deck.slides[0],
     idx = deck.slides.indexOf(slide),
     item = slide.items.find((x) => x.id === sel)
@@ -496,36 +495,15 @@ export function Editor({
             Сохранить шаблон
           </button>
         ) : (
-          <div className="menu-anchor">
-            <button
-              className="icon"
-              aria-label="Действия с методичкой"
-              onClick={() => setMenu(!menu)}
-            >
-              <MoreHorizontal />
-            </button>
-            {menu && (
-              <div className="popover">
-                {(
-                  [
-                    ['export', 'Экспортировать JSON', FileDown],
-                    ['offline', 'Подготовить к офлайн-показу', WifiOff],
-                  ] as const
-                ).map(([key, label, Icon]) => (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      setMenu(false)
-                      action(key)
-                    }}
-                  >
-                    <Icon size={17} />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            className="icon editor-export"
+            title="Экспортировать JSON"
+            aria-label="Экспортировать JSON"
+            onClick={() => action('export')}
+          >
+            <FileDown size={20} />
+          </button>
         )}
       </header>
       <div className="edit-grid">

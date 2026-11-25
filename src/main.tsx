@@ -60,6 +60,10 @@ import { example } from './example'
 import relief from './assets/relief.webp'
 import { registerShell, ensureShell } from './offline'
 import guide from '../docs/USER_GUIDE.md?raw'
+import {
+  saveOfflinePresentation,
+  readOfflinePresentation,
+} from './offlinePresentations'
 import './style.css'
 
 registerShell()
@@ -144,6 +148,15 @@ function App() {
       setScope(result.scope)
     }
     return result
+  }
+  async function prepareForOffline(deck: Deck) {
+    await ensureShell()
+
+    const prepared = await embedImages(deck, rememberImage)
+
+    await saveOfflinePresentation(prepared)
+
+    notice('Методичка подготовлена к офлайн-показу.')
   }
   const visibleRows = allowed
     ? catalog
@@ -284,23 +297,53 @@ function App() {
     if (page !== 'files' || !allowed) return
     void refresh().catch((e) => libError(errorText(e)))
   }, [page, allowed])
+
   useEffect(() => {
     let live = true
+
     pubError('')
     setPublicDeck(null)
-    if (hash.startsWith('#p/'))
-      readPublic(hash.slice(3))
-        .then(validateDeck)
-        .then((d) => {
-          if (live) setPublicDeck(d)
-        })
-        .catch((e) => {
-          if (live) pubError(errorText(e))
-        })
+
+    if (hash.startsWith('#p/')) {
+      const id = hash.slice(3)
+
+      void (async () => {
+        try {
+          let deck: Deck
+
+          if (!navigator.onLine) {
+            // Нет интернета — открываем подготовленную копию.
+            const cached = await readOfflinePresentation(id)
+
+            if (!cached) {
+              throw new Error(
+                'Методичка не подготовлена к офлайн-показу. ' +
+                  'Подключитесь к интернету и подготовьте её заранее.'
+              )
+            }
+
+            deck = cached
+          } else {
+            // Интернет есть — получаем актуальную публикацию.
+            deck = validateDeck(await readPublic(id))
+          }
+
+          if (live) {
+            setPublicDeck(deck)
+          }
+        } catch (e) {
+          if (live) {
+            pubError(errorText(e))
+          }
+        }
+      })()
+    }
+
     return () => {
       live = false
     }
   }, [hash])
+
   useEffect(() => {
     if (page !== 'published' || !owner) return
     let live = true
@@ -1134,6 +1177,7 @@ function App() {
           <Viewer
             initialMode="slides"
             deck={publicDeck}
+            onPrepare={prepareForOffline}
             onClose={() => (location.hash = '')}
           />
         ) : (
@@ -1144,7 +1188,11 @@ function App() {
           </main>
         )
       ) : watch ? (
-        <Viewer deck={watch} onClose={() => setWatch(null)} />
+        <Viewer
+          deck={watch}
+          onPrepare={prepareForOffline}
+          onClose={() => setWatch(null)}
+        />
       ) : editingTemplate?.t.format === 3 && allowed ? (
         <GridDesigner
           libraryAvailable={owner && online}

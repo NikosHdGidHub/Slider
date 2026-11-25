@@ -7,11 +7,13 @@ interface ViewerProps {
   deck: Deck
   onClose: () => void
   initialMode?: 'teacher' | 'slides'
+  onPrepare?: (deck: Deck) => Promise<void>
 }
 
 export function Viewer({
   deck,
   onClose,
+  onPrepare,
   initialMode = 'teacher',
 }: ViewerProps) {
   const [mode, setMode] = useState(initialMode)
@@ -19,6 +21,8 @@ export function Viewer({
   const [screen, setScreen] = useState<Window | null>(null)
   const [error, setError] = useState('')
   const [tools, setTools] = useState(true)
+  const [preparing, setPreparing] = useState(false)
+  const [prepared, setPrepared] = useState(false)
   const surface = useRef<HTMLElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const slide = deck.slides[index]
@@ -181,6 +185,36 @@ export function Viewer({
               <button type="button" onClick={projector}>
                 {screen ? 'К окну проектора' : 'Открыть экран учеников'}
               </button>
+              {onPrepare && (
+                <button
+                  type="button"
+                  className="atlas-offline-button"
+                  disabled={preparing}
+                  onClick={async () => {
+                    setPreparing(true)
+                    setError('')
+
+                    try {
+                      await onPrepare(deck)
+                      setPrepared(true)
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : 'Не удалось подготовить методичку.'
+                      )
+                    } finally {
+                      setPreparing(false)
+                    }
+                  }}
+                >
+                  {preparing
+                    ? 'Подготавливаем…'
+                    : prepared
+                      ? 'Готово к офлайн-показу'
+                      : 'Подготовить к офлайн-показу'}
+                </button>
+              )}
               <button className="atlas-primary" type="button" onClick={present}>
                 Только слайды
               </button>
