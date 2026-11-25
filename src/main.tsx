@@ -594,7 +594,7 @@ function App() {
                       <article className="card" key={en.deck.id}>
                         <button
                           className="card-open"
-                          onClick={() => open(en.deck, en.revision)}
+                          onClick={() => setWatch(en.deck)}
                         >
                           <div className="card-preview">
                             <Stage deck={en.deck} slide={en.deck.slides[0]} />
@@ -604,6 +604,12 @@ function App() {
                             {en.deck.slides.length} слайд. ·{" "}
                             {new Date(en.updated).toLocaleDateString("ru-RU")}
                           </small>
+                        </button>
+                        <button
+                          className="secondary"
+                          onClick={() => open(en.deck, en.revision)}
+                        >
+                          Редактировать
                         </button>
                         <button
                           className="icon"
@@ -652,7 +658,6 @@ function App() {
                 allowed={allowed}
                 onlineOwner={owner && online}
                 create={insert}
-                view={setWatch}
                 edit={(t, row) => {
                   setEditingTemplate({ t, row });
                 }}

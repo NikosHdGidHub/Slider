@@ -24,7 +24,6 @@ type Props = {
   onlineOwner: boolean;
   edit: (t: Template, row?: CatalogRow) => void;
   create: (d: Deck) => Promise<void>;
-  view: (d: Deck) => void;
   refresh: () => Promise<void>;
   notice: (s: string) => void;
 };
@@ -36,7 +35,6 @@ export function TemplateLibrary({
   onlineOwner,
   edit,
   create,
-  view,
   refresh,
   notice,
 }: Props) {
@@ -103,10 +101,21 @@ export function TemplateLibrary({
               <article className="template-card" key={d.id}>
                 <button
                   className="template-cover"
-                  aria-label={"Просмотреть " + d.title}
-                  onClick={() => view(d)}
-                >
-                  <Stage slide={d.slides[0]} deck={d} />
+                  aria-label={"Редактировать " + d.title}
+                  onClick={() => {
+                    if (!allowed) return;
+
+                    edit(
+                      row.builtin
+                        ? {
+                          ...t,
+                          deck: copyDeck(d, d.title + " — копия"),
+                        }
+                        : structuredClone(t),
+                      row.builtin ? undefined : row,
+                    );
+                  }}
+                ><Stage slide={d.slides[0]} deck={d} />
                 </button>
                 <div className="template-info">
                   <small>
@@ -139,9 +148,9 @@ export function TemplateLibrary({
                             edit(
                               row.builtin
                                 ? {
-                                    ...t,
-                                    deck: copyDeck(d, d.title + " — копия"),
-                                  }
+                                  ...t,
+                                  deck: copyDeck(d, d.title + " — копия"),
+                                }
                                 : structuredClone(t),
                               row.builtin ? undefined : row,
                             )
@@ -218,8 +227,8 @@ export function TemplateLibrary({
                                     if (
                                       confirm(
                                         "Удалить шаблон «" +
-                                          d.title +
-                                          "» и его сохранённые копии? Созданные уроки сохранятся.",
+                                        d.title +
+                                        "» и его сохранённые копии? Созданные уроки сохранятся.",
                                       )
                                     )
                                       void act(() => deleteTemplate(row));

@@ -135,10 +135,10 @@ export function Editor({
       items: s.items.map((it) =>
         it.id === id
           ? (Object.fromEntries(
-              Object.entries({ ...it, ...fields }).filter(
-                ([, value]) => value !== undefined,
-              ),
-            ) as unknown as Item)
+            Object.entries({ ...it, ...fields }).filter(
+              ([, value]) => value !== undefined,
+            ),
+          ) as unknown as Item)
           : it,
       ),
     }));
@@ -182,13 +182,13 @@ export function Editor({
     const normal = deck.slides.find((s) => s.kind === "normal");
     const fresh = normal
       ? {
-          ...structuredClone(normal),
-          id: crypto.randomUUID(),
-          notes: "",
-          items: normal.items
-            .filter((o) => o.role === "decoration")
-            .map((o) => ({ ...structuredClone(o), id: crypto.randomUUID() })),
-        }
+        ...structuredClone(normal),
+        id: crypto.randomUUID(),
+        notes: "",
+        items: normal.items
+          .filter((o) => o.role === "decoration")
+          .map((o) => ({ ...structuredClone(o), id: crypto.randomUUID() })),
+      }
       : newSlide();
     change((d) => ({
       ...d,
@@ -196,10 +196,10 @@ export function Editor({
         ...d.slides.slice(0, idx + 1),
         deck.master.art
           ? applyKind(
-              deck.master,
-              { ...fresh, ownBackground: false, items: [] },
-              "normal",
-            )
+            deck.master,
+            { ...fresh, ownBackground: false, items: [] },
+            "normal",
+          )
           : fresh,
         ...d.slides.slice(idx + 1),
       ],
@@ -398,11 +398,11 @@ export function Editor({
             tray
               ? undefined
               : "Слой " +
-                (o.layerName ||
-                  o.text.slice(0, 38) ||
-                  { shape: "Фигура", text: "Текст", image: "Изображение" }[
-                    o.type
-                  ])
+              (o.layerName ||
+                o.text.slice(0, 38) ||
+                { shape: "Фигура", text: "Текст", image: "Изображение" }[
+                o.type
+                ])
           }
           className="layer-row"
           key={o.id}
@@ -430,7 +430,7 @@ export function Editor({
           {o.layerName ||
             o.text.slice(0, 38) ||
             { text: "Текст", shape: "Фигура", image: "Изображение" }[
-              o.type
+            o.type
             ]}{" "}
           {o.fixed || o.locked ? "🔒" : ""}
           {o.hidden ? " · скрыт" : ""}
@@ -459,10 +459,12 @@ export function Editor({
           <Check size={15} />
           {status}
         </small>
-        <button className="primary" onClick={view}>
-          <Play size={16} />
-          Показать
-        </button>
+        {!saveTemplate && (
+          <button className="primary" onClick={view}>
+            <Play size={16} />
+            Показать
+          </button>
+        )}
         {saveTemplate ? (
           <button className="secondary" onClick={saveTemplate}>
             Сохранить шаблон
@@ -628,9 +630,9 @@ export function Editor({
                       o.id === id
                         ? { ...o, x, y }
                         : a.group &&
-                            a.group === o.group &&
-                            editable(o) &&
-                            target(a) === target(o)
+                          a.group === o.group &&
+                          editable(o) &&
+                          target(a) === target(o)
                           ? { ...o, x: o.x + x - a.x, y: o.y + y - a.y }
                           : o,
                     ),
@@ -777,27 +779,27 @@ export function Editor({
               {(saveTemplate ||
                 slots(deck.master, slide).find((v) => v.id === target(item))
                   ?.cell.type === "free") && (
-                <GeometryPanel
-                  item={item}
-                  patch={(v) => {
-                    if (
-                      gridTemplateKind === "presentation" &&
-                      v.role === "decoration"
-                    )
-                      patch(item.id, {
-                        ...freezeDecoration(item, slots(deck.master, slide)),
-                        role: v.role,
-                      });
-                    else if (item.fixed && v.role === "content") {
-                      const free = slots(deck.master, slide).find(
-                        (p) => p.cell.type === "free",
-                      );
-                      patch(item.id, {
-                        role: "content",
-                        fixed: undefined,
-                        slot: free?.id ?? "tray",
-                        ...(free
-                          ? {
+                  <GeometryPanel
+                    item={item}
+                    patch={(v) => {
+                      if (
+                        gridTemplateKind === "presentation" &&
+                        v.role === "decoration"
+                      )
+                        patch(item.id, {
+                          ...freezeDecoration(item, slots(deck.master, slide)),
+                          role: v.role,
+                        });
+                      else if (item.fixed && v.role === "content") {
+                        const free = slots(deck.master, slide).find(
+                          (p) => p.cell.type === "free",
+                        );
+                        patch(item.id, {
+                          role: "content",
+                          fixed: undefined,
+                          slot: free?.id ?? "tray",
+                          ...(free
+                            ? {
                               x: (item.x - free.box.x) / free.scale,
                               y: (item.y - free.box.y) / free.scale,
                               w: item.w / free.scale,
@@ -805,12 +807,12 @@ export function Editor({
                               contentScale:
                                 (item.contentScale ?? 1) / free.scale,
                             }
-                          : {}),
-                      });
-                    } else patch(item.id, v);
-                  }}
-                />
-              )}
+                            : {}),
+                        });
+                      } else patch(item.id, v);
+                    }}
+                  />
+                )}
               <div className="field-pair">
                 {[-1, 1].map((delta) => (
                   <button
@@ -917,32 +919,32 @@ export function Editor({
                 (saveTemplate &&
                   !deck.slides.some((s) => s.structure) &&
                   deck.master.name === "По умолчанию")) && (
-                <details>
-                  <summary>Область прежней компоновки</summary>
-                  {(["x", "y", "w", "h"] as const).map((k) => (
-                    <Num
-                      key={k}
-                      label={k}
-                      value={(slide.area ?? { x: 0, y: 0, w: 1280, h: 720 })[k]}
-                      min={k === "x" || k === "y" ? 0 : 1}
-                      max={k === "x" || k === "w" ? 1280 : 720}
-                      change={(v) =>
-                        modify((s) => ({
-                          ...s,
-                          area: {
-                            x: 0,
-                            y: 0,
-                            w: 1280,
-                            h: 720,
-                            ...s.area,
-                            [k]: v,
-                          },
-                        }))
-                      }
-                    />
-                  ))}
-                </details>
-              )}
+                  <details>
+                    <summary>Область прежней компоновки</summary>
+                    {(["x", "y", "w", "h"] as const).map((k) => (
+                      <Num
+                        key={k}
+                        label={k}
+                        value={(slide.area ?? { x: 0, y: 0, w: 1280, h: 720 })[k]}
+                        min={k === "x" || k === "y" ? 0 : 1}
+                        max={k === "x" || k === "w" ? 1280 : 720}
+                        change={(v) =>
+                          modify((s) => ({
+                            ...s,
+                            area: {
+                              x: 0,
+                              y: 0,
+                              w: 1280,
+                              h: 720,
+                              ...s.area,
+                              [k]: v,
+                            },
+                          }))
+                        }
+                      />
+                    ))}
+                  </details>
+                )}
               {gridTemplateKind !== "layout" && (
                 <>
                   <Background
@@ -980,7 +982,7 @@ export function Editor({
                             },
                             slides: d.slides.map((s) =>
                               (s.kind ?? "normal") === kind &&
-                              (s.id === slide.id || !s.ownBackground)
+                                (s.id === slide.id || !s.ownBackground)
                                 ? inheritedBackground(s, sample)
                                 : s,
                             ),
