@@ -32,15 +32,29 @@ function dataURL(blob: Blob): Promise<string> {
   })
 }
 
-export async function originalBackground(file: File) {
-  if (!RASTER_MIME.includes(file.type) || file.size > MAX_IMAGE_BYTES)
-    throw Error(
-      'Для оригинала нужен PNG, JPEG или WebP до 16 МиБ. Выберите оптимизацию или меньший файл.'
-    )
-  const src = imageSource(await dataURL(file))
-  await decode(src)
-  return src
+export async function originalImage(blob: Blob) {
+  if (
+    !RASTER_MIME.includes(blob.type) ||
+    !blob.size ||
+    blob.size > MAX_IMAGE_BYTES
+  )
+    throw Error('Для оригинала нужен PNG, JPEG или WebP до 16 МиБ.')
+  const src = imageSource(await dataURL(blob))
+  const img = await decode(src)
+  return { src, width: img.naturalWidth, height: img.naturalHeight }
 }
+
+export async function originalBackground(file: File) {
+  return (await originalImage(file)).src
+}
+
+export function checkImageBudget(deck: Deck) {
+  if (new Blob([JSON.stringify(deck)]).size > MAX_DOCUMENT_BYTES)
+    throw Error(
+      'Со встроенными изображениями методичка превышает 64 МиБ. Выберите меньший файл.'
+    )
+}
+
 export async function optimize(
   file: Blob,
   limit = MAX_IMAGE_BYTES

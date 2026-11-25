@@ -1,4 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import {
+  Cloud,
+  FileCode2,
+  FileText,
+  FolderPlus,
+  ImageOff,
+  Laptop,
+  LockKeyhole,
+  Presentation,
+  RefreshCw,
+  Search,
+  Upload,
+} from 'lucide-react'
+import { digest } from './digest'
+import { imageSources, publicationUsage, removeUnusedFile } from './fileUsage'
+import { originalImage } from './media'
 import {
   resources,
   createFolder,
@@ -7,205 +23,731 @@ import {
   imageUrl,
   updateFile,
   downloadFile,
+  resourceKey,
   type Resource,
 } from './resources'
+import type { Entry } from './storage'
+
+type LocalImage = {
+  sha: string
+  src: string
+  size: number
+  format: string
+  lessons: Entry[]
+}
+
+const formatOf = (mime: string) =>
+  ({
+    'image/png': 'PNG',
+    'image/jpeg': 'JPEG',
+    'image/webp': 'WebP',
+    'application/pdf': 'PDF',
+    'application/json': 'JSON',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+      'PPTX',
+  })[mime] ?? 'Файл'
+const shortSize = (size: number) =>
+  size < 1024 * 1024
+    ? Math.max(1, Math.round(size / 1024)) + ' КиБ'
+    : new Intl.NumberFormat('ru', { maximumFractionDigits: 1 }).format(
+        size / (1024 * 1024)
+      ) + ' МиБ'
+const messageOf = (error: unknown) =>
+  typeof error === 'object' && error && 'message' in error
+    ? String(error.message)
+    : 'Не удалось выполнить операцию.'
+
+async function localImages(entries: Entry[]) {
+  const photos = new Map<string, LocalImage>()
+  const hashes = new Map<string, string>()
+  let hasLinks = false
+  for (const lesson of entries) {
+    for (const src of new Set(imageSources(lesson.deck))) {
+      if (!src.startsWith('data:')) {
+        hasLinks = true
+        continue
+      }
+      let sha = hashes.get(src)
+      if (!sha) {
+        const blob = await (await fetch(src)).blob()
+        sha = await digest(blob)
+        hashes.set(src, sha)
+        if (!photos.has(sha))
+          photos.set(sha, {
+            sha,
+            src,
+            size: blob.size,
+            format: formatOf(blob.type),
+            lessons: [],
+          })
+      }
+      const found = photos.get(sha)!
+      if (!found.lessons.includes(lesson)) found.lessons.push(lesson)
+    }
+  }
+  return { images: [...photos.values()], hasLinks }
+}
+
+function EmptyFiles({
+  title,
+  children,
+}: {
+  title: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="files-empty">
+      <ImageOff size={26} aria-hidden="true" />
+      <strong>{title}</strong>
+      {children}
+    </div>
+  )
+}
+
+function LocalFiles({
+  entries,
+  openLesson,
+}: {
+  entries: Entry[]
+  openLesson: (entry: Entry) => void
+}) {
+  const [result, setResult] =
+    useState<Awaited<ReturnType<typeof localImages>>>()
+  const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  useEffect(() => {
+    let active = true
+    setResult(undefined)
+    setError('')
+    localImages(entries)
+      .then((value) => {
+        if (active) setResult(value)
+      })
+      .catch((error) => {
+        if (active) setError(messageOf(error))
+      })
+    return () => {
+      active = false
+    }
+  }, [entries])
+  const images =
+    result?.images.map((image, index) => ({
+      ...image,
+      name: 'Изображение ' + (index + 1),
+    })) ?? []
+  const visible = images.filter((image) =>
+    [
+      image.name,
+      image.format,
+      ...image.lessons.map((entry) => entry.deck.title),
+    ].some((name) => name.toLowerCase().includes(query.trim().toLowerCase()))
+  )
+  return (
+    <>
+      <div className="files-bar">
+        <SearchBox
+          query={query}
+          onChange={setQuery}
+          placeholder="Поиск по методичке или формату"
+        />
+      </div>
+      {error ? (
+        <p role="alert">{error}</p>
+      ) : !result ? (
+        <p role="status">Читаем локальные методички…</p>
+      ) : !images.length ? (
+        <EmptyFiles title="На этом устройстве пока нет изображений в методичках">
+          <p>
+            Изображения появятся здесь после добавления в локальную методичку.
+          </p>
+        </EmptyFiles>
+      ) : !visible.length ? (
+        <EmptyFiles title="По вашему запросу ничего не найдено" />
+      ) : (
+        <div className="file-grid">
+          {visible.map((image) => (
+            <article key={image.sha} className="file-card">
+              <div className="file-thumb">
+                <img src={image.src} alt="" loading="lazy" />
+              </div>
+              <div className="file-body">
+                <h2>{image.name}</h2>
+                <p className="file-meta">
+                  {image.format} · {shortSize(image.size)}
+                </p>
+                <details className="file-links">
+                  <summary>Методички ({image.lessons.length})</summary>
+                  {image.lessons.map((entry) => (
+                    <button
+                      className="file-link"
+                      key={entry.deck.id}
+                      onClick={() => openLesson(entry)}
+                    >
+                      {entry.deck.title}
+                    </button>
+                  ))}
+                </details>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+      {result?.hasLinks && (
+        <p className="files-note">
+          Некоторые методички ссылаются на изображения в интернете. Чтобы
+          сохранить их на устройстве, выберите «Подготовить к офлайн-показу» в
+          редакторе.
+        </p>
+      )}
+    </>
+  )
+}
+
+function SearchBox({
+  query,
+  onChange,
+  placeholder = 'Поиск по названию',
+}: {
+  query: string
+  onChange: (value: string) => void
+  placeholder?: string
+}) {
+  return (
+    <label className="files-search">
+      <Search size={17} aria-hidden="true" />
+      <input
+        type="search"
+        aria-label={placeholder}
+        placeholder={placeholder}
+        value={query}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  )
+}
+
+export function FileLibrary({
+  entries,
+  openLesson,
+  openJSON,
+  owner,
+  online,
+  allowed,
+  login,
+}: {
+  entries: Entry[]
+  openLesson: (entry: Entry) => void
+  openJSON: (text: string) => Promise<void>
+  owner: boolean
+  online: boolean
+  allowed: boolean
+  login: () => void
+}) {
+  const [tab, setTab] = useState<'local' | 'cloud'>('local')
+  return (
+    <section className="files-library" aria-label="Библиотека файлов">
+      <p className="files-description">
+        Изображения из ваших методичек и материалы в облачном хранилище.
+      </p>
+      <div className="files-tabs" aria-label="Расположение файлов" role="group">
+        <button aria-pressed={tab === 'local'} onClick={() => setTab('local')}>
+          <Laptop size={18} />
+          На устройстве
+        </button>
+        <button aria-pressed={tab === 'cloud'} onClick={() => setTab('cloud')}>
+          <Cloud size={18} />В облаке
+        </button>
+      </div>
+      {tab === 'local' ? (
+        allowed ? (
+          <LocalFiles entries={entries} openLesson={openLesson} />
+        ) : (
+          <EmptyFiles title="Войдите, чтобы открыть файлы своих методичек">
+            <button className="secondary" onClick={login}>
+              Войти
+            </button>
+          </EmptyFiles>
+        )
+      ) : !online ? (
+        <EmptyFiles title="Облачная библиотека недоступна без интернета">
+          <p>
+            Локальные методички и сохранённые в них изображения остаются на
+            устройстве.
+          </p>
+        </EmptyFiles>
+      ) : !owner ? (
+        <EmptyFiles title="Войдите, чтобы открыть облачную библиотеку">
+          <button className="secondary" onClick={login}>
+            Войти
+          </button>
+        </EmptyFiles>
+      ) : (
+        <Files openJSON={openJSON} />
+      )}
+    </section>
+  )
+}
 
 export function Files({
   pick,
   openJSON,
 }: {
-  pick?: (url: string) => void
+  pick?: (image: Awaited<ReturnType<typeof originalImage>>) => void
   openJSON?: (text: string) => Promise<void>
 }) {
-  const [rows, setRows] = useState<Resource[]>([]),
-    [query, search] = useState(''),
-    [kind, filter] = useState(''),
-    [folder, setFolder] = useState(''),
-    [message, status] = useState(''),
-    [busy, working] = useState(false)
+  const [rows, setRows] = useState<Resource[]>()
   const [folders, setFolders] = useState<string[]>([])
-  async function run(fn: () => Promise<void>) {
+  const [usage, setUsage] =
+    useState<Awaited<ReturnType<typeof publicationUsage>>>()
+  const [usageError, setUsageError] = useState('')
+  const [query, search] = useState('')
+  const [kind, filter] = useState('')
+  const [folder, setFolder] = useState('')
+  const [message, status] = useState('')
+  const [busy, working] = useState(false)
+  const [confirmFile, askDelete] = useState<Resource>()
+  const [preview, setPreview] = useState<Resource>()
+  const upload = useRef<HTMLInputElement>(null)
+  const mounted = useRef(false)
+  async function load() {
+    const [files, dirs] = await Promise.all([resources(), listFolders()])
+    setRows(files)
+    setFolders(dirs)
+    if (pick) return
+    setUsage(undefined)
+    setUsageError('')
+    try {
+      setUsage(await publicationUsage())
+    } catch (error) {
+      setUsageError(messageOf(error))
+    }
+  }
+  async function run(fn: () => Promise<void>, refresh = false) {
     working(true)
     status('')
     try {
       await fn()
-      const [files, dirs] = await Promise.all([resources(), listFolders()])
-      setRows(files)
-      setFolders(dirs)
-    } catch (e) {
-      status((e as Error).message)
+    } catch (error) {
+      status(messageOf(error))
     } finally {
+      if (refresh) {
+        try {
+          await load()
+        } catch (error) {
+          status(messageOf(error))
+        }
+      }
       working(false)
     }
   }
   useEffect(() => {
-    void run(async () => {})
+    mounted.current = true
+    void run(load)
+    return () => {
+      mounted.current = false
+    }
   }, [])
-  const visible = rows.filter(
-    (r) =>
-      (!pick || r.bucket === 'images') &&
-      r.name.toLowerCase().includes(query.toLowerCase()) &&
-      r.mime.startsWith(kind) &&
-      (!folder || r.folder === folder)
+  const visible =
+    rows?.filter(
+      (row) =>
+        (!pick || row.bucket === 'images') &&
+        (!folder || row.folder === folder) &&
+        row.mime.startsWith(kind) &&
+        row.name.toLowerCase().includes(query.trim().toLowerCase())
+    ) ?? []
+  const options = [
+    ...new Set([
+      ...folders,
+      ...(rows ?? []).map((row) => row.folder).filter(Boolean),
+    ]),
+  ].sort((a, b) => a.localeCompare(b, 'ru'))
+  const uploadButton = (
+    <button
+      className="primary files-upload"
+      onClick={() => upload.current?.click()}
+    >
+      <Upload size={16} />
+      Загрузить файл
+    </button>
   )
   return (
-    <section aria-label="Мои файлы">
-      <fieldset disabled={busy}>
-        {!pick && (
-          <label>
-            Загрузить файлы{' '}
-            <input
-              type="file"
-              multiple
-              accept=".png,.jpg,.jpeg,.webp,.svg,.pdf,.pptx,.json"
-              onChange={(e) => {
-                const files = Array.from(e.target.files || [])
-                e.target.value = ''
-                void run(async () => {
-                  const errors: string[] = []
-                  for (const f of files) {
-                    try {
-                      await storeFile(f, f.name, folder)
-                    } catch (e) {
-                      errors.push(f.name + ' — ' + (e as Error).message)
-                    }
-                  }
-                  if (errors.length) status(errors.join(' · '))
-                })
-              }}
-            />
-          </label>
-        )}
-        <input
-          aria-label="Поиск по названию"
-          placeholder="Поиск по названию"
-          value={query}
-          onChange={(e) => search(e.target.value)}
-        />
-        {!pick && (
+    <section
+      aria-label={pick ? 'Облачные изображения' : 'Облачные файлы'}
+      aria-busy={busy}
+    >
+      <fieldset
+        className="files-controls"
+        disabled={busy || !!preview || !!confirmFile}
+      >
+        <div className="files-bar">
+          <SearchBox query={query} onChange={search} />
+          {!pick && (
+            <select
+              aria-label="Тип файла"
+              value={kind}
+              onChange={(e) => filter(e.target.value)}
+            >
+              <option value="">Все форматы</option>
+              <option value="image/">Изображения</option>
+              <option value="application/pdf">PDF</option>
+              <option value="application/vnd">PPTX</option>
+              <option value="application/json">JSON</option>
+            </select>
+          )}
           <select
-            aria-label="Тип файла"
-            value={kind}
-            onChange={(e) => filter(e.target.value)}
+            aria-label="Папка"
+            value={folder}
+            onChange={(e) => setFolder(e.target.value)}
           >
-            <option value="">Все типы</option>
-            <option value="image/">Изображения</option>
-            <option value="application/pdf">PDF</option>
-            <option value="application/vnd">PPTX</option>
-            <option value="application/json">JSON</option>
+            <option value="">Все папки</option>
+            {options.map((name) => (
+              <option key={name}>{name}</option>
+            ))}
           </select>
-        )}
-        {!pick && (
+          {!pick && (
+            <button
+              className="secondary"
+              onClick={() => {
+                const name = prompt('Название новой папки')?.trim()
+                if (name)
+                  void run(async () => {
+                    await createFolder(name)
+                    setFolder(name)
+                  }, true)
+              }}
+            >
+              <FolderPlus size={16} />
+              Создать папку
+            </button>
+          )}
           <button
-            onClick={() => {
-              const name = prompt('Название новой папки')?.trim()
-              if (name)
-                void run(async () => {
-                  await createFolder(name)
-                  setFolder(name)
-                })
+            className="secondary files-refresh"
+            title="Обновить список"
+            aria-label="Обновить список"
+            onClick={() => void run(load)}
+          >
+            <RefreshCw size={16} />
+          </button>
+          {!pick && (
+            <>
+              <input
+                hidden
+                ref={upload}
+                type="file"
+                multiple
+                accept=".png,.jpg,.jpeg,.webp,.svg,.pdf,.pptx,.json"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? [])
+                  e.target.value = ''
+                  if (!files.length) return
+                  void run(async () => {
+                    const errors: string[] = []
+                    for (const file of files) {
+                      try {
+                        await storeFile(file, file.name, folder)
+                      } catch (error) {
+                        errors.push(file.name + ' — ' + messageOf(error))
+                      }
+                    }
+                    if (errors.length) throw Error(errors.join(' · '))
+                  }, true)
+                }}
+              />
+              {rows?.length || !rows ? uploadButton : null}
+            </>
+          )}
+        </div>
+        {busy && (
+          <p role="status" className="files-note">
+            Работаем с облачным хранилищем…
+          </p>
+        )}
+        {message && (
+          <p role="alert" className="files-error">
+            {message}
+          </p>
+        )}
+        {usageError && (
+          <p className="files-note">
+            Проверка публикаций не завершена. {usageError} Обновите список,
+            чтобы повторить проверку.
+          </p>
+        )}
+        {rows &&
+          (!visible.length ? (
+            <EmptyFiles
+              title={
+                rows.some((row) => !pick || row.bucket === 'images')
+                  ? 'По вашему запросу ничего не найдено'
+                  : pick
+                    ? 'В облаке пока нет изображений'
+                    : 'В облаке пока нет файлов'
+              }
+            >
+              {!pick && !rows.length && uploadButton}
+            </EmptyFiles>
+          ) : (
+            <div className="file-grid">
+              {visible.map((row) => (
+                <CloudFileCard
+                  key={resourceKey(row)}
+                  row={row}
+                  refs={usage?.get(resourceKey(row)) ?? []}
+                  usageKnown={!!usage}
+                  options={options}
+                  run={run}
+                  openJSON={openJSON}
+                  onPreview={
+                    !pick && row.bucket === 'images'
+                      ? () => setPreview(row)
+                      : undefined
+                  }
+                  pick={
+                    pick
+                      ? () =>
+                          void run(async () => {
+                            const blob = await downloadFile(row)
+                            if (row.sha && (await digest(blob)) !== row.sha)
+                              throw Error(
+                                'Контрольная сумма изображения не совпала.'
+                              )
+                            const image = await originalImage(
+                              new Blob([blob], { type: row.mime })
+                            )
+                            if (mounted.current) pick(image)
+                          })
+                      : undefined
+                  }
+                  onRequestDelete={() =>
+                    void run(async () => {
+                      const latest = await publicationUsage()
+                      setUsage(latest)
+                      if (latest.has(resourceKey(row)))
+                        throw Error('Файл используется в публикациях.')
+                      askDelete(row)
+                    })
+                  }
+                />
+              ))}
+            </div>
+          ))}
+      </fieldset>
+      {preview && (
+        <div className="overlay">
+          <section
+            className="dialog file-preview"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="file-preview-title"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setPreview(undefined)
             }}
           >
-            Создать папку
-          </button>
+            <h2 id="file-preview-title">{preview.name}</h2>
+            <img src={imageUrl(preview)} alt={preview.name} />
+            <button
+              autoFocus
+              className="secondary"
+              onClick={() => setPreview(undefined)}
+            >
+              Закрыть
+            </button>
+          </section>
+        </div>
+      )}
+      {confirmFile && (
+        <div className="overlay">
+          <section
+            className="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="file-delete-title"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') askDelete(undefined)
+            }}
+          >
+            <h2 id="file-delete-title">Удалить файл из облака?</h2>
+            <p className="file-delete-name">{confirmFile.name}</p>
+            <div className="files-confirm">
+              <button
+                autoFocus
+                className="secondary"
+                onClick={() => askDelete(undefined)}
+              >
+                Отмена
+              </button>
+              <button
+                className="primary"
+                onClick={() => {
+                  askDelete(undefined)
+                  void run(() => removeUnusedFile(confirmFile), true)
+                }}
+              >
+                Удалить
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function CloudFileCard({
+  row,
+  refs,
+  usageKnown,
+  options,
+  pick,
+  openJSON,
+  run,
+  onRequestDelete,
+  onPreview,
+}: {
+  row: Resource
+  refs: { id: string; title: string }[]
+  usageKnown: boolean
+  options: string[]
+  pick?: () => void
+  openJSON?: (text: string) => Promise<void>
+  run: (fn: () => Promise<void>, refresh?: boolean) => Promise<void>
+  onRequestDelete: () => void
+  onPreview?: () => void
+}) {
+  const DocIcon =
+    row.mime === 'application/json'
+      ? FileCode2
+      : row.mime.includes('presentation')
+        ? Presentation
+        : FileText
+  return (
+    <article className="file-card">
+      <div className="file-thumb">
+        {row.bucket === 'images' ? (
+          onPreview ? (
+            <button
+              className="file-thumb-preview"
+              aria-label={'Открыть изображение ' + row.name}
+              onClick={onPreview}
+            >
+              <img src={imageUrl(row)} alt="" loading="lazy" />
+            </button>
+          ) : (
+            <img src={imageUrl(row)} alt="" loading="lazy" />
+          )
+        ) : (
+          <span>
+            <DocIcon size={33} aria-hidden="true" />
+            {formatOf(row.mime)}
+          </span>
         )}
-        <select
-          aria-label="Папка"
-          value={folder}
-          onChange={(e) => setFolder(e.target.value)}
-        >
-          <option value="">Все папки</option>
-          {Array.from(
-            new Set([...folders, ...rows.map((r) => r.folder).filter(Boolean)])
-          ).map((f) => (
-            <option key={f}>{f}</option>
-          ))}
-        </select>
-        <p role="status">
-          {busy
-            ? 'Загрузка…'
-            : message || (!visible.length ? 'Файлы не найдены' : '')}
+      </div>
+      <div className="file-body">
+        <h2>{row.name}</h2>
+        <p className="file-meta">
+          {formatOf(row.mime)} ·{' '}
+          {row.size ? shortSize(row.size) : 'Размер не указан'}
+          {row.folder && ' · ' + row.folder}
         </p>
-        <div className="file-grid">
-          {visible.map((r) => (
-            <article key={r.sha}>
-              {r.bucket === 'images' && (
-                <img src={imageUrl(r)} alt="" loading="lazy" />
-              )}
-              <strong>{r.name}</strong>
-              <small>
-                {r.mime} · {Math.ceil(r.size / 1024)} КиБ ·{' '}
-                {new Date(r.created_at).toLocaleDateString()} {r.folder}
-              </small>
-              {pick ? (
-                <button onClick={() => pick(imageUrl(r))}>Выбрать</button>
-              ) : (
-                <>
+        {!pick && (
+          <p className="file-meta">
+            {new Date(row.created_at).toLocaleDateString('ru')}
+          </p>
+        )}
+        {pick ? (
+          <button className="secondary" onClick={pick}>
+            Выбрать
+          </button>
+        ) : (
+          <>
+            {refs.length ? (
+              <details className="file-links">
+                <summary>
+                  <LockKeyhole size={14} aria-hidden="true" /> Используется в{' '}
+                  {refs.length}{' '}
+                  {refs.length === 1 ? 'публикации' : 'публикациях'}
+                </summary>
+                {refs.map((ref) => (
+                  <a className="file-link" key={ref.id} href={'#p/' + ref.id}>
+                    {ref.title}
+                  </a>
+                ))}
+              </details>
+            ) : (
+              <p className="file-usage">
+                {usageKnown
+                  ? 'Не используется в публикациях'
+                  : 'Использование не проверено'}
+              </p>
+            )}
+            <details className="file-actions">
+              <summary>
+                Действия <span aria-hidden="true">⋯</span>
+              </summary>
+              <div>
+                <button
+                  onClick={() =>
+                    void run(async () => {
+                      const url = URL.createObjectURL(await downloadFile(row))
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = row.name
+                      a.click()
+                      setTimeout(() => URL.revokeObjectURL(url), 5000)
+                    })
+                  }
+                >
+                  Скачать
+                </button>
+                {row.mime === 'application/json' && openJSON && (
                   <button
                     onClick={() =>
-                      void run(async () => {
-                        const url = URL.createObjectURL(await downloadFile(r))
-                        const a = document.createElement('a')
-                        a.href = url
-                        a.download = r.name
-                        a.click()
-                        setTimeout(() => URL.revokeObjectURL(url), 5000)
-                      })
+                      void run(async () =>
+                        openJSON(await (await downloadFile(row)).text())
+                      )
                     }
                   >
-                    Скачать
+                    Импортировать
                   </button>
-                  {r.mime === 'application/json' && openJSON && (
-                    <button
-                      onClick={() =>
-                        void run(async () =>
-                          openJSON(await (await downloadFile(r)).text())
-                        )
-                      }
-                    >
-                      Импортировать
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      const name = prompt('Название файла', r.name)?.trim()
-                      if (name) void run(() => updateFile(r.sha, { name }))
-                    }}
-                  >
-                    Переименовать
-                  </button>
-                  <button
-                    onClick={() => {
-                      const folder = prompt(
-                        'Название папки (пустое — корневая папка)',
-                        r.folder
+                )}
+                <button
+                  onClick={() => {
+                    const name = prompt('Название файла', row.name)?.trim()
+                    if (name) void run(() => updateFile(row, { name }), true)
+                  }}
+                >
+                  Переименовать
+                </button>
+                <label>
+                  Переместить в папку
+                  <select
+                    value={row.folder}
+                    onChange={(e) =>
+                      void run(
+                        () =>
+                          updateFile(row, {
+                            folder: e.target.value,
+                          }),
+                        true
                       )
-                      if (folder !== null)
-                        void run(() =>
-                          updateFile(r.sha, { folder: folder.trim() })
-                        )
-                    }}
+                    }
                   >
-                    Переместить
+                    <option value="">Без папки</option>
+                    {options.map((name) => (
+                      <option key={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+                {usageKnown && !refs.length && (
+                  <button className="file-delete" onClick={onRequestDelete}>
+                    Удалить из облака
                   </button>
-                  <button
-                    onClick={() => {
-                      if (
-                        confirm(
-                          'Убрать файл из каталога? В методичках он останется доступен.'
-                        )
-                      )
-                        void run(() => updateFile(r.sha, { hidden: true }))
-                    }}
-                  >
-                    Убрать из каталога
-                  </button>
-                </>
-              )}
-            </article>
-          ))}
-        </div>
-      </fieldset>
-    </section>
+                )}
+              </div>
+            </details>
+          </>
+        )}
+      </div>
+    </article>
   )
 }

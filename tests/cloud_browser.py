@@ -4,6 +4,7 @@ and VITE_ADMIN_UUID=00000000-0000-4000-8000-000000000001. Pass the output direct
 """
 
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -16,7 +17,7 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from browser import ROOT, QuietHandler
 from playwright.sync_api import expect, sync_playwright
@@ -30,13 +31,15 @@ def flow(browser, url, tmp):
     catalog = {}
     folders = {}
     reject_publish = False
+    reject_delete = False
+    reject_read = False
     locks = {}
 
     def endpoint(route):
         r = route.request
         u = urlparse(r.url)
         q = parse_qs(u.query)
-        path = u.path
+        path = unquote(u.path)
         method = r.method
         requests.append((method, path))
 
@@ -103,18 +106,34 @@ def flow(browser, url, tmp):
                 folders[r.post_data_json["name"]] = r.post_data_json
                 return send({},201)
             return send(list(folders.values()))
-        if path == "/rest/v1/atlas_files":
-            key = q.get("sha", [""])[0][3:]
+        if path in ("/rest/v1/atlas_files", "/rest/v1/atlas_file_inventory"):
+            key = q.get("bucket", [""])[0][3:] + "/" + q.get("path", [""])[0][3:]
             if method == "POST":
                 row = r.post_data_json
-                catalog.setdefault(row["sha"], dict(row, created_at="2026-01-01", hidden=False))
+                catalog.setdefault(row["bucket"]+"/"+row["path"], row)
                 return send({}, 201)
             if method == "PATCH":
                 catalog[key].update(r.post_data_json)
                 return send(catalog[key])
+            if method == "DELETE":
+                catalog.pop(key, None)
+                return send({})
+            rows = []
+            for physical, contents in sorted(files.items()):
+                bucket, name = physical.split("/",1)
+                if bucket not in ("images","atlas-private"):
+                    continue
+                row = catalog.get(physical) or dict(
+                    bucket=bucket,path=name,name=name.split("/")[-1],sha=None,folder="",
+                    mime="image/png" if name.endswith(".png") else "application/octet-stream",
+                    size=len(contents),created_at="2025-01-01",
+                )
+                if key != "/" and key != physical: continue
+                if "sha" in q and q["sha"][0][3:] != row["sha"]: continue
+                rows.append(row)
             if "vnd.pgrst.object" in r.headers.get("accept",""):
-                return send(catalog.get(key))
-            return send([v for k,v in catalog.items() if (not key or key==k) and not v["hidden"]])
+                return send(rows[0] if rows else None)
+            return send(rows)
         if path == "/rest/v1/atlas_templates":
             if method == "GET":
                 return send(list(templates.values()))
@@ -150,11 +169,19 @@ def flow(browser, url, tmp):
             )
         if path.startswith("/storage/v1/object/"):
             key = path.split("/object/", 1)[1]
+            if key.startswith("info/"):
+                return send({} if key.removeprefix("info/") in files else {"message":"Missing"}, 200 if key.removeprefix("info/") in files else 404)
+            if method in ("POST","DELETE") and not any(
+                r.headers.get("x-client-info") == "atlas-storage/" + token for token in locks.values()
+            ):
+                return send({"message":"missing storage lease"}, 403)
             if method == "DELETE":
+                if reject_delete: return send({"message":"Storage отказал в удалении"},403)
                 for name in r.post_data_json["prefixes"]:
                     files.pop(key + "/" + name, None)
                 return send([])
             if method == "GET" and key.removeprefix("authenticated/") in files:
+                if reject_read and "presentations/" in key: return send({"message":"read unavailable"},503)
                 return send(files[key.removeprefix("authenticated/")],mime="application/octet-stream")
             if method == "POST":
                 if reject_publish and key.startswith("presentations/"):
@@ -225,6 +252,48 @@ def flow(browser, url, tmp):
     click("Добавить текст")
     page.get_by_role("textbox", name="Текст", exact=True).fill("Черновой материал")
     page.get_by_label("Размещение объекта").select_option("tray")
+    assert not any(k.startswith("images/") for k in files)
+    title = page.get_by_label("Название методички").input_value()
+    click("В библиотеку")
+    click("Оставить локально и выйти")
+    click("Мои файлы")
+    expect(page.locator(".file-card")).to_have_count(1)
+    page.reload()
+    click("Мои файлы")
+    expect(page.locator(".file-card")).to_have_count(1)
+    page.evaluate("""() => new Promise((resolve,reject) => {
+        const request = indexedDB.open('atlas-lessons-v1')
+        request.onsuccess = () => {
+            const db = request.result
+            const tx = db.transaction('lessons','readwrite')
+            const store = tx.objectStore('lessons')
+            const query = store.getAll()
+            query.onsuccess = () => {
+                const copy = query.result[0]
+                copy.deck.title = 'Повторное использование'
+                copy.deck.id = crypto.randomUUID()
+                const slide = copy.deck.slides.find(s => s.items.some(o=>o.type==='image'))
+                const image = slide.items.find(o=>o.type==='image')
+                slide.background = image.src
+                image.slot = 'tray'
+                store.add(copy)
+            }
+            tx.oncomplete = () => { db.close(); resolve() }
+            tx.onerror = () => reject(tx.error)
+        }
+    })""")
+    ctx.set_offline(True)
+    page.reload()
+    click("Мои файлы")
+    expect(page.locator(".file-card")).to_have_count(1)
+    expect(page.get_by_text("Методички (2)")).to_be_visible()
+    click("Мои методички")
+    click("Удалить Повторное использование")
+    click("Мои файлы")
+    expect(page.get_by_text("Методички (1)")).to_be_visible()
+    ctx.set_offline(False)
+    page.locator(".file-links summary").click()
+    click(title)
     click("Опубликовать")
     link = page.locator(".dialog input[readonly]").input_value()
     assert any(k.startswith("images/") for k in files)
@@ -274,6 +343,7 @@ def flow(browser, url, tmp):
     expect(public.get_by_text("Версия со второго устройства",exact=True)).to_have_count(0)
     b("Выбрать из моих файлов").click()
     second.locator(".file-grid button").first.click()
+    expect(second.locator(".canvas img[src^='data:']").first).to_be_visible()
     expect(b("Обновить публикацию")).to_be_enabled()
     b("В библиотеку").click()
     b("Продолжить редактирование").click()
@@ -306,6 +376,18 @@ def flow(browser, url, tmp):
     if b("Оставить локально и выйти").is_visible(): b("Оставить локально и выйти").click()
     device.set_offline(False)
     b("Мои файлы").click()
+    local_card = second.locator(".file-grid article")
+    expect(local_card).to_have_count(1)
+    expect(local_card).to_contain_text("Методички (1)")
+    assert second.locator(".files-library input[type=file]").count()==0
+    b("В облаке").click()
+    expect(second.get_by_text("Используется в 1 публикации")).to_be_visible()
+    reject_read = True
+    b("Обновить список").click()
+    expect(second.get_by_text("Использование не проверено")).to_be_visible()
+    reject_read = False
+    b("Обновить список").click()
+    expect(second.get_by_text("Используется в 1 публикации")).to_be_visible()
     upload = second.locator("fieldset input[type=file]")
     for filename in ["lesson.pdf", "copy.pdf"]:
         upload.set_input_files({"name": filename,"mimeType":"application/pdf","buffer":b"%PDF-1.4\nexample"})
@@ -314,9 +396,18 @@ def flow(browser, url, tmp):
     assert len([k for k in files if k.startswith("atlas-private/")]) == 1
     second.get_by_label("Поиск по названию").fill("lesson.pdf")
     expect(second.locator(".file-grid article")).to_have_count(1)
-    second.locator(".file-grid article").get_by_role("button",name="Убрать из каталога").click()
-    expect(second.locator(".file-grid article")).to_have_count(0)
-    assert len([k for k in files if k.startswith("atlas-private/")]) == 1
+    paper = second.locator(".file-grid article")
+    paper.locator(".file-actions summary").click()
+    b("Удалить из облака").click()
+    reject_delete = True
+    b("Удалить").click()
+    expect(second.get_by_role("alert")).to_contain_text("Storage отказал")
+    expect(paper).to_contain_text("lesson.pdf")
+    reject_delete = False
+    b("Удалить из облака").click()
+    b("Удалить").click()
+    expect(paper).to_have_count(0)
+    assert not any(k.startswith("atlas-private/") for k in files)
     second.get_by_label("Поиск по названию").fill("")
     ask = lambda dialog: dialog.accept("Материалы" if "папк" in dialog.message.lower() else "Урок.pdf")
     second.remove_listener("dialog", dialog_handler)
@@ -326,21 +417,25 @@ def flow(browser, url, tmp):
     pdf = {"name":"новый.pdf","mimeType":"application/pdf","buffer":b"%PDF-1.4\nsecond"}
     upload.set_input_files(pdf)
     expect(second.locator(".file-grid article")).to_have_count(1)
+    second.locator(".file-actions summary").click()
     b("Переименовать").click()
     expect(second.locator(".file-grid article")).to_contain_text("Урок.pdf")
     with second.expect_download() as downloaded:
         b("Скачать").click()
     assert Path(downloaded.value.path()).read_bytes()==pdf["buffer"]
+    second.get_by_label("Переместить в папку").select_option("")
+    expect(second.locator(".file-grid article")).to_have_count(0)
     second.get_by_label("Папка", exact=True).select_option("")
     third = ctx.new_page()
     third.goto(url)
     third.get_by_role("button",name="Мои файлы",exact=True).click()
+    third.get_by_role("button",name="В облаке",exact=True).click()
     twin = dict(pdf, name="другое.pdf",buffer=b"%PDF-1.4 concurrent")
     third.locator("fieldset input[type=file]").set_input_files(twin)
     upload.set_input_files(twin)
     expect(second.get_by_text("другое.pdf",exact=True)).to_be_visible()
     expect(third.get_by_text("другое.pdf",exact=True)).to_be_visible()
-    assert len([k for k in files if k.startswith("atlas-private/")])==3
+    assert len([k for k in files if k.startswith("atlas-private/")])==2
     third.close()
     for ext in ["png","jpeg","webp"]:
         uri=second.evaluate("(t)=>document.createElement('canvas').toDataURL('image/'+t)",ext)
@@ -350,11 +445,51 @@ def flow(browser, url, tmp):
     expect(second.get_by_text("образец.json",exact=True)).to_be_visible()
     upload.set_input_files({"name":"образец.pptx","mimeType":"application/vnd.openxmlformats-officedocument.presentationml.presentation","buffer":b"PK\x03\x04test"})
     expect(second.get_by_text("образец.pptx",exact=True)).to_be_visible()
+    legacy = "images/archive/legacy.png"
+    files[legacy] = (ROOT / "public/icons/atlas-512.png").read_bytes()
+    hidden = "images/previously-hidden.png"
+    files[hidden] = (ROOT / "public/icons/atlas-192.png").read_bytes()
+    catalog[hidden] = dict(bucket="images",path="previously-hidden.png",name="Ранее скрытый.png",
+        sha=hashlib.sha256(files[hidden]).hexdigest(),mime="image/png",folder="",hidden=True,
+        size=len(files[hidden]),created_at="2025-01-01")
+    b("Обновить список").click()
+    expect(second.get_by_text("legacy.png",exact=True)).to_be_visible()
+    b("Открыть изображение legacy.png").click()
+    expect(second.get_by_role("dialog",name="legacy.png").locator("img")).to_be_visible()
+    b("Закрыть").click()
+    expect(second.get_by_text("Ранее скрытый.png",exact=True)).to_be_visible()
+    expect(second.locator("fieldset")).to_be_enabled()
+    with second.expect_response(lambda response: response.request.method=="POST" and response.url.split("?")[0].endswith("/atlas_files")):
+        upload.set_input_files(ROOT / "public/icons/atlas-512.png")
+    expect(second.locator("fieldset")).to_be_enabled()
+    assert catalog[legacy]["sha"] == hashlib.sha256(files[legacy]).hexdigest()
+    assert sum(contents==files[legacy] for contents in files.values()) == 1
+    previous=second.locator(".file-card").filter(has_text="Ранее скрытый.png")
+    previous.locator(".file-actions summary").click()
+    previous.get_by_role("button",name="Удалить из облака").click()
+    expect(second.get_by_role("dialog",name="Удалить файл из облака?")).to_be_visible()
+    reject_read=True
+    b("Удалить").click()
+    expect(second.get_by_text("Использование не проверено").first).to_be_visible()
+    assert hidden in files
+    reject_read=False
+    b("Обновить список").click()
+    previous.get_by_role("button",name="Удалить из облака").click()
+    b("Удалить").click()
+    expect(previous).to_have_count(0)
+    assert hidden not in files and hidden not in catalog
     second.get_by_label("Тип файла").select_option("application/vnd")
     expect(second.locator(".file-grid article")).to_have_count(1)
     upload.set_input_files({"name":"bad.txt","mimeType":"text/plain","buffer":b"error"})
     expect(second.get_by_text("Формат файла не поддерживается.",exact=False)).to_be_visible()
-    device.close()
+    second.get_by_label("Тип файла").select_option("")
+    files["images/"+"long"*40+".png"] = files[legacy]
+    b("Обновить список").click()
+    expect(second.get_by_text("long"*40+".png",exact=True)).to_be_visible()
+    for width,height in [(1600,1000),(1280,800),(768,1024),(360,780)]:
+        second.set_viewport_size({"width":width,"height":height})
+        assert second.evaluate("document.documentElement.scrollWidth === innerWidth"),width
+    second.set_viewport_size({"width":1440,"height":900})
     click("Редактировать")
     click("Синхронизовать")
     click("Загрузить опубликованную версию")
@@ -364,6 +499,19 @@ def flow(browser, url, tmp):
     click("Опубликованные")
     click("Снять с публикации")
     expect(page.get_by_text("Публикаций пока нет")).to_be_visible()
+    second.get_by_label("Тип файла").select_option("image/")
+    used_image = second.locator(".file-card").filter(has_text="Изображение.")
+    used_image.locator(".file-actions summary").click()
+    expect(used_image.get_by_role("button",name="Удалить из облака")).to_have_count(0)
+    b("Обновить список").click()
+    used_image.get_by_role("button",name="Удалить из облака").click()
+    b("Удалить").click()
+    expect(used_image).to_have_count(0)
+    assert not any(row.get("name","").startswith("Изображение.") for row in catalog.values())
+    b("Мои методички").click()
+    b("Редактировать Версия со второго устройства").click()
+    expect(second.locator(".canvas img[src^='data:']").first).to_be_visible()
+    device.close()
     public.reload()
     expect(public.get_by_text("Публикация недоступна.", exact=False)).to_be_visible()
     click("Шаблоны")
@@ -390,5 +538,5 @@ if __name__ == "__main__":
         b.close()
         h.shutdown()
         print(
-            "PASS: Supabase client fixture: owner login, private templates, image upload, public projector JSON, guest view and unpublish"
+            "PASS: cloud inventory, local copies, publication lifecycle, file deletion, deduplication and responsive layout"
         )

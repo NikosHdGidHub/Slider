@@ -31,9 +31,16 @@ import {
 } from 'lucide-react'
 import { newDeck, validateDeck, type Deck, MAX_DOCUMENT_BYTES } from './model'
 import { embedImages } from './media'
-import { adminId, client, listPublished, readPublic, unpublish } from './cloud'
+import {
+  adminId,
+  client,
+  listPublished,
+  readPublishedForInventory,
+  readPublic,
+  unpublish,
+} from './cloud'
 import { entries, saveEntry, type Entry } from './storage'
-import { Files } from './Files'
+import { FileLibrary } from './Files'
 import { publish, fingerprint } from './publication'
 import { collectStyles } from './styleLibrary'
 import { TemplateLibrary } from './TemplateLibrary'
@@ -242,6 +249,10 @@ function App() {
     }
   }, [allowed])
   useEffect(() => {
+    if (page !== 'files' || !allowed) return
+    void refresh().catch((e) => libError(errorText(e)))
+  }, [page, allowed])
+  useEffect(() => {
     let live = true
     pubError('')
     setPublicDeck(null)
@@ -328,7 +339,7 @@ function App() {
     !same
   async function publishedHash(id: string) {
     if (!(await listPublished()).includes(id)) return ''
-    const remote = validateDeck(await readPublic(id))
+    const remote = validateDeck(await readPublishedForInventory(id))
     if (remote.id !== id) throw Error('Идентификатор публикации не совпадает.')
     return fingerprint(remote)
   }
@@ -611,14 +622,14 @@ function App() {
           if (failure.current) throw failure.current
           if (current.current !== d)
             throw Error('Документ изменился. Повторите публикацию.')
-          const hash = await fingerprint(d)
+          const draftHash = await fingerprint(d)
           const published = await publish(d, async () => {
             const remoteHash = await publishedHash(d.id)
             setBaseline(remoteHash)
             if (
               remoteHash &&
               remoteHash !== openedPublication.current &&
-              remoteHash !== hash &&
+              remoteHash !== draftHash &&
               !confirm(
                 'Облачная версия отличается от последней открытой на этом устройстве. Заменить её текущей методичкой?'
               )
@@ -627,6 +638,7 @@ function App() {
             return current.current === d
           })
           if (!published) return
+          const hash = await fingerprint(d)
           localStorage.setItem(marker(d.id), hash)
           openedPublication.current = hash
           setBaseline(hash)
@@ -912,14 +924,15 @@ function App() {
               />
             </>
           ) : page === 'files' ? (
-            owner && online ? (
-              <Files openJSON={importData} />
-            ) : (
-              <p>
-                Для доступа к файлам войдите как владелец и подключитесь к
-                интернету.
-              </p>
-            )
+            <FileLibrary
+              entries={allowed ? list : []}
+              openLesson={(entry) => open(entry.deck, entry.revision)}
+              openJSON={importData}
+              online={online}
+              owner={owner}
+              allowed={allowed}
+              login={() => dialog('login')}
+            />
           ) : page === 'guide' ? (
             <article className="guide">
               {guide

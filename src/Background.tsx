@@ -1,7 +1,7 @@
 import { Files } from './Files'
 import { useEffect, useRef, useState } from 'react'
-import { MAX_DOCUMENT_BYTES, type Deck, type Slide } from './model'
-import { originalBackground, optimize } from './media'
+import { type Deck, type Slide } from './model'
+import { originalBackground, optimize, checkImageBudget } from './media'
 export function Background({
   slide,
   deck,
@@ -31,6 +31,15 @@ export function Background({
   }, [])
   const [picker, setPicker] = useState(false)
   const effects = slide.effects ?? {}
+  function applyImage(src: string) {
+    const { deck, slide, update } = latest.current
+    const next = { ...slide, background: src }
+    checkImageBudget({
+      ...deck,
+      slides: deck.slides.map((s) => (s.id === slide.id ? next : s)),
+    })
+    update(next)
+  }
   function clear() {
     const next = { ...slide }
     delete next.effects
@@ -52,11 +61,16 @@ export function Background({
       )}
       {picker && (
         <div className="overlay">
-          <section className="dialog">
+          <section
+            className="dialog file-picker"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Выбор фона"
+          >
             <button onClick={() => setPicker(false)}>Закрыть</button>
             <Files
-              pick={(src) => {
-                update({ ...slide, background: src })
+              pick={({ src }) => {
+                applyImage(src)
                 setPicker(false)
               }}
             />
@@ -96,24 +110,7 @@ export function Background({
                   ? await originalBackground(pending)
                   : (await optimize(pending, 64 * 1048576)).src
                 if (active.current) {
-                  const { deck: current, slide: page } = latest.current
-                  const projected = {
-                    ...current,
-                    slides: current.slides.map((v) =>
-                      v.id === page.id ? { ...v, background: src } : v
-                    ),
-                  }
-                  if (
-                    new Blob([JSON.stringify(projected)]).size >
-                    MAX_DOCUMENT_BYTES
-                  )
-                    throw Error(
-                      'С этим фоном JSON превышает 64 МиБ. Выберите оптимизацию или меньший файл.'
-                    )
-                  latest.current.update({
-                    ...latest.current.slide,
-                    background: src,
-                  })
+                  applyImage(src)
                   setFile(null)
                 }
               } catch (e) {

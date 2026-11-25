@@ -49,9 +49,7 @@ import {
   type Slide,
 } from './model'
 import { Files } from './Files'
-import { optimize } from './media'
-import { cloudImage } from './publication'
-import { client } from './cloud'
+import { optimize, checkImageBudget } from './media'
 
 type Props = {
   publishLabel?: string
@@ -102,13 +100,17 @@ export function Editor({
     item = slide.items.find((x) => x.id === sel)
   const input = useRef<HTMLInputElement>(null),
     background = useRef(false)
-  function modify(fn: (s: Slide) => Slide) {
-    change((d) => ({
-      ...d,
-      slides: d.slides.map((s) =>
-        s.id === slide.id ? linkCaptions(d.master, fn(s)) : s
-      ),
-    }))
+  function modify(fn: (s: Slide) => Slide, checkSize = false) {
+    change((d) => {
+      const next = {
+        ...d,
+        slides: d.slides.map((s) =>
+          s.id === slide.id ? linkCaptions(d.master, fn(s)) : s
+        ),
+      }
+      if (checkSize) checkImageBudget(next)
+      return next
+    })
   }
   const chosenSlot = useRef('')
   function additions(s: Slide, added: Item[]) {
@@ -226,7 +228,7 @@ export function Editor({
   }
   const [picker, setPicker] = useState(false)
   function addImage(src: string, width: number, height: number, bg: boolean) {
-    if (bg) modify((s) => ({ ...s, background: src }))
+    if (bg) modify((s) => ({ ...s, background: src }), true)
     else {
       const w = Math.min(700, width, (520 * width) / height),
         h = (w * height) / width
@@ -240,7 +242,10 @@ export function Editor({
         w,
         h,
       }
-      modify((s) => ({ ...s, items: [...s.items, ...additions(s, [img])] }))
+      modify(
+        (s) => ({ ...s, items: [...s.items, ...additions(s, [img])] }),
+        true
+      )
       select(img.id)
     }
   }
@@ -261,12 +266,6 @@ export function Editor({
       }
       const { src, width, height } = await optimize(file)
       addImage(src, width, height, bg)
-      if (client && navigator.onLine)
-        cloudImage(src, file.name).catch(() =>
-          notice(
-            'Изображение сохранено локально. При публикации загрузка повторится.'
-          )
-        )
     } catch (e) {
       notice((e as Error).message)
     }
@@ -580,24 +579,17 @@ export function Editor({
             )}
             {picker && (
               <div className="overlay">
-                <section className="dialog">
+                <section
+                  className="dialog file-picker"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Выбор изображения"
+                >
                   <button onClick={() => setPicker(false)}>Закрыть</button>
                   <Files
-                    pick={async (src) => {
-                      try {
-                        const img = new Image()
-                        img.src = src
-                        await img.decode()
-                        addImage(
-                          src,
-                          img.naturalWidth,
-                          img.naturalHeight,
-                          false
-                        )
-                        setPicker(false)
-                      } catch {
-                        notice('Не удалось открыть изображение.')
-                      }
+                    pick={({ src, width, height }) => {
+                      addImage(src, width, height, false)
+                      setPicker(false)
                     }}
                   />
                 </section>

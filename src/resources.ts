@@ -1,10 +1,16 @@
 import { digest } from './digest'
-import { client, adminId } from './cloud'
+import {
+  client,
+  adminId,
+  withStorageLock,
+  checkStorageWrite,
+  type StorageWriter,
+} from './cloud'
 import { validateDeck } from './model'
 import { optimize } from './media'
 
 export type Resource = {
-  sha: string
+  sha: string | null
   name: string
   folder: string
   mime: string
@@ -30,10 +36,10 @@ export async function resources(): Promise<Resource[]> {
   const rows: Resource[] = []
   for (let offset = 0; ; offset += 100) {
     const { data, error } = await db()
-      .from('atlas_files')
+      .from('atlas_file_inventory')
       .select('*')
-      .eq('hidden', false)
-      .order('sha')
+      .order('bucket')
+      .order('path')
       .range(offset, offset + 99)
     if (error) throw Error(error.message)
     rows.push(...data)
@@ -43,22 +49,63 @@ export async function resources(): Promise<Resource[]> {
 export function imageUrl(row: Resource) {
   return db().storage.from(row.bucket).getPublicUrl(row.path).data.publicUrl
 }
-export async function updateFile(
-  sha: string,
-  patch: { name?: string; folder?: string; hidden?: boolean }
-) {
+export function resourceKey(row: Pick<Resource, 'bucket' | 'path'>) {
+  return row.bucket + '/' + row.path
+}
+
+const inventory = () => db().from('atlas_file_inventory')
+async function register(row: Resource, sha: string) {
   const { error } = await db()
     .from('atlas_files')
-    .update(patch)
-    .eq('sha', sha)
-    .select('sha')
-    .single()
-  if (error) throw Error(error.message)
+    .upsert(
+      { ...row, sha, owner_id: adminId },
+      { onConflict: 'bucket,path', ignoreDuplicates: true }
+    )
+  if (error) throw error
 }
+
+export async function updateFile(
+  row: Resource,
+  patch: { name?: string; folder?: string }
+) {
+  return withStorageLock(async () => {
+    if (!row.sha) await register(row, await digest(await downloadFile(row)))
+    const { error } = await db()
+      .from('atlas_files')
+      .update(patch)
+      .eq('bucket', row.bucket)
+      .eq('path', row.path)
+      .select('path')
+      .single()
+    if (error) throw error
+  })
+}
+
+export async function purgeFile(row: Resource, bucket: StorageWriter) {
+  const api = bucket(row.bucket)
+  const { error } = await api.remove([row.path])
+  checkStorageWrite(error, 'Не удалось удалить файл.')
+  const { data, error: checkError } = await inventory()
+    .select('path')
+    .eq('bucket', row.bucket)
+    .eq('path', row.path)
+    .maybeSingle()
+  if (checkError) throw checkError
+  if (data) throw Error('Файл остался в хранилище. Повторите удаление.')
+  const { error: cleanup } = await db()
+    .from('atlas_files')
+    .delete()
+    .eq('bucket', row.bucket)
+    .eq('path', row.path)
+  if (cleanup)
+    throw Error('Файл удалён из Storage. Не удалось очистить запись каталога.')
+}
+
 export async function storeFile(
   blob: Blob,
   name: string,
-  folder = ''
+  folder = '',
+  writer?: StorageWriter
 ): Promise<Resource> {
   let ext = name.split('.').pop()!.toLowerCase()
   if (blob.size > 50 * 1024 * 1024 || !blob.size)
@@ -76,13 +123,6 @@ export async function storeFile(
   if (ext === 'pptx' && (await blob.slice(0, 4).text()) !== 'PK\x03\x04')
     throw Error('Файл не содержит архив PPTX.')
   const sha = await digest(blob)
-  const catalog = db().from('atlas_files')
-  const existing = await catalog.select('*').eq('sha', sha).maybeSingle()
-  if (existing.error) throw Error(existing.error.message)
-  if (existing.data) {
-    if (existing.data.hidden) await updateFile(sha, { hidden: false })
-    return existing.data
-  }
   const image = mime.startsWith('image/')
   if (image) {
     if (blob.size > 16 * 1024 * 1024)
@@ -100,36 +140,58 @@ export async function storeFile(
     const bitmap = await createImageBitmap(blob)
     bitmap.close()
   }
-  const bucket = image ? 'images' : 'atlas-private'
-  const path = image ? sha + '.' + (ext === 'jpeg' ? 'jpg' : ext) : sha
-  const { error } = await db()
-    .storage.from(bucket)
-    .upload(path, blob, { contentType: mime, cacheControl: '31536000' })
-  if (error && !['409', '400'].includes(String(error.statusCode)))
-    throw Error(error.message)
-  if (error && !/duplicate|already exists/i.test(error.message))
-    throw Error(error.message)
-  const row = {
-    sha,
-    name,
-    folder,
-    mime,
-    size: blob.size,
-    bucket,
-    path,
-    owner_id: adminId,
+  async function save(write: StorageWriter) {
+    const existing = await inventory()
+      .select('*')
+      .eq('sha', sha)
+      .order('bucket')
+      .order('path')
+      .limit(1)
+      .maybeSingle()
+    if (existing.error) throw existing.error
+    if (existing.data) return existing.data as Resource
+    // Recover metadata from the actual bytes. Keep every historic object path.
+    for (const row of await resources()) {
+      if (
+        row.sha ||
+        (row.size && row.size !== blob.size) ||
+        row.bucket !== (image ? 'images' : 'atlas-private')
+      )
+        continue
+      const recovered = await digest(await downloadFile(row))
+      await register(row, recovered)
+      if (recovered === sha) return { ...row, sha }
+    }
+    const bucket = image ? 'images' : 'atlas-private'
+    const path = image ? sha + '.' + (ext === 'jpeg' ? 'jpg' : ext) : sha
+    const { error } = await write(bucket).upload(path, blob, {
+      contentType: mime,
+      cacheControl: '31536000',
+    })
+    checkStorageWrite(error, 'Не удалось загрузить файл.')
+    const row = {
+      sha,
+      name,
+      folder,
+      mime,
+      size: blob.size,
+      bucket,
+      path,
+      created_at: new Date().toISOString(),
+    }
+    await register(row, sha)
+    return row
   }
-  const saved = await catalog.upsert(row, {
-    onConflict: 'sha',
-    ignoreDuplicates: true,
-  })
-  if (saved.error) throw Error(saved.error.message)
-  const result = await catalog.select('*').eq('sha', sha).single()
-  if (result.error) throw Error(result.error.message)
-  return result.data
+  return writer ? save(writer) : withStorageLock(save)
 }
 export async function downloadFile(row: Resource) {
-  const { data, error } = await db().storage.from(row.bucket).download(row.path)
+  const { data, error } = await db()
+    .storage.from(row.bucket)
+    .download(
+      row.path,
+      {},
+      { cache: 'no-store', signal: AbortSignal.timeout(30000) }
+    )
   if (error) throw Error(error.message)
   return data
 }
@@ -155,14 +217,12 @@ const imageTypes: Record<string, string> = {
   'image/jpeg': 'jpg',
 }
 
-export async function uploadImage(blob: Blob, name?: string): Promise<string> {
+export async function uploadImage(
+  blob: Blob,
+  writer: StorageWriter
+): Promise<string> {
   const extension = imageTypes[blob.type]
   if (!extension)
     throw new Error('Загрузите растровое изображение PNG, WebP или JPEG.')
-  return imageUrl(
-    await storeFile(
-      blob,
-      (name?.replace(/\.[^.]+$/, '') || 'Изображение') + '.' + extension
-    )
-  )
+  return imageUrl(await storeFile(blob, 'Изображение.' + extension, '', writer))
 }
