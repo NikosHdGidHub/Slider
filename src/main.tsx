@@ -28,6 +28,7 @@ import {
   X,
   ChevronRight,
   Compass,
+  LogIn,
 } from 'lucide-react'
 import { newDeck, validateDeck, type Deck, MAX_DOCUMENT_BYTES } from './model'
 import { embedImages } from './media'
@@ -152,6 +153,10 @@ function App() {
     [catalog, allowed, list]
   )
   async function getInstructions() {
+    if (!allowed) {
+      dialog('login')
+      return
+    }
     await task('Формируем инструкцию…', async () => {
       const result = await refreshCatalog()
       if (allowed !== access.current) return
@@ -211,9 +216,23 @@ function App() {
     setModal(name)
   }
   function navigate(next: string) {
+    const protectedPages = ['templates', 'files']
+
+    if (!allowed && protectedPages.includes(next)) {
+      setPage('library')
+      setDrawer(false)
+      return
+    }
+
     setPage(next)
     setDrawer(false)
   }
+  useEffect(() => {
+    if (!allowed && ['templates', 'files'].includes(page)) {
+      setPage('library')
+      setDrawer(false)
+    }
+  }, [allowed, page])
   useEffect(() => {
     const network = () => setOnline(navigator.onLine),
       route = () => setHash(location.hash)
@@ -545,6 +564,10 @@ function App() {
   }
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (!allowed && modal !== 'login') {
+      dialog('login')
+      return
+    }
     await task('Подождите…', async () => {
       if (modal === 'login') {
         if (!client)
@@ -686,6 +709,9 @@ function App() {
     ['published', 'Опубликованные', Globe2],
     ['guide', 'Руководство', BookOpenText],
   ] as const
+  const visibleNav = nav.filter(
+    ([key]) => allowed || !['templates', 'files'].includes(key)
+  )
   const home = (
     <div className="shell">
       <aside className={'sidebar ' + (drawer ? 'opened' : '')}>
@@ -698,7 +724,7 @@ function App() {
         <div className="side-rule" />
         <small className="nav-label">Рабочее пространство</small>
         <nav>
-          {nav.map(([key, label, Icon]) => (
+          {visibleNav.map(([key, label, Icon]) => (
             <button
               key={key}
               className={page === key ? 'active' : ''}
@@ -735,8 +761,12 @@ function App() {
             </button>
           ) : (
             !localMode && (
-              <button title="Войти" onClick={() => dialog('login')}>
-                <ArrowUpRight size={17} />
+              <button
+                title="Войти"
+                aria-label="Войти"
+                onClick={() => dialog('login')}
+              >
+                <LogIn size={18} />
               </button>
             )
           )}
@@ -772,7 +802,7 @@ function App() {
                       ? 'Мои файлы'
                       : 'Опубликованные'}
             </h1>
-            {(page === 'library' || page === 'templates') && (
+            {allowed && (page === 'library' || page === 'templates') && (
               <button
                 className="secondary instructions-button"
                 onClick={getInstructions}
@@ -783,7 +813,7 @@ function App() {
                   : 'Скачать инструкцию для генерации презентации'}
               </button>
             )}
-            {page === 'library' && (
+            {allowed && page === 'library' && (
               <button className="primary" onClick={() => need('create')}>
                 <Plus size={18} />
                 Создать методичку
@@ -829,10 +859,15 @@ function App() {
                   <h2>
                     Локальная библиотека <span>{list.length}</span>
                   </h2>
-                  <button className="secondary" onClick={() => need('import')}>
-                    <Upload size={16} />
-                    Импорт JSON
-                  </button>
+                  {allowed && (
+                    <button
+                      className="secondary"
+                      onClick={() => need('import')}
+                    >
+                      <Upload size={16} />
+                      Импорт JSON
+                    </button>
+                  )}
                 </div>
                 {libraryError ? (
                   <p role="alert">{libraryError}</p>
@@ -904,7 +939,7 @@ function App() {
                 )}
               </section>
             </>
-          ) : page === 'templates' ? (
+          ) : page === 'templates' && allowed ? (
             <>
               <p className="catalog-scope">{scope}</p>
               <TemplateLibrary
@@ -923,7 +958,7 @@ function App() {
                 notice={notice}
               />
             </>
-          ) : page === 'files' ? (
+          ) : page === 'files' && allowed ? (
             <FileLibrary
               entries={allowed ? list : []}
               openLesson={(entry) => open(entry.deck, entry.revision)}
@@ -947,6 +982,16 @@ function App() {
                   )
                 )}
             </article>
+          ) : !allowed && ['templates', 'files'].includes(page) ? (
+            <div className="empty">
+              <BookOpen />
+              <h3>Доступ ограничен</h3>
+              <p>Войдите как преподаватель, чтобы открыть этот раздел.</p>
+              <button className="primary" onClick={() => dialog('login')}>
+                <LogIn size={17} />
+                Войти
+              </button>
+            </div>
           ) : (
             <section>
               {owner ? (
