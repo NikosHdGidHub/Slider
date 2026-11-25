@@ -132,9 +132,24 @@ export function useCommands(actions: Action[]) {
         return
       }
       if (typing(e.target) || !(e.ctrlKey || e.metaKey)) return
-      const action = actions.find(
-        (a) => a.key === (e.shiftKey ? 'shift+' : '') + e.key.toLowerCase()
-      )
+      // ВАЖНО ДЛЯ ВСЕХ БУДУЩИХ ИНСТРУМЕНТОВ РЕДАКТОРА:
+      //
+      // Горячие клавиши определяем по физическому коду (KeyboardEvent.code),
+      // а не по символу (KeyboardEvent.key).
+      //
+      // Причина: русская и английская раскладки возвращают разные e.key.
+      // Например, Ctrl+Z в русской раскладке даёт e.key = "я",
+      // но e.code = "KeyZ" в обеих раскладках.
+      //
+      // Это правило обязательно для всех редакторов и конструкторов:
+      // отмена, повтор, копирование, вставка, вырезание и будущие инструменты.
+
+      const physicalKey = e.code.startsWith('Key')
+        ? e.code.slice(3).toLowerCase()
+        : e.key.toLowerCase()
+
+      const shortcut = (e.shiftKey ? 'shift+' : '') + physicalKey
+      const action = actions.find((a) => a.key === shortcut)
       if (action) {
         e.preventDefault()
         action.run()
