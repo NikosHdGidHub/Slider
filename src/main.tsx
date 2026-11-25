@@ -84,7 +84,6 @@ function App() {
   );
   const [catalogKind, setCatalogKind] =
     useState<Template["kind"]>("presentation");
-  const [art, setArt] = useState(false);
   const [scope, setScope] = useState("");
   const [editingTemplate, setEditingTemplate] = useState<{
     t: Template;
@@ -413,8 +412,8 @@ function App() {
     if (
       !confirm(
         "Удалить локальную методичку «" +
-          en.deck.title +
-          "»? Публикация останется доступна.",
+        en.deck.title +
+        "»? Публикация останется доступна.",
       )
     )
       return;
@@ -655,7 +654,6 @@ function App() {
                 create={insert}
                 view={setWatch}
                 edit={(t, row) => {
-                  setArt(false);
                   setEditingTemplate({ t, row });
                 }}
                 refresh={async () => {
@@ -749,13 +747,12 @@ function App() {
         )
       ) : watch ? (
         <Viewer deck={watch} onClose={() => setWatch(null)} />
-      ) : editingTemplate?.t.format === 3 && !art && allowed ? (
+      ) : editingTemplate?.t.format === 3 && allowed ? (
         <GridDesigner
           template={editingTemplate.t}
           set={templateHistory.set}
           history={templateHistory}
           notice={notice}
-          art={() => setArt(true)}
           back={() => {
             if (
               confirm(
@@ -796,10 +793,6 @@ function App() {
             templateHistory.update((t) => t && { ...t, deck: fn(t.deck) })
           }
           back={() => {
-            if (art) {
-              setArt(false);
-              return;
-            }
             if (confirm("Закрыть редактор без сохранения шаблона?"))
               setEditingTemplate(null);
           }}
@@ -815,7 +808,7 @@ function App() {
             })
           }
           view={() => setWatch(editingTemplate.t.deck)}
-          action={() => {}}
+          action={() => { }}
           notice={notice}
         />
       ) : doc && allowed ? (
@@ -837,7 +830,6 @@ function App() {
               current.current = null;
               setCatalogKind("presentation");
               navigate("templates");
-              setArt(false);
               setEditingTemplate({ t, row });
             })
           }

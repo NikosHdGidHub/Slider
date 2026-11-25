@@ -94,7 +94,6 @@ export function GridDesigner({
   history,
   save,
   back,
-  art,
   notice,
 }: {
   template: Template;
@@ -102,7 +101,6 @@ export function GridDesigner({
   set: (t: Template) => void;
   save: () => void;
   back: () => void;
-  art: () => void;
   notice: (s: string) => void;
 }) {
   const clipboard = useRef<Cell | null>(null);
@@ -307,9 +305,9 @@ export function GridDesigner({
                 const at =
                   ((pad +
                     (space * g[axis].slice(0, i + 1).reduce((a, b) => a + b)) /
-                      sum) /
+                    sum) /
                     dim) *
-                    100 +
+                  100 +
                   "%";
                 const segments = rectangles(g).filter(
                   ({ cell: c }) => (row ? c.row : c.col) + c[axis] === i + 1,
@@ -323,15 +321,15 @@ export function GridDesigner({
                     style={
                       row
                         ? {
-                            top: at,
-                            left: b.x / 12.8 + "%",
-                            width: b.w / 12.8 + "%",
-                          }
+                          top: at,
+                          left: b.x / 12.8 + "%",
+                          width: b.w / 12.8 + "%",
+                        }
                         : {
-                            left: at,
-                            top: b.y / 7.2 + "%",
-                            height: b.h / 7.2 + "%",
-                          }
+                          left: at,
+                          top: b.y / 7.2 + "%",
+                          height: b.h / 7.2 + "%",
+                        }
                     }
                     onPointerDown={(e) => {
                       e.currentTarget.setPointerCapture(e.pointerId);
@@ -355,11 +353,11 @@ export function GridDesigner({
                         Math.min(
                           pair - 0.02,
                           tracks[i] +
-                            (((((row ? e.clientY : e.clientX) - d.start) /
-                              (row ? rect.height : rect.width)) *
-                              dim) /
-                              space) *
-                              sum,
+                          (((((row ? e.clientY : e.clientX) - d.start) /
+                            (row ? rect.height : rect.width)) *
+                            dim) /
+                            space) *
+                          sum,
                         ),
                       );
                       tracks[i + 1] = pair - tracks[i];
@@ -382,7 +380,6 @@ export function GridDesigner({
               }
             />
           </label>
-          <button onClick={art}>Редактировать объекты и шрифты</button>
         </section>
         <aside className="inspector">
           {!structural && (
