@@ -1,0 +1,327 @@
+{
+  "version": 3,
+  "master": {
+    "name": "По умолчанию",
+    "schemes": {
+      "title": {
+        "rows": [
+          1
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cells": [
+          {
+            "id": "body",
+            "row": 0,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "normal": {
+        "rows": [
+          1
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cells": [
+          {
+            "id": "body",
+            "row": 0,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "end": {
+        "rows": [
+          1
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cells": [
+          {
+            "id": "body",
+            "row": 0,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    "art": {}
+  },
+  "id": "6b075a10-a6ae-46b5-b217-40b0ab971f11",
+  "title": "Читаем карту города",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "theme": {
+    "palette": [
+      "#163e49",
+      "#e5f4ef",
+      "#f8bd56"
+    ],
+    "styles": [
+      {
+        "id": "title",
+        "label": "Заголовок",
+        "values": {
+          "font": "sans",
+          "size": 64,
+          "bold": true,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "subtitle",
+        "label": "Подзаголовок",
+        "values": {
+          "font": "sans",
+          "size": 44,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "body",
+        "label": "Основной текст",
+        "values": {
+          "font": "sans",
+          "size": 32,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "caption",
+        "label": "Подпись",
+        "values": {
+          "font": "sans",
+          "size": 24,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "accent",
+        "label": "Акцент",
+        "values": {
+          "font": "sans",
+          "size": 38,
+          "bold": true,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "small",
+        "label": "Мелкий текст",
+        "values": {
+          "font": "sans",
+          "size": 18,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      }
+    ]
+  },
+  "resources": {
+    "fonts": []
+  },
+  "slides": [
+    {
+      "id": "173b9f79-6b2f-4001-95f0-3045b82dd844",
+      "color": "#ffffff",
+      "background": null,
+      "notes": "Покажите знакомый городской маршрут и спросите, как его описать словами.",
+      "items": [
+        {
+          "id": "57b913ce-cda4-4098-a0a2-b7211daaffd4",
+          "type": "text",
+          "text": "Читаем карту города",
+          "src": "",
+          "x": 95,
+          "y": 139,
+          "w": 1100,
+          "h": 110,
+          "size": 70,
+          "color": "#215744",
+          "align": "left"
+        },
+        {
+          "id": "a450a499-5833-4aa9-8906-973a00e63b7f",
+          "type": "text",
+          "text": "Ориентиры и направления",
+          "src": "",
+          "x": 99,
+          "y": 281,
+          "w": 1050,
+          "h": 95,
+          "size": 42,
+          "color": "#397765",
+          "align": "left"
+        },
+        {
+          "id": "53a43ad2-2158-40ee-bf6e-5cf04d258022",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 98,
+          "y": 439,
+          "w": 1046,
+          "h": 105,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "rounded",
+          "fill": {
+            "type": "solid",
+            "color": "#dfece5"
+          }
+        },
+        {
+          "id": "75949afc-349e-404f-ad2b-b7dfbb77ed31",
+          "type": "text",
+          "text": "Парк  →  Школа  →  Библиотека",
+          "src": "",
+          "x": 130,
+          "y": 462,
+          "w": 968,
+          "h": 54,
+          "size": 37,
+          "color": "#234640",
+          "align": "left"
+        }
+      ],
+      "kind": "title"
+    },
+    {
+      "id": "24af32ab-2270-4593-a53b-f7f5ab645f0e",
+      "color": "#ffffff",
+      "background": null,
+      "notes": "Пусть один ученик объясняет путь, другой проверяет его по карте.",
+      "items": [
+        {
+          "id": "c74fb845-09c2-47d3-a833-9f2274b4e552",
+          "type": "text",
+          "text": "Назови три ориентира",
+          "src": "",
+          "x": 100,
+          "y": 113,
+          "w": 1080,
+          "h": 101,
+          "size": 62,
+          "color": "#234640",
+          "align": "left"
+        },
+        {
+          "id": "27f7bece-de7e-421c-b31a-1b43232deb99",
+          "type": "text",
+          "text": "Начни у входа в парк. Пройди к школе и поверни к библиотеке.",
+          "src": "",
+          "x": 102,
+          "y": 274,
+          "w": 1000,
+          "h": 158,
+          "size": 42,
+          "color": "#234640",
+          "align": "left"
+        }
+      ],
+      "kind": "normal"
+    },
+    {
+      "id": "44486f5d-7f14-43c1-b9e1-2094e8553215",
+      "color": "#ffffff",
+      "background": null,
+      "notes": "Предложите записать собственный маршрут через два ориентира.",
+      "items": [
+        {
+          "id": "0451de46-9bbe-4e7c-b021-2e1ab7306a8d",
+          "type": "text",
+          "text": "Куда мы пойдём дальше?",
+          "src": "",
+          "x": 100,
+          "y": 140,
+          "w": 1090,
+          "h": 105,
+          "size": 64,
+          "color": "#234640",
+          "align": "left"
+        },
+        {
+          "id": "19f83773-ec3a-43db-8a10-27fb65cf5e68",
+          "type": "text",
+          "text": "Нарисуй простой маршрут и подпиши направления.",
+          "src": "",
+          "x": 105,
+          "y": 300,
+          "w": 1040,
+          "h": 112,
+          "size": 42,
+          "color": "#234640",
+          "align": "left"
+        }
+      ],
+      "kind": "end"
+    }
+  ]
+}

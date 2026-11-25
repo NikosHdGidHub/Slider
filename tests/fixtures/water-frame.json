@@ -1,0 +1,903 @@
+{
+  "version": 3,
+  "master": {
+    "name": "Меловая рамка",
+    "schemes": {
+      "title": {
+        "rows": [
+          1,
+          8
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          38,
+          90,
+          52,
+          90
+        ],
+        "cells": [
+          {
+            "id": "header",
+            "row": 0,
+            "col": 0,
+            "type": "header",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              14,
+              0,
+              14
+            ],
+            "style": {
+              "size": 23,
+              "bold": true,
+              "color": "#31614f"
+            }
+          },
+          {
+            "id": "body",
+            "row": 1,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "normal": {
+        "rows": [
+          1,
+          8
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          38,
+          90,
+          52,
+          90
+        ],
+        "cells": [
+          {
+            "id": "header",
+            "row": 0,
+            "col": 0,
+            "type": "header",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              14,
+              0,
+              14
+            ],
+            "style": {
+              "size": 23,
+              "bold": true,
+              "color": "#31614f"
+            }
+          },
+          {
+            "id": "body",
+            "row": 1,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "end": {
+        "rows": [
+          1,
+          8
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          38,
+          90,
+          52,
+          90
+        ],
+        "cells": [
+          {
+            "id": "header",
+            "row": 0,
+            "col": 0,
+            "type": "header",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              14,
+              0,
+              14
+            ],
+            "style": {
+              "size": 23,
+              "bold": true,
+              "color": "#31614f"
+            }
+          },
+          {
+            "id": "body",
+            "row": 1,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    "art": {
+      "title": {
+        "id": "5e750832-9118-4eb3-ae03-9c7e7f2c5720",
+        "kind": "title",
+        "color": "#f3f5e8",
+        "background": null,
+        "items": [
+          {
+            "id": "11a9317c-5605-4174-b085-e617aa96e582",
+            "type": "shape",
+            "x": 24,
+            "y": 24,
+            "w": 1232,
+            "h": 672,
+            "text": "",
+            "src": "",
+            "size": 48,
+            "color": "#18293d",
+            "align": "left",
+            "shape": "rect",
+            "fill": {
+              "type": "none"
+            },
+            "stroke": "#287458",
+            "strokeWidth": 4,
+            "role": "decoration",
+            "fixed": true
+          },
+          {
+            "id": "34fa1b3a-cc86-468e-b8dc-62b3bf379005",
+            "type": "text",
+            "x": 1090,
+            "y": 47,
+            "w": 105,
+            "h": 31,
+            "text": "АТЛАС",
+            "src": "",
+            "size": 22,
+            "color": "#28614a",
+            "align": "right",
+            "role": "decoration",
+            "fixed": true
+          }
+        ],
+        "notes": ""
+      },
+      "normal": {
+        "id": "2477d59c-e33c-47fc-b790-b28d975b5469",
+        "kind": "normal",
+        "color": "#f3f5e8",
+        "background": null,
+        "items": [
+          {
+            "id": "7e2ba402-e128-4e20-a370-d194891a0cf6",
+            "type": "shape",
+            "x": 24,
+            "y": 24,
+            "w": 1232,
+            "h": 672,
+            "text": "",
+            "src": "",
+            "size": 48,
+            "color": "#18293d",
+            "align": "left",
+            "shape": "rect",
+            "fill": {
+              "type": "none"
+            },
+            "stroke": "#287458",
+            "strokeWidth": 4,
+            "role": "decoration",
+            "fixed": true
+          },
+          {
+            "id": "6de8fedc-48d6-42d0-842c-c5a9883abcf2",
+            "type": "text",
+            "x": 1090,
+            "y": 47,
+            "w": 105,
+            "h": 31,
+            "text": "АТЛАС",
+            "src": "",
+            "size": 22,
+            "color": "#28614a",
+            "align": "right",
+            "role": "decoration",
+            "fixed": true
+          }
+        ],
+        "notes": ""
+      },
+      "end": {
+        "id": "fd626997-2fe7-46e4-ab19-6d5236d1ca67",
+        "kind": "end",
+        "color": "#f3f5e8",
+        "background": null,
+        "items": [
+          {
+            "id": "30578e3c-0f44-4823-84a8-24c8192221e3",
+            "type": "shape",
+            "x": 24,
+            "y": 24,
+            "w": 1232,
+            "h": 672,
+            "text": "",
+            "src": "",
+            "size": 48,
+            "color": "#18293d",
+            "align": "left",
+            "shape": "rect",
+            "fill": {
+              "type": "none"
+            },
+            "stroke": "#287458",
+            "strokeWidth": 4,
+            "role": "decoration",
+            "fixed": true
+          },
+          {
+            "id": "0fd5da9a-95de-4661-b68a-7a001671bf28",
+            "type": "text",
+            "x": 1090,
+            "y": 47,
+            "w": 105,
+            "h": 31,
+            "text": "АТЛАС",
+            "src": "",
+            "size": 22,
+            "color": "#28614a",
+            "align": "right",
+            "role": "decoration",
+            "fixed": true
+          }
+        ],
+        "notes": ""
+      }
+    }
+  },
+  "id": "07e5c3de-a9a1-4d2e-8828-78922afca3c9",
+  "title": "Круговорот воды",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "theme": {
+    "palette": [
+      "#163e49",
+      "#e5f4ef",
+      "#f8bd56"
+    ],
+    "styles": [
+      {
+        "id": "title",
+        "label": "Заголовок",
+        "values": {
+          "font": "sans",
+          "size": 64,
+          "bold": true,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "subtitle",
+        "label": "Подзаголовок",
+        "values": {
+          "font": "sans",
+          "size": 44,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "body",
+        "label": "Основной текст",
+        "values": {
+          "font": "sans",
+          "size": 32,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "caption",
+        "label": "Подпись",
+        "values": {
+          "font": "sans",
+          "size": 24,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "accent",
+        "label": "Акцент",
+        "values": {
+          "font": "sans",
+          "size": 38,
+          "bold": true,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "small",
+        "label": "Мелкий текст",
+        "values": {
+          "font": "sans",
+          "size": 18,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      }
+    ]
+  },
+  "resources": {
+    "fonts": []
+  },
+  "slides": [
+    {
+      "id": "126b759a-dec1-4f84-96d3-88cebfe8a3f4",
+      "color": "#f3f5e8",
+      "background": null,
+      "notes": "Спросите, где оказывается вода после того, как исчезает лужа.",
+      "items": [
+        {
+          "id": "94c47935-11f2-4932-887f-9b3fe8bc6b20",
+          "type": "shape",
+          "x": 24,
+          "y": 24,
+          "w": 1232,
+          "h": 672,
+          "text": "",
+          "src": "",
+          "size": 48,
+          "color": "#18293d",
+          "align": "left",
+          "shape": "rect",
+          "fill": {
+            "type": "none"
+          },
+          "stroke": "#287458",
+          "strokeWidth": 4,
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "91f5f80e-9797-48e5-b7ef-e2039a804867",
+          "type": "text",
+          "x": 1090,
+          "y": 47,
+          "w": 105,
+          "h": 31,
+          "text": "АТЛАС",
+          "src": "",
+          "size": 22,
+          "color": "#28614a",
+          "align": "right",
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "8e27e2c4-bbd0-4ae7-9493-3ad074612ba8",
+          "type": "text",
+          "text": "ЕСТЕСТВОЗНАНИЕ",
+          "src": "",
+          "x": 100,
+          "y": 108,
+          "w": 650,
+          "h": 43,
+          "size": 26,
+          "color": "#407a64",
+          "align": "left"
+        },
+        {
+          "id": "20e705ec-6dca-471b-81a9-765f6cf9eea1",
+          "type": "text",
+          "text": "Круговорот\nводы",
+          "src": "",
+          "x": 100,
+          "y": 174,
+          "w": 696,
+          "h": 197,
+          "size": 72,
+          "color": "#1e483e",
+          "align": "left"
+        },
+        {
+          "id": "d5af877d-8057-45c7-b922-39a45eacd9ed",
+          "type": "text",
+          "text": "От лужи до облака и обратно",
+          "src": "",
+          "x": 102,
+          "y": 448,
+          "w": 790,
+          "h": 62,
+          "size": 39,
+          "color": "#234640",
+          "align": "left"
+        },
+        {
+          "id": "fd8c28fa-5228-4cf7-a630-72e4f6537914",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 863,
+          "y": 146,
+          "w": 282,
+          "h": 282,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "circle",
+          "fill": {
+            "type": "solid",
+            "color": "#d3e8dd"
+          }
+        },
+        {
+          "id": "6da2baef-7e44-4967-b8c9-9605b6443407",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 932,
+          "y": 215,
+          "w": 145,
+          "h": 145,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "circle",
+          "fill": {
+            "type": "solid",
+            "color": "#4c897b"
+          }
+        },
+        {
+          "id": "11e641c4-4c3c-4ab8-83fa-b727fde0dfa6",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 985,
+          "y": 240,
+          "w": 37,
+          "h": 37,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "circle",
+          "fill": {
+            "type": "solid",
+            "color": "#dfefe6"
+          }
+        }
+      ],
+      "kind": "title"
+    },
+    {
+      "id": "62758ac5-d02b-4ccf-b8bd-64956b568505",
+      "color": "#f3f5e8",
+      "background": null,
+      "notes": "Предложите привести наблюдение из повседневной жизни для этапа «Испарение».",
+      "items": [
+        {
+          "id": "154282af-fe6b-48b9-993f-1fbcf358dbe2",
+          "type": "shape",
+          "x": 24,
+          "y": 24,
+          "w": 1232,
+          "h": 672,
+          "text": "",
+          "src": "",
+          "size": 48,
+          "color": "#18293d",
+          "align": "left",
+          "shape": "rect",
+          "fill": {
+            "type": "none"
+          },
+          "stroke": "#287458",
+          "strokeWidth": 4,
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "b53f011d-c652-4922-9e8a-cea55c74283b",
+          "type": "text",
+          "x": 1090,
+          "y": 47,
+          "w": 105,
+          "h": 31,
+          "text": "АТЛАС",
+          "src": "",
+          "size": 22,
+          "color": "#28614a",
+          "align": "right",
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "7cbccaa2-8739-44f9-8a88-1f6f222fd25d",
+          "type": "text",
+          "text": "Испарение",
+          "src": "",
+          "x": 100,
+          "y": 95,
+          "w": 1030,
+          "h": 100,
+          "size": 64,
+          "color": "#214c3e",
+          "align": "left"
+        },
+        {
+          "id": "cdfc8444-219e-4c79-8f6b-03fe20631d3e",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 110,
+          "y": 242,
+          "w": 1020,
+          "h": 294,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "rounded",
+          "fill": {
+            "type": "solid",
+            "color": "#dbe9a9"
+          }
+        },
+        {
+          "id": "caa7910d-ef4e-4b86-a35b-91ccf1295e98",
+          "type": "text",
+          "text": "01",
+          "src": "",
+          "x": 164,
+          "y": 300,
+          "w": 215,
+          "h": 140,
+          "size": 95,
+          "color": "#35634e",
+          "align": "left"
+        },
+        {
+          "id": "7f92de89-3fd2-4be5-ac34-4824db06b708",
+          "type": "text",
+          "text": "Солнце нагревает воду. Часть воды становится водяным паром.",
+          "src": "",
+          "x": 390,
+          "y": 308,
+          "w": 652,
+          "h": 157,
+          "size": 44,
+          "color": "#264a43",
+          "align": "left"
+        }
+      ],
+      "kind": "normal"
+    },
+    {
+      "id": "907fbfed-5019-4b6b-acb1-fed6d6331019",
+      "color": "#f3f5e8",
+      "background": null,
+      "notes": "Предложите привести наблюдение из повседневной жизни для этапа «Конденсация».",
+      "items": [
+        {
+          "id": "a1a12480-94cb-4ee2-a380-06d7bf3727b6",
+          "type": "shape",
+          "x": 24,
+          "y": 24,
+          "w": 1232,
+          "h": 672,
+          "text": "",
+          "src": "",
+          "size": 48,
+          "color": "#18293d",
+          "align": "left",
+          "shape": "rect",
+          "fill": {
+            "type": "none"
+          },
+          "stroke": "#287458",
+          "strokeWidth": 4,
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "f2f14695-973a-4b37-84d1-1d35f7a37af8",
+          "type": "text",
+          "x": 1090,
+          "y": 47,
+          "w": 105,
+          "h": 31,
+          "text": "АТЛАС",
+          "src": "",
+          "size": 22,
+          "color": "#28614a",
+          "align": "right",
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "dc1146a1-2bf0-4aa4-b85f-87a304cfe86d",
+          "type": "text",
+          "text": "Конденсация",
+          "src": "",
+          "x": 100,
+          "y": 95,
+          "w": 1030,
+          "h": 100,
+          "size": 64,
+          "color": "#214c3e",
+          "align": "left"
+        },
+        {
+          "id": "1eb3ff50-25e2-43b5-b8b5-e112eb93999e",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 110,
+          "y": 242,
+          "w": 1020,
+          "h": 294,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "rounded",
+          "fill": {
+            "type": "solid",
+            "color": "#bfded4"
+          }
+        },
+        {
+          "id": "10aed3af-dba3-4f5c-a310-a806a97ad38e",
+          "type": "text",
+          "text": "02",
+          "src": "",
+          "x": 164,
+          "y": 300,
+          "w": 215,
+          "h": 140,
+          "size": 95,
+          "color": "#35634e",
+          "align": "left"
+        },
+        {
+          "id": "964ccfe3-337a-4cc8-9c8b-21e6ec291a2b",
+          "type": "text",
+          "text": "Высоко в воздухе пар охлаждается и собирается в маленькие капли.",
+          "src": "",
+          "x": 390,
+          "y": 308,
+          "w": 652,
+          "h": 157,
+          "size": 44,
+          "color": "#264a43",
+          "align": "left"
+        }
+      ],
+      "kind": "normal"
+    },
+    {
+      "id": "ecae23b6-c2cc-4d39-a6a8-6874e4821192",
+      "color": "#f3f5e8",
+      "background": null,
+      "notes": "Предложите привести наблюдение из повседневной жизни для этапа «Осадки».",
+      "items": [
+        {
+          "id": "fdbbf2e1-e8d2-4cfd-bdcc-e46b84d0aaf7",
+          "type": "shape",
+          "x": 24,
+          "y": 24,
+          "w": 1232,
+          "h": 672,
+          "text": "",
+          "src": "",
+          "size": 48,
+          "color": "#18293d",
+          "align": "left",
+          "shape": "rect",
+          "fill": {
+            "type": "none"
+          },
+          "stroke": "#287458",
+          "strokeWidth": 4,
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "53e93327-bea1-49aa-8fac-770dab451768",
+          "type": "text",
+          "x": 1090,
+          "y": 47,
+          "w": 105,
+          "h": 31,
+          "text": "АТЛАС",
+          "src": "",
+          "size": 22,
+          "color": "#28614a",
+          "align": "right",
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "3a8c7f2a-c9d9-4c44-9175-4e6ad77c5730",
+          "type": "text",
+          "text": "Осадки",
+          "src": "",
+          "x": 100,
+          "y": 95,
+          "w": 1030,
+          "h": 100,
+          "size": 64,
+          "color": "#214c3e",
+          "align": "left"
+        },
+        {
+          "id": "faeb39ff-14ce-442f-8e8b-1308480e25c3",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 110,
+          "y": 242,
+          "w": 1020,
+          "h": 294,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "rounded",
+          "fill": {
+            "type": "solid",
+            "color": "#bdd4de"
+          }
+        },
+        {
+          "id": "940479a1-ea7a-49d3-84a2-11fbc028528e",
+          "type": "text",
+          "text": "03",
+          "src": "",
+          "x": 164,
+          "y": 300,
+          "w": 215,
+          "h": 140,
+          "size": 95,
+          "color": "#35634e",
+          "align": "left"
+        },
+        {
+          "id": "19bd5ed7-28c5-407a-9749-535825bdb77c",
+          "type": "text",
+          "text": "Капли становятся крупнее. Они падают и возвращают воду на землю.",
+          "src": "",
+          "x": 390,
+          "y": 308,
+          "w": 652,
+          "h": 157,
+          "size": 44,
+          "color": "#264a43",
+          "align": "left"
+        }
+      ],
+      "kind": "normal"
+    },
+    {
+      "id": "cb560c59-f23e-4489-8f16-df99e538c1ca",
+      "color": "#f3f5e8",
+      "background": null,
+      "notes": "Попросите учеников рассказать путь одной капли.",
+      "items": [
+        {
+          "id": "87b1444a-0023-4c23-8984-393a40051680",
+          "type": "shape",
+          "x": 24,
+          "y": 24,
+          "w": 1232,
+          "h": 672,
+          "text": "",
+          "src": "",
+          "size": 48,
+          "color": "#18293d",
+          "align": "left",
+          "shape": "rect",
+          "fill": {
+            "type": "none"
+          },
+          "stroke": "#287458",
+          "strokeWidth": 4,
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "8be40551-4bec-4d29-8b3c-281dd91062d5",
+          "type": "text",
+          "x": 1090,
+          "y": 47,
+          "w": 105,
+          "h": 31,
+          "text": "АТЛАС",
+          "src": "",
+          "size": 22,
+          "color": "#28614a",
+          "align": "right",
+          "role": "decoration",
+          "fixed": true
+        },
+        {
+          "id": "c75b216a-112a-40ba-a02d-8c53c71d692b",
+          "type": "text",
+          "text": "Куда отправится капля?",
+          "src": "",
+          "x": 100,
+          "y": 112,
+          "w": 1075,
+          "h": 92,
+          "size": 61,
+          "color": "#234640",
+          "align": "left"
+        },
+        {
+          "id": "8d5d5507-e77b-41e8-8c96-76c3f1552df7",
+          "type": "text",
+          "text": "Нарисуй маршрут в трёх шагах:\nиспарение → облако → осадки.",
+          "src": "",
+          "x": 105,
+          "y": 262,
+          "w": 1060,
+          "h": 241,
+          "size": 49,
+          "color": "#234640",
+          "align": "left"
+        }
+      ],
+      "kind": "end"
+    }
+  ],
+  "header": "Школа · Кафедра естествознания"
+}

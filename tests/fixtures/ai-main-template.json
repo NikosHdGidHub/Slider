@@ -1,0 +1,342 @@
+{
+  "format": 3,
+  "kind": "presentation",
+  "description": "Зелёная учебная серия с нижней линейкой и полем для колонтитула.",
+  "deck": {
+    "version": 3,
+    "master": {
+      "name": "Урок в зелёной рамке",
+      "schemes": {
+        "title": {
+          "rows": [
+            1,
+            9
+          ],
+          "cols": [
+            1
+          ],
+          "padding": [
+            25,
+            70,
+            35,
+            70
+          ],
+          "cells": [
+            {
+              "id": "header",
+              "row": 0,
+              "col": 0,
+              "rows": 1,
+              "cols": 1,
+              "type": "header",
+              "padding": [
+                0,
+                15,
+                0,
+                15
+              ],
+              "value": "Учебная серия",
+              "style": {
+                "size": 25,
+                "color": "#3d7156"
+              }
+            },
+            {
+              "id": "body",
+              "row": 1,
+              "col": 0,
+              "rows": 1,
+              "cols": 1,
+              "type": "area",
+              "padding": [
+                12,
+                12,
+                12,
+                12
+              ]
+            }
+          ]
+        },
+        "normal": {
+          "rows": [
+            1,
+            9
+          ],
+          "cols": [
+            1
+          ],
+          "padding": [
+            25,
+            70,
+            35,
+            70
+          ],
+          "cells": [
+            {
+              "id": "header",
+              "row": 0,
+              "col": 0,
+              "rows": 1,
+              "cols": 1,
+              "type": "header",
+              "padding": [
+                0,
+                15,
+                0,
+                15
+              ],
+              "value": "Учебная серия",
+              "style": {
+                "size": 25,
+                "color": "#3d7156"
+              }
+            },
+            {
+              "id": "body",
+              "row": 1,
+              "col": 0,
+              "rows": 1,
+              "cols": 1,
+              "type": "area",
+              "padding": [
+                12,
+                12,
+                12,
+                12
+              ]
+            }
+          ]
+        },
+        "end": {
+          "rows": [
+            1,
+            9
+          ],
+          "cols": [
+            1
+          ],
+          "padding": [
+            25,
+            70,
+            35,
+            70
+          ],
+          "cells": [
+            {
+              "id": "header",
+              "row": 0,
+              "col": 0,
+              "rows": 1,
+              "cols": 1,
+              "type": "header",
+              "padding": [
+                0,
+                15,
+                0,
+                15
+              ],
+              "value": "Учебная серия",
+              "style": {
+                "size": 25,
+                "color": "#3d7156"
+              }
+            },
+            {
+              "id": "body",
+              "row": 1,
+              "col": 0,
+              "rows": 1,
+              "cols": 1,
+              "type": "area",
+              "padding": [
+                12,
+                12,
+                12,
+                12
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "id": "e13c5f27-c6c4-435a-b751-e61965510a79",
+    "title": "Урок в зелёной рамке",
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "theme": {
+      "palette": [
+        "#163e49",
+        "#e5f4ef",
+        "#f8bd56"
+      ],
+      "styles": [
+        {
+          "id": "title",
+          "label": "Заголовок",
+          "values": {
+            "font": "sans",
+            "size": 64,
+            "bold": true,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "subtitle",
+          "label": "Подзаголовок",
+          "values": {
+            "font": "sans",
+            "size": 44,
+            "bold": false,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "body",
+          "label": "Основной текст",
+          "values": {
+            "font": "sans",
+            "size": 32,
+            "bold": false,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "caption",
+          "label": "Подпись",
+          "values": {
+            "font": "sans",
+            "size": 24,
+            "bold": false,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "accent",
+          "label": "Акцент",
+          "values": {
+            "font": "sans",
+            "size": 38,
+            "bold": true,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        },
+        {
+          "id": "small",
+          "label": "Мелкий текст",
+          "values": {
+            "font": "sans",
+            "size": 18,
+            "bold": false,
+            "color": "#163e49",
+            "fit": true,
+            "minSize": 18
+          }
+        }
+      ]
+    },
+    "resources": {
+      "fonts": []
+    },
+    "slides": [
+      {
+        "id": "3c8bc5b0-2167-4907-b699-b817fe1377c6",
+        "color": "#e9f4eb",
+        "background": null,
+        "notes": "",
+        "items": [
+          {
+            "id": "faf9d6fd-13a2-456d-acba-2f5dc783fb07",
+            "type": "shape",
+            "text": "",
+            "src": "",
+            "x": 0,
+            "y": 702,
+            "w": 1280,
+            "h": 18,
+            "size": 24,
+            "color": "#234640",
+            "align": "left",
+            "shape": "rect",
+            "fill": {
+              "type": "solid",
+              "color": "#4b8065"
+            },
+            "fixed": true,
+            "role": "decoration"
+          }
+        ],
+        "kind": "title"
+      },
+      {
+        "id": "aff9df86-7943-4a9c-9175-e2caf4719e0e",
+        "color": "#f4f8ef",
+        "background": null,
+        "notes": "",
+        "items": [
+          {
+            "id": "122318e2-52ab-4976-80f2-15264c241c83",
+            "type": "shape",
+            "text": "",
+            "src": "",
+            "x": 0,
+            "y": 702,
+            "w": 1280,
+            "h": 18,
+            "size": 24,
+            "color": "#234640",
+            "align": "left",
+            "shape": "rect",
+            "fill": {
+              "type": "solid",
+              "color": "#4b8065"
+            },
+            "fixed": true,
+            "role": "decoration"
+          }
+        ],
+        "kind": "normal"
+      },
+      {
+        "id": "eee2b7f3-83c5-42c3-9788-707e9269d13c",
+        "color": "#e8eee5",
+        "background": null,
+        "notes": "",
+        "items": [
+          {
+            "id": "ed610168-23b7-4dbb-80d9-2067055fa6f8",
+            "type": "shape",
+            "text": "",
+            "src": "",
+            "x": 0,
+            "y": 702,
+            "w": 1280,
+            "h": 18,
+            "size": 24,
+            "color": "#234640",
+            "align": "left",
+            "shape": "rect",
+            "fill": {
+              "type": "solid",
+              "color": "#4b8065"
+            },
+            "fixed": true,
+            "role": "decoration"
+          }
+        ],
+        "kind": "end"
+      }
+    ]
+  }
+}

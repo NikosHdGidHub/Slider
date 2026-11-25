@@ -138,8 +138,7 @@ button svg {
 .account b {
   font-size: 14px;
 }
-.account small,
-.card small {
+.account small {
   font-size: 13px;
   color: #69776d;
   margin-top: 4px;
@@ -189,8 +188,7 @@ button svg {
   margin: auto;
   padding: 46px clamp(24px, 4vw, 65px) 60px;
 }
-.title-row,
-.section-title {
+.title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -200,8 +198,6 @@ button svg {
   margin-bottom: 28px;
 }
 h1,
-.feature h2,
-.section-title h2,
 .dialog h2,
 .guide h2 {
   font-family: Georgia, 'Times New Roman', serif;
@@ -213,7 +209,6 @@ h1 {
 }
 .primary,
 .secondary,
-.feature-copy button,
 .pub button {
   border-radius: 7px;
   padding: 11px 15px;
@@ -230,104 +225,6 @@ h1 {
   border: 1px solid #d4dbd0;
   background: #fff;
 }
-.feature {
-  border-radius: 13px;
-  overflow: hidden;
-  display: grid;
-  grid-template-columns: 46% 54%;
-  background: #213f34;
-  color: #fbf8e9;
-  min-height: 295px;
-}
-.feature-copy {
-  padding: 30px clamp(25px, 3.1vw, 52px) 29px;
-}
-.feature-tag {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #dbe8ce;
-  font-size: 13px;
-}
-.feature h2 {
-  margin: 17px 0 13px;
-  font-size: clamp(38px, 3.9vw, 65px);
-  line-height: 0.98;
-  letter-spacing: -1.5px;
-}
-.feature h2 em {
-  color: #e0e8b6;
-  font-weight: 400;
-}
-.feature-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #d5dfd1;
-  font-size: 14px;
-}
-.feature-meta i {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.feature-copy button {
-  background: #f2f5e6;
-  color: #294a36;
-  margin-top: 22px;
-}
-.plate {
-  background-color: #dce2c1;
-  background-size: cover;
-  background-position: center;
-  position: relative;
-  color: #48604d;
-}
-.plate-north {
-  font:
-    12px Georgia,
-    serif;
-  position: absolute;
-  right: 24px;
-  top: 19px;
-  text-align: center;
-}
-.scale-line {
-  position: absolute;
-  bottom: 22px;
-  left: 24px;
-  width: 67px;
-  border-bottom: 2px solid #546754;
-  display: flex;
-  justify-content: space-between;
-  padding-bottom: 3px;
-  font:
-    11px Georgia,
-    serif;
-}
-.collection {
-  margin-top: 40px;
-}
-.section-title {
-  margin-bottom: 17px;
-}
-.section-title h2,
-.guide h2 {
-  font-size: clamp(24px, 2.1vw, 34px);
-  letter-spacing: -0.8px;
-}
-.section-title h2 span {
-  font:
-    13px Arial,
-    sans-serif;
-  vertical-align: middle;
-  border-radius: 20px;
-  background: #e8eee4;
-  color: #4b6650;
-  padding: 3px 8px;
-  margin-left: 5px;
-}
 .empty {
   display: flex;
   flex-direction: column;
@@ -341,15 +238,6 @@ h1 {
   background: #f5f7f1;
   padding: 20px;
 }
-.folder {
-  width: 46px;
-  height: 42px;
-  margin-bottom: 3px;
-}
-.folder svg {
-  width: 25px;
-  height: 25px;
-}
 .empty h3 {
   font-size: 17px;
   font-weight: 600;
@@ -359,69 +247,12 @@ h1 {
   line-height: 1.5;
   font-size: 14px;
 }
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 18px;
-}
-.card,
 .pub {
   position: relative;
   background: #fff;
   border: 1px solid #d6ddd2;
   border-radius: 10px;
   padding: 12px;
-}
-.card-open {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  text-align: left;
-  width: 100%;
-  gap: 4px;
-  padding: 0;
-}
-.card-open b {
-  margin: 8px 30px 0 0;
-  overflow-wrap: anywhere;
-}
-.card-preview {
-  overflow: hidden;
-  border: 1px solid #e2e6de;
-  border-radius: 4px;
-}
-.card-actions {
-  position: absolute;
-  right: 6px;
-  bottom: 9px;
-
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.card-actions .icon {
-  position: static;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  width: 32px;
-  height: 32px;
-  padding: 0;
-
-  border-radius: 7px;
-  cursor: pointer;
-}
-
-.card-actions .icon:hover {
-  background: #eef3ef;
-}
-
-.card-actions .icon:focus-visible {
-  outline: 2px solid #406b52;
-  outline-offset: 2px;
 }
 .pub {
   display: flex;
@@ -565,9 +396,6 @@ h1 {
   .library {
     padding: 30px 22px;
   }
-  .feature {
-    min-height: 260px;
-  }
 }
 @media (max-width: 710px) {
   .sidebar {
@@ -604,31 +432,6 @@ h1 {
     flex-wrap: wrap;
     margin-bottom: 20px;
   }
-  .feature {
-    grid-template-columns: 52% 48%;
-    min-height: 250px;
-  }
-  .feature-copy {
-    padding: 20px 14px;
-  }
-  .feature h2 {
-    font-size: 37px;
-  }
-  .feature-tag,
-  .feature-meta {
-    font-size: 12px;
-  }
-  .feature-copy button {
-    font-size: 13px;
-    padding: 8px;
-  }
-  .section-title {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-  .collection {
-    margin-top: 24px;
-  }
   .pub {
     flex-wrap: wrap;
   }
@@ -640,17 +443,6 @@ h1 {
 .title-row h1 {
   margin-right: auto;
 }
-.instructions-button {
-  white-space: normal;
-}
-.catalog-scope,
-.template-info small {
-  color: #526b68;
-  font-size: 0.85rem;
-}
-.catalog-bar,
-.catalog-tabs,
-.catalog-actions,
 .preview-nav,
 .field-pair {
   display: flex;
@@ -658,67 +450,9 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
 }
-.catalog-bar {
-  margin: 20px 0;
-}
-.catalog-tabs {
-  padding: 4px;
-  background: #e8eee8;
-  border-radius: 10px;
-  margin-right: auto;
-}
-.catalog-tabs button {
-  padding: 8px 14px;
-  border-radius: 7px;
-}
-.catalog-tabs .active {
-  background: white;
-  box-shadow: 0 1px 4px #193e341c;
-}
-.template-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
-  gap: 18px;
-}
-.template-card {
-  border: 1px solid #d6dfd8;
-  border-radius: 14px;
-  overflow: hidden;
-  background: white;
-}
-.template-cover {
-  display: block;
-  width: 100%;
-  padding: 0;
-}
-.template-info {
-  padding: 18px;
-}
-.template-info h2 {
-  margin: 0.35em 0;
-  font-size: 1.3rem;
-}
-.template-info p {
-  line-height: 1.5;
-}
-.template-info fieldset {
-  padding: 0;
-  border: 0;
-  margin: 0;
-}
-.catalog-actions details {
-  width: 100%;
-}
-.catalog-actions details div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.catalog-actions details button,
 .preview-nav button {
   padding: 6px;
 }
-.catalog-actions summary,
 .import-preview summary {
   cursor: pointer;
   font-weight: 600;

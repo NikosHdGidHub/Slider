@@ -1,4 +1,4 @@
-import { newShape, type Item, type PathNode, type Point } from './model'
+import { newShape, type Item, type PathNode, type Point } from './model.ts'
 const geometry: Record<string, string[]> = {
   svg: ['viewBox', 'xmlns', 'width', 'height'],
   g: [],

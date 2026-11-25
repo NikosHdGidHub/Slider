@@ -1,0 +1,673 @@
+{
+  "version": 3,
+  "master": {
+    "name": "Лаборатория 2 × 3",
+    "schemes": {
+      "title": {
+        "rows": [
+          1
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cells": [
+          {
+            "id": "body",
+            "row": 0,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "normal": {
+        "rows": [
+          1,
+          8,
+          1
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          26,
+          66,
+          26,
+          66
+        ],
+        "cells": [
+          {
+            "id": "header",
+            "row": 0,
+            "col": 0,
+            "type": "header",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "style": {
+              "size": 20,
+              "bold": true,
+              "color": "#2b6350"
+            }
+          },
+          {
+            "id": "body",
+            "row": 1,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "id": "footer",
+            "row": 2,
+            "col": 0,
+            "type": "footer",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "value": "Лабораторная тетрадь",
+            "style": {
+              "size": 19,
+              "color": "#45665a"
+            }
+          }
+        ]
+      },
+      "end": {
+        "rows": [
+          1
+        ],
+        "cols": [
+          1
+        ],
+        "padding": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cells": [
+          {
+            "id": "body",
+            "row": 0,
+            "col": 0,
+            "type": "area",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    "art": {}
+  },
+  "id": "ed547564-b71b-47a9-92ed-fdaf62b3767c",
+  "title": "Строение Солнечной системы",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "theme": {
+    "palette": [
+      "#163e49",
+      "#e5f4ef",
+      "#f8bd56"
+    ],
+    "styles": [
+      {
+        "id": "title",
+        "label": "Заголовок",
+        "values": {
+          "font": "sans",
+          "size": 64,
+          "bold": true,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "subtitle",
+        "label": "Подзаголовок",
+        "values": {
+          "font": "sans",
+          "size": 44,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "body",
+        "label": "Основной текст",
+        "values": {
+          "font": "sans",
+          "size": 32,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "caption",
+        "label": "Подпись",
+        "values": {
+          "font": "sans",
+          "size": 24,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "accent",
+        "label": "Акцент",
+        "values": {
+          "font": "sans",
+          "size": 38,
+          "bold": true,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      },
+      {
+        "id": "small",
+        "label": "Мелкий текст",
+        "values": {
+          "font": "sans",
+          "size": 18,
+          "bold": false,
+          "color": "#163e49",
+          "fit": true,
+          "minSize": 18
+        }
+      }
+    ]
+  },
+  "resources": {
+    "fonts": []
+  },
+  "slides": [
+    {
+      "id": "8f426ba2-b168-4ec9-bd02-123402eaddb4",
+      "color": "#ffffff",
+      "background": null,
+      "notes": "Покажите рисунок орбит. Предложите назвать знакомые планеты.",
+      "items": [
+        {
+          "id": "3e76b578-05c9-4953-94ef-2fd78f19813f",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 0,
+          "y": 0,
+          "w": 1280,
+          "h": 720,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "rect",
+          "fill": {
+            "type": "solid",
+            "color": "#152b31"
+          }
+        },
+        {
+          "id": "ed31dbb0-08de-4a16-a767-1a7d56a9057d",
+          "type": "text",
+          "text": "АСТРОНОМИЯ",
+          "src": "",
+          "x": 86,
+          "y": 106,
+          "w": 600,
+          "h": 46,
+          "size": 27,
+          "color": "#f1ba6d",
+          "align": "left"
+        },
+        {
+          "id": "e6251cc7-d778-4aa5-901f-e6eca191e8e6",
+          "type": "text",
+          "text": "Строение\nСолнечной системы",
+          "src": "",
+          "x": 82,
+          "y": 193,
+          "w": 1020,
+          "h": 231,
+          "size": 75,
+          "color": "#f2f6ed",
+          "align": "left"
+        },
+        {
+          "id": "cacd7540-2adc-46e9-aeb9-16f55edd05c0",
+          "type": "text",
+          "text": "Солнце, планеты и их орбиты",
+          "src": "",
+          "x": 89,
+          "y": 515,
+          "w": 800,
+          "h": 66,
+          "size": 40,
+          "color": "#bbd4ce",
+          "align": "left"
+        },
+        {
+          "id": "4a17470e-1a8c-4fdc-99aa-c2bdaaa8bb87",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 904,
+          "y": 199,
+          "w": 278,
+          "h": 278,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "circle",
+          "fill": {
+            "type": "solid",
+            "color": "#e9a45c"
+          }
+        },
+        {
+          "id": "4942bc95-d01f-4de6-a0a1-56572e4962a2",
+          "type": "shape",
+          "text": "",
+          "src": "",
+          "x": 952,
+          "y": 240,
+          "w": 175,
+          "h": 175,
+          "size": 24,
+          "color": "#234640",
+          "align": "left",
+          "shape": "circle",
+          "fill": {
+            "type": "solid",
+            "color": "#f4bb70"
+          }
+        }
+      ],
+      "kind": "title"
+    },
+    {
+      "id": "39992fe7-448b-4bc6-b270-bb4c784a8923",
+      "color": "#ffffff",
+      "background": null,
+      "notes": "Дайте ученикам минуту на наблюдение и попросите продолжить фразу.",
+      "items": [
+        {
+          "id": "30557931-287c-42fe-a466-fd864b0f4db6",
+          "type": "image",
+          "x": 80,
+          "y": 80,
+          "w": 560,
+          "h": 140,
+          "text": "",
+          "src": "data:image/png;base64,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",
+          "size": 48,
+          "color": "#18293d",
+          "align": "left",
+          "slot": "s/photo"
+        },
+        {
+          "id": "34526b99-3ad6-440d-88b7-841cc1913b2a",
+          "type": "text",
+          "text": "Почему планеты движутся по орбитам?",
+          "src": "",
+          "x": 0,
+          "y": 0,
+          "w": 1280,
+          "h": 120,
+          "size": 49,
+          "color": "#234640",
+          "align": "left",
+          "slot": "s/question"
+        },
+        {
+          "id": "86986acf-d4a2-40c2-9546-00872d6f80bc",
+          "type": "text",
+          "text": "Гравитация притягивает планеты к Солнцу. Их движение удерживает их на орбитах.",
+          "src": "",
+          "x": 0,
+          "y": 0,
+          "w": 550,
+          "h": 220,
+          "size": 40,
+          "color": "#234640",
+          "align": "left",
+          "slot": "s/reason"
+        },
+        {
+          "id": "750c9895-df6d-480a-a125-8ec0a5202dad",
+          "type": "text",
+          "text": "На рисунке расстояния и размеры условны.",
+          "src": "",
+          "x": 0,
+          "y": 0,
+          "w": 1200,
+          "h": 90,
+          "size": 31,
+          "color": "#234640",
+          "align": "left",
+          "slot": "s/answer"
+        }
+      ],
+      "kind": "normal",
+      "structure": {
+        "rows": [
+          1,
+          2.8,
+          1
+        ],
+        "cols": [
+          1.1,
+          1
+        ],
+        "padding": [
+          17,
+          24,
+          15,
+          24
+        ],
+        "cells": [
+          {
+            "id": "question",
+            "row": 0,
+            "col": 0,
+            "type": "title",
+            "rows": 1,
+            "cols": 2,
+            "padding": [
+              9,
+              20,
+              8,
+              20
+            ],
+            "style": {
+              "size": 46,
+              "bold": true
+            }
+          },
+          {
+            "id": "reason",
+            "row": 1,
+            "col": 0,
+            "type": "description",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              10,
+              20,
+              12,
+              20
+            ],
+            "fill": "#e7f0e9",
+            "style": {
+              "size": 38
+            }
+          },
+          {
+            "id": "photo",
+            "row": 1,
+            "col": 1,
+            "type": "image",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              10,
+              14,
+              12,
+              14
+            ],
+            "fill": "#e9f1ed"
+          },
+          {
+            "id": "answer",
+            "row": 2,
+            "col": 0,
+            "type": "caption",
+            "rows": 1,
+            "cols": 2,
+            "padding": [
+              8,
+              20,
+              8,
+              20
+            ],
+            "style": {
+              "size": 28
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "69582c6e-4780-4ca6-a537-d0854fd45c7d",
+      "color": "#ffffff",
+      "background": null,
+      "notes": "Дайте ученикам минуту на наблюдение и попросите продолжить фразу.",
+      "items": [
+        {
+          "id": "3abc9634-fa54-4cad-8903-aaee65e91cf5",
+          "type": "image",
+          "x": 80,
+          "y": 80,
+          "w": 560,
+          "h": 140,
+          "text": "",
+          "src": "data:image/png;base64,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",
+          "size": 48,
+          "color": "#18293d",
+          "align": "left",
+          "slot": "s/photo"
+        },
+        {
+          "id": "6bf9d64d-ec03-4906-9660-9e9f693243c0",
+          "type": "text",
+          "text": "Чем отличаются планеты?",
+          "src": "",
+          "x": 0,
+          "y": 0,
+          "w": 1280,
+          "h": 120,
+          "size": 49,
+          "color": "#234640",
+          "align": "left",
+          "slot": "s/question"
+        },
+        {
+          "id": "d262b073-ba91-4101-b01d-834ae9d783c1",
+          "type": "text",
+          "text": "Каменистые планеты ближе к Солнцу. Газовые и ледяные гиганты движутся дальше.",
+          "src": "",
+          "x": 0,
+          "y": 0,
+          "w": 550,
+          "h": 220,
+          "size": 40,
+          "color": "#234640",
+          "align": "left",
+          "slot": "s/reason"
+        },
+        {
+          "id": "3054fa50-764e-49cd-8899-27fcaf2f88bc",
+          "type": "text",
+          "text": "Назови одну каменистую планету.",
+          "src": "",
+          "x": 0,
+          "y": 0,
+          "w": 1200,
+          "h": 90,
+          "size": 31,
+          "color": "#234640",
+          "align": "left",
+          "slot": "s/answer"
+        }
+      ],
+      "kind": "normal",
+      "structure": {
+        "rows": [
+          1,
+          2.8,
+          1
+        ],
+        "cols": [
+          1.1,
+          1
+        ],
+        "padding": [
+          17,
+          24,
+          15,
+          24
+        ],
+        "cells": [
+          {
+            "id": "question",
+            "row": 0,
+            "col": 0,
+            "type": "title",
+            "rows": 1,
+            "cols": 2,
+            "padding": [
+              9,
+              20,
+              8,
+              20
+            ],
+            "style": {
+              "size": 46,
+              "bold": true
+            }
+          },
+          {
+            "id": "reason",
+            "row": 1,
+            "col": 0,
+            "type": "description",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              10,
+              20,
+              12,
+              20
+            ],
+            "fill": "#e7f0e9",
+            "style": {
+              "size": 38
+            }
+          },
+          {
+            "id": "photo",
+            "row": 1,
+            "col": 1,
+            "type": "image",
+            "rows": 1,
+            "cols": 1,
+            "padding": [
+              10,
+              14,
+              12,
+              14
+            ],
+            "fill": "#e9f1ed"
+          },
+          {
+            "id": "answer",
+            "row": 2,
+            "col": 0,
+            "type": "caption",
+            "rows": 1,
+            "cols": 2,
+            "padding": [
+              8,
+              20,
+              8,
+              20
+            ],
+            "style": {
+              "size": 28
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "6b9beac0-640c-4d9c-bce2-c3a9d6a7c8db",
+      "color": "#ffffff",
+      "background": null,
+      "notes": "Попросите сравнить модель на рисунке и реальную Солнечную систему.",
+      "items": [
+        {
+          "id": "30bdee17-2b61-44e0-9c4f-88053feff893",
+          "type": "text",
+          "text": "Итог наблюдения",
+          "src": "",
+          "x": 90,
+          "y": 105,
+          "w": 1085,
+          "h": 109,
+          "size": 70,
+          "color": "#234640",
+          "align": "left"
+        },
+        {
+          "id": "bd286b78-8e67-4075-94d8-078906774690",
+          "type": "text",
+          "text": "Что общего у всех восьми планет?\nЧто на схеме показано условно?",
+          "src": "",
+          "x": 95,
+          "y": 286,
+          "w": 1030,
+          "h": 175,
+          "size": 47,
+          "color": "#234640",
+          "align": "left"
+        }
+      ],
+      "kind": "end"
+    }
+  ],
+  "header": "Наблюдения и доказательства"
+}

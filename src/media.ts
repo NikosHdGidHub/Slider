@@ -1,8 +1,8 @@
-import { digest } from './digest'
+import { digest } from './digest.ts'
 import { mediaSlides } from './grid.ts'
-import { importSVG } from './vectorImport'
-import { imageSource, MAX_DOCUMENT_BYTES, validateDeck } from './model'
-import type { Deck } from './model'
+import { importSVG } from './vectorImport.ts'
+import { imageSource, MAX_DOCUMENT_BYTES, validateDeck } from './model.ts'
+import type { Deck } from './model.ts'
 
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024
 const RASTER_MIME = ['image/png', 'image/jpeg', 'image/webp']

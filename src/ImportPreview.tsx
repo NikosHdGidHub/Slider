@@ -16,6 +16,26 @@ function overlaps(a: Box, b: Box) {
     a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
   )
 }
+function insideOutline(frame: Item, content: Box) {
+  if (
+    frame.type !== 'shape' ||
+    (frame.shape !== 'rect' && frame.shape !== 'rounded') ||
+    frame.fill?.type !== 'none' ||
+    frame.text ||
+    frame.rotation
+  )
+    return false
+  const gap = Math.max(
+    frame.strokeWidth ?? 0,
+    frame.radius ?? (frame.shape === 'rounded' ? 24 : 0)
+  )
+  return (
+    content.x >= frame.x + gap &&
+    content.y >= frame.y + gap &&
+    content.x + content.w <= frame.x + frame.w - gap &&
+    content.y + content.h <= frame.y + frame.h - gap
+  )
+}
 export function ImportPreview({
   deck,
   accept,
@@ -75,6 +95,8 @@ export function ImportPreview({
         if (out.length >= 24) break
         if (
           overlaps(b, boxes[j]) &&
+          !insideOutline(o, boxes[j]) &&
+          !insideOutline(visible[j], b) &&
           (o.role !== visible[j].role || o.text || visible[j].text)
         )
           out.push(

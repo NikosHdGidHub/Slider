@@ -204,7 +204,7 @@ body:has(.workspace, .atlas-viewer) {
   border-inline-start: 1px solid var(--edge);
   padding-inline-start: 6px;
 }
-.workspace .workspace-icon,
+.workspace .icon-button,
 .zoom-bar button {
   flex: none;
   display: inline-flex;
@@ -216,12 +216,12 @@ body:has(.workspace, .atlas-viewer) {
   border: 1px solid transparent;
   border-radius: 5px;
 }
-.workspace-icon svg,
+.icon-button svg,
 .zoom-bar button svg {
   width: 17px;
   height: 17px;
 }
-.workspace-icon:hover:not(:disabled),
+.icon-button:hover:not(:disabled),
 .zoom-bar button:hover:not(:disabled) {
   background: var(--raised);
 }

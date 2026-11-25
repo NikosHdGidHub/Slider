@@ -7,7 +7,6 @@ import { rememberImage } from './storage'
 import { useHistory } from './StudioTools'
 import { GridDesigner } from './GridDesigner'
 import { templateFrom } from './catalog'
-import { templateInstructions } from './instructions'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
@@ -15,7 +14,6 @@ import {
   Library,
   Globe2,
   BookOpenText,
-  Plus,
   Upload,
   Play,
   ArrowUpRight,
@@ -25,14 +23,12 @@ import {
   FolderOpen,
   FileJson,
   Pencil,
-  Trash2,
   Link2,
   LogOut,
   CloudOff,
   Menu,
   X,
   ChevronRight,
-  Compass,
   QrCode,
   LogIn,
   RefreshCw,
@@ -52,17 +48,21 @@ import { FileLibrary } from './Files'
 import { publish, fingerprint } from './publication'
 import { collectStyles } from './styleLibrary'
 import { TemplateLibrary } from './TemplateLibrary'
+import { LessonLibrary } from './LessonLibrary'
+import { ActionMenus } from './ActionMenu'
+import { useLibrarySettings } from './Library'
+import { useStoredPreference } from './workspacePreferences'
 import { ImportPreview } from './ImportPreview'
 import { builtins, validateTemplate, type Template } from './catalog'
 import { getCatalog, saveLocal, type CatalogRow } from './templateStore'
-import { instructions, download } from './instructions'
+import { download, referencedFonts } from './instructions'
 import { Editor } from './Editor'
 import { Viewer } from './Viewer'
 import { ReceiveLesson, SendLesson } from './TransferScreen'
 import { parsePair, receiveHash } from './transfer'
 import { Stage } from './Stage'
+import { builtinFonts } from './schema'
 import { example } from './example'
-import relief from './assets/relief.webp'
 import { registerShell, ensureShell } from './offline'
 import guide from '../docs/USER_GUIDE.md?raw'
 import {
@@ -109,6 +109,7 @@ function App() {
     [publicDeck, setPublicDeck] = useState<Deck | null>(null)
   const [online, setOnline] = useState(navigator.onLine),
     [libraryError, libError] = useState(''),
+    [listReady, setListReady] = useState(false),
     importer = useRef<HTMLInputElement>(null)
   const allowed = localMode || owner
   const phone = isPhone()
@@ -121,9 +122,21 @@ function App() {
   const [catalog, setCatalog] = useState<CatalogRow[]>(
     builtins.map((template) => ({ template, builtin: true }))
   )
-  const [catalogKind, setCatalogKind] =
-    useState<Template['kind']>('presentation')
-  const [scope, setScope] = useState('')
+  const [catalogKind, setCatalogKind] = useStoredPreference<Template['kind']>(
+    'atlas.library.v1.template-tab',
+    'presentation',
+    (stored) =>
+      stored === 'presentation' || stored === 'layout' ? stored : undefined
+  )
+  const lessonsSettings = useLibrarySettings('lessons')
+  const presentationSettings = useLibrarySettings('presentation')
+  const layoutSettings = useLibrarySettings('layout')
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState('')
+  const [catalogConnection, setCatalogConnection] = useState<
+    'offline' | 'error'
+  >()
+  const catalogRequest = useRef(0)
   const [editingTemplate, setEditingTemplate] = useState<{
     t: Template
     row?: CatalogRow
@@ -173,12 +186,24 @@ function App() {
   const access = useRef(allowed)
   access.current = allowed
   async function refreshCatalog() {
-    const result = await getCatalog(allowed, owner)
-    if (access.current === allowed) {
-      setCatalog(result.rows)
-      setScope(result.scope)
+    const request = ++catalogRequest.current
+    setCatalogLoading(true)
+    setCatalogError('')
+    try {
+      const result = await getCatalog(allowed, owner)
+      if (access.current === allowed && request === catalogRequest.current) {
+        setCatalog(result.rows)
+        setCatalogConnection(result.connection)
+      }
+      return result
+    } catch (error) {
+      if (access.current === allowed && request === catalogRequest.current)
+        setCatalogError(errorText(error))
+      throw error
+    } finally {
+      if (access.current === allowed && request === catalogRequest.current)
+        setCatalogLoading(false)
     }
-    return result
   }
   async function prepareForOffline(deck: Deck) {
     await ensureShell()
@@ -193,63 +218,31 @@ function App() {
     ? catalog
     : builtins.map((template) => ({ template, builtin: true }))
   useEffect(() => {
-    void refreshCatalog().catch((e) => notice(errorText(e)))
+    void refreshCatalog().catch(() => {})
     if (!allowed) setEditingTemplate(null)
   }, [allowed, online])
+  const inEditor = !!(doc || editingTemplate)
   const styleLibrary = useMemo(
     () =>
-      collectStyles([
-        ...visibleRows.map((r) => r.template.deck),
-        ...(allowed ? list.map((e) => e.deck) : []),
-      ]),
-    [catalog, allowed, list]
+      inEditor
+        ? collectStyles([
+            ...visibleRows.map((row) => row.template.deck),
+            ...(allowed ? list.map((entry) => entry.deck) : []),
+          ])
+        : undefined,
+    [catalog, allowed, list, inEditor]
   )
-  async function getInstructions() {
-    if (!allowed) {
-      dialog('login')
-      return
-    }
-    await task('Формируем инструкцию…', async () => {
-      const result = await refreshCatalog()
-      if (allowed !== access.current) return
-      const templates = await Promise.all(
-        result.rows.map(async ({ template }) => {
-          if (
-            !navigator.onLine ||
-            !template.deck.slides.some(
-              (s) =>
-                s.background?.startsWith('https:') ||
-                s.items.some((o) => o.src.startsWith('https:'))
-            )
-          )
-            return template
-          try {
-            return { ...template, deck: await embedImages(template.deck) }
-          } catch {
-            return template
-          }
-        })
-      )
-      if (allowed !== access.current) return
-      const styleCatalog = collectStyles([
-        ...templates.map((t) => t.deck),
-        ...(allowed ? (await entries()).map((e) => e.deck) : []),
-      ])
-      download(
-        page === 'templates'
-          ? 'atlas-template-instructions.txt'
-          : 'atlas-presentation-instructions.txt',
-        page === 'templates'
-          ? templateInstructions(templates, result.scope, styleCatalog)
-          : instructions(templates, result.scope, styleCatalog),
-        'text/plain'
-      )
-      notice(result.scope + '. Инструкция скачана.')
-    })
-  }
+
   async function refresh() {
-    setList(await entries())
-    libError('')
+    try {
+      setList(await entries())
+      libError('')
+    } catch (error) {
+      libError(errorText(error))
+      throw error
+    } finally {
+      setListReady(true)
+    }
   }
   async function task(label: string, fn: () => Promise<void>) {
     setBusy(label)
@@ -262,6 +255,7 @@ function App() {
     }
   }
   function dialog(name: string) {
+    notice('')
     setPreview(null)
     setValue('')
     password('')
@@ -320,6 +314,7 @@ function App() {
     if (allowed) refresh().catch((e) => libError(errorText(e)))
     else {
       setList([])
+      setListReady(false)
       setDoc(null)
       current.current = null
     }
@@ -644,22 +639,18 @@ function App() {
   async function importData(raw: string) {
     if (!allowEditing()) return
     const d = validateDeck(raw)
-    const used = new Set<string | undefined>(
-      d.theme.styles.map((s) => s.values.font)
+    const used = referencedFonts(d)
+    for (const font of d.resources.fonts) used.delete(font.id)
+    const fallback = [...used].some(
+      (font) => !Object.hasOwn(builtinFonts, font)
     )
-    for (const s of d.slides)
-      for (const o of s.items) {
-        used.add(o.overrides?.font)
-        o.paragraphs?.forEach((p) => p.runs.forEach((r) => used.add(r.font)))
-      }
-    for (const g of [
-      ...Object.values(d.master.schemes),
-      ...d.slides.flatMap((s) => (s.structure ? [s.structure] : [])),
-    ])
-      for (const c of g.cells) used.add(c.style?.font)
-    for (const f of styleLibrary.fonts)
-      if (used.has(f.id) && !d.resources.fonts.some((a) => a.id === f.id))
-        d.resources.fonts.push(structuredClone(f))
+      ? collectStyles([
+          ...visibleRows.map((row) => row.template.deck),
+          ...list.map((entry) => entry.deck),
+        ])
+      : undefined
+    for (const font of fallback?.fonts ?? [])
+      if (used.has(font.id)) d.resources.fonts.push(structuredClone(font))
     if (new Blob([JSON.stringify(d)]).size > MAX_DOCUMENT_BYTES)
       throw new Error('Со встроенными шрифтами файл превышает 64 МиБ.')
     validateDeck(d)
@@ -701,6 +692,14 @@ function App() {
       else if (modal === 'import') await importData(value)
     })
   }
+  function exportDeck(deck: Deck) {
+    const json = JSON.stringify(validateDeck(deck))
+    if (new Blob([json]).size > MAX_DOCUMENT_BYTES)
+      throw new Error(
+        'Для импорта файл должен быть меньше 64 МБ. Разделите занятие.'
+      )
+    download((deck.title.replace(/[\\/]/g, '_') || 'Методичка') + '.json', json)
+  }
   async function act(id: 'export' | 'publish' | 'offline', exitAfter = false) {
     const d = current.current
     if (!d) return
@@ -712,20 +711,7 @@ function App() {
           : 'Подготовка JSON…',
       async () => {
         if (id === 'export') {
-          const data = validateDeck(d),
-            file = new Blob([JSON.stringify(data)], {
-              type: 'application/json',
-            })
-          if (file.size > MAX_DOCUMENT_BYTES)
-            throw new Error(
-              'Для импорта файл должен быть меньше 64 МБ. Разделите занятие.'
-            )
-          const url = URL.createObjectURL(file),
-            a = document.createElement('a')
-          a.href = url
-          a.download = (d.title.replace(/[\\/]/g, '_') || 'Методичка') + '.json'
-          a.click()
-          setTimeout(() => URL.revokeObjectURL(url), 5000)
+          exportDeck(d)
         } else if (id === 'offline') {
           await ensureShell()
           const prepared = await embedImages(d, rememberImage)
@@ -823,7 +809,7 @@ function App() {
     ([key]) => allowed || !['templates', 'files'].includes(key)
   )
   const home = (
-    <div className="shell" hidden={!homeVisible}>
+    <div className="shell" hidden={!homeVisible} inert={!!modal}>
       <aside className={'sidebar ' + (drawer ? 'opened' : '')}>
         <div className="brand">
           <span className="brand-icon">
@@ -899,181 +885,74 @@ function App() {
             {online ? 'На этом устройстве' : 'Офлайн'}
           </div>
         </header>
-        <main className="library" ref={libraryContent}>
-          <div className="title-row">
-            <h1>
-              {page === 'library'
-                ? 'Мои методички'
-                : page === 'guide'
+        <main
+          className="library"
+          ref={libraryContent}
+          data-library={page === 'library' || page === 'templates' || undefined}
+        >
+          {!['library', 'templates'].includes(page) && (
+            <div className="title-row">
+              <h1>
+                {page === 'guide'
                   ? 'Руководство'
-                  : page === 'templates'
-                    ? 'Шаблоны'
-                    : page === 'files'
-                      ? 'Мои файлы'
-                      : 'Опубликованные'}
-            </h1>
-            {allowed && (page === 'library' || page === 'templates') && (
-              <button
-                className="secondary instructions-button"
-                onClick={getInstructions}
-              >
-                <FileJson size={17} />
-                {page === 'templates'
-                  ? 'Скачать инструкцию для генерации шаблона'
-                  : 'Скачать инструкцию для генерации презентации'}
-              </button>
-            )}
-            {page === 'published' && (
-              <button
-                className="primary"
-                onClick={() => (location.hash = receiveHash)}
-              >
-                <QrCode size={18} /> Получить методичку с телефона
-              </button>
-            )}
-            {allowed && !phone && page === 'library' && (
-              <button className="primary" onClick={() => need('create')}>
-                <Plus size={18} />
-                Создать методичку
-              </button>
-            )}
-          </div>
-          {phone && ['library', 'templates', 'files'].includes(page) && (
+                  : page === 'files'
+                    ? 'Мои файлы'
+                    : 'Опубликованные'}
+              </h1>
+              {page === 'published' && (
+                <button
+                  className="primary"
+                  onClick={() => (location.hash = receiveHash)}
+                >
+                  <QrCode size={18} /> Получить методичку с телефона
+                </button>
+              )}
+            </div>
+          )}
+          {phone && page === 'files' && (
             <p className="phone-edit-message">{desktopEditingMessage}</p>
           )}
           {page === 'library' ? (
-            <>
-              <article className="feature">
-                <div className="feature-copy">
-                  <div className="feature-tag">
-                    <Compass size={15} />
-                    Пример методички
-                  </div>
-                  <h2>
-                    Как читать
-                    <br />
-                    <em>рельеф</em>
-                  </h2>
-                  <div className="feature-meta">
-                    <span>География</span>
-                    <i />4 слайда
-                  </div>
-                  <button onClick={() => setWatch(example)}>
-                    <Play size={15} fill="currentColor" />
-                    Открыть пример
-                  </button>
-                </div>
-                <div
-                  className="plate"
-                  style={{ backgroundImage: 'url(' + relief + ')' }}
-                >
-                  <span className="plate-north">
-                    N<br />↑
-                  </span>
-                  <div className="scale-line">
-                    0<span>1 км</span>
-                  </div>
-                </div>
-              </article>
-              <section className="collection">
-                <div className="section-title">
-                  <h2>
-                    Локальная библиотека <span>{list.length}</span>
-                  </h2>
-                  {allowed && !phone && (
-                    <button
-                      className="secondary"
-                      onClick={() => need('import')}
-                    >
-                      <Upload size={16} />
-                      Импорт JSON
-                    </button>
-                  )}
-                </div>
-                {libraryError ? (
-                  <p role="alert">{libraryError}</p>
-                ) : list.length ? (
-                  <div className="cards">
-                    {list.map((en) => (
-                      <article className="card" key={en.deck.id}>
-                        <button
-                          className="card-open"
-                          onClick={() => setWatch(en.deck)}
-                        >
-                          <div className="card-preview">
-                            <Stage deck={en.deck} slide={en.deck.slides[0]} />
-                          </div>
-                          <b>{en.deck.title}</b>
-                          <small>
-                            {en.deck.slides.length} слайд. ·{' '}
-                            {new Date(en.updated).toLocaleDateString('ru-RU')}
-                          </small>
-                        </button>
-                        <div className="card-actions">
-                          {!phone && (
-                            <button
-                              className="icon"
-                              type="button"
-                              title="Редактировать методичку"
-                              aria-label={'Редактировать ' + en.deck.title}
-                              onClick={() => open(en.deck, en.revision)}
-                            >
-                              <Pencil size={16} />
-                            </button>
-                          )}
-
-                          <button
-                            className="icon"
-                            type="button"
-                            title="Удалить локальную методичку"
-                            aria-label={'Удалить ' + en.deck.title}
-                            onClick={() => remove(en)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="empty">
-                    <span className="folder">
-                      <FolderOpen strokeWidth={1.4} />
-                    </span>
-                    <h3>
-                      {allowed
-                        ? 'Здесь появятся ваши методички'
-                        : 'Библиотека преподавателя'}
-                    </h3>
-                    <p>
-                      {allowed
-                        ? 'Создайте первую методичку или импортируйте готовый JSON.'
-                        : 'Войдите в аккаунт владельца, чтобы открыть локальные методички.'}
-                    </p>
-                    {!allowed && (
-                      <button
-                        className="secondary"
-                        onClick={() => dialog('login')}
-                      >
-                        Войти
-                      </button>
-                    )}
-                  </div>
-                )}
-              </section>
-            </>
+            <ActionMenus>
+              <LessonLibrary
+                settings={lessonsSettings}
+                rows={allowed ? list : []}
+                allowed={allowed}
+                editable={allowed && !phone}
+                loading={!listReady}
+                error={libraryError}
+                create={() => need('create')}
+                importJSON={() => need('import')}
+                view={setWatch}
+                edit={(entry) => open(entry.deck, entry.revision)}
+                remove={remove}
+                exportJSON={(deck) =>
+                  task('Подготовка JSON…', async () => exportDeck(deck))
+                }
+                login={() => dialog('login')}
+                example={() => navigate('guide')}
+                retry={() => void refresh().catch(() => {})}
+                notice={notice}
+              />
+            </ActionMenus>
           ) : page === 'templates' && allowed ? (
-            <>
-              <p className="catalog-scope">{scope}</p>
+            <ActionMenus>
               <TemplateLibrary
                 kind={catalogKind}
                 setKind={setCatalogKind}
                 rows={visibleRows}
-                allowed={allowed}
-                editable={allowed && !phone}
+                settings={
+                  catalogKind === 'presentation'
+                    ? presentationSettings
+                    : layoutSettings
+                }
+                editable={!phone}
                 onlineOwner={owner && online}
+                online={online}
+                loading={catalogLoading}
+                error={catalogError}
+                connection={catalogConnection}
                 create={insert}
-                view={setWatch}
                 edit={(t, row) => {
                   if (allowEditing()) setEditingTemplate({ t, row })
                 }}
@@ -1082,7 +961,7 @@ function App() {
                 }}
                 notice={notice}
               />
-            </>
+            </ActionMenus>
           ) : page === 'files' && allowed ? (
             <FileLibrary
               entries={allowed ? list : []}
@@ -1096,19 +975,41 @@ function App() {
               login={() => dialog('login')}
             />
           ) : page === 'guide' ? (
-            <article className="guide">
-              {guide
-                .split('\n')
-                .filter(Boolean)
-                .filter((l) => !l.startsWith('# '))
-                .map((line, i) =>
-                  line.startsWith('## ') ? (
-                    <h2 key={i}>{line.slice(3)}</h2>
-                  ) : (
-                    <p key={i}>{line}</p>
-                  )
-                )}
-            </article>
+            <>
+              <section
+                className="lib-guide-example"
+                aria-label="Пример методички"
+              >
+                <div className="lib-thumbnail" aria-hidden="true">
+                  <Stage deck={example} slide={example.slides[0]} />
+                </div>
+                <div>
+                  <h2>Пример методички</h2>
+                  <p>
+                    {example.title} · {example.slides.length} слайда
+                  </p>
+                  <button
+                    className="lib-button lib-text"
+                    onClick={() => setWatch(example)}
+                  >
+                    <Play size={16} /> Открыть пример
+                  </button>
+                </div>
+              </section>
+              <article className="guide">
+                {guide
+                  .split('\n')
+                  .filter(Boolean)
+                  .filter((l) => !l.startsWith('# '))
+                  .map((line, i) =>
+                    line.startsWith('## ') ? (
+                      <h2 key={i}>{line.slice(3)}</h2>
+                    ) : (
+                      <p key={i}>{line}</p>
+                    )
+                  )}
+              </article>
+            </>
           ) : !allowed && ['templates', 'files'].includes(page) ? (
             <div className="empty">
               <BookOpen />

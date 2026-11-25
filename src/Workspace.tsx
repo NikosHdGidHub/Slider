@@ -3,7 +3,6 @@ import {
   useId,
   useRef,
   useState,
-  type ButtonHTMLAttributes,
   type CSSProperties,
   type ReactNode,
 } from 'react'
@@ -17,7 +16,10 @@ import {
 } from 'lucide-react'
 import { clamp, usePreference } from './workspacePreferences'
 import type { HistoryControls } from './StudioTools'
+import { IconButton } from './IconButton'
 import './workspace.css'
+
+export { IconButton } from './IconButton'
 
 type ResizeProps = {
   label: string
@@ -92,29 +94,6 @@ export function ResizeHandle({
           )
       }}
     />
-  )
-}
-
-export function IconButton({
-  label,
-  shortcut,
-  title,
-  children,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  label: string
-  shortcut?: string
-}) {
-  return (
-    <button
-      {...props}
-      type="button"
-      className={['workspace-icon', props.className].filter(Boolean).join(' ')}
-      aria-label={label}
-      title={title ?? (shortcut ? label + ' (' + shortcut + ')' : label)}
-    >
-      {children}
-    </button>
   )
 }
 

@@ -4,25 +4,17 @@ export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-type Value<T> = T extends number ? number : boolean
-
-export function usePreference<T extends boolean | number>(
-  name: string,
+export function useStoredPreference<T>(
+  key: string,
   fallback: T,
-  limits?: readonly [number, number]
+  decode: (saved: unknown) => T | undefined
 ) {
-  const key = 'atlas.workspace.v1.' + name
-  const [value, setValue] = useState<Value<T>>(() => {
+  const [value, setValue] = useState<T>(() => {
     try {
-      const saved: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
-      if (typeof saved === 'boolean' && typeof fallback === 'boolean')
-        return saved as Value<T>
-      if (typeof saved === 'number' && Number.isFinite(saved) && limits)
-        return clamp(saved, ...limits) as Value<T>
+      return decode(JSON.parse(localStorage.getItem(key) ?? 'null')) ?? fallback
     } catch {
-      // The workspace also works when browser storage is unavailable.
+      return fallback
     }
-    return fallback as Value<T>
   })
   useEffect(() => {
     try {
@@ -32,4 +24,23 @@ export function usePreference<T extends boolean | number>(
     }
   }, [key, value])
   return [value, setValue] as const
+}
+
+type Value<T> = T extends number ? number : boolean
+
+export function usePreference<T extends boolean | number>(
+  name: string,
+  fallback: T,
+  limits?: readonly [number, number]
+) {
+  return useStoredPreference(
+    'atlas.workspace.v1.' + name,
+    fallback as Value<T>,
+    (saved) => {
+      if (typeof saved === 'boolean' && typeof fallback === 'boolean')
+        return saved as Value<T>
+      if (typeof saved === 'number' && Number.isFinite(saved) && limits)
+        return clamp(saved, ...limits) as Value<T>
+    }
+  )
 }

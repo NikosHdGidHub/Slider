@@ -10,12 +10,12 @@ export interface CatalogRow {
 export async function getCatalog(
   allowed: boolean,
   cloud: boolean
-): Promise<{ rows: CatalogRow[]; scope: string }> {
+): Promise<{ rows: CatalogRow[]; connection?: 'offline' | 'error' }> {
   const rows: CatalogRow[] = builtins.map((template) => ({
     template,
     builtin: true,
   }))
-  if (!allowed) return { rows, scope: 'Встроенный каталог' }
+  if (!allowed) return { rows }
   const local = await localTemplates()
   const user = new Map<string, CatalogRow>(
     local.map((entry) => [
@@ -23,7 +23,7 @@ export async function getCatalog(
       { template: entry.template, entry },
     ])
   )
-  let scope = 'Встроенные и локальные шаблоны'
+  let connection: 'offline' | 'error' | undefined
   if (cloud && client && navigator.onLine) {
     const remote: CatalogRow[] = []
     try {
@@ -85,14 +85,11 @@ export async function getCatalog(
           user.delete(id)
         }
       }
-      scope = 'Встроенные, локальные и облачные шаблоны'
     } catch {
-      scope =
-        'Облачный каталог недоступен. Включены встроенные и локальные шаблоны.'
+      connection = 'error'
     }
-  } else if (cloud)
-    scope = 'Офлайн. Включены встроенные и локально сохранённые шаблоны.'
-  return { rows: [...rows, ...user.values()], scope }
+  } else if (cloud) connection = 'offline'
+  return { rows: [...rows, ...user.values()], connection }
 }
 export async function saveLocal(template: Template, row?: CatalogRow) {
   if (row?.builtin) throw new Error('Для встроенного шаблона создайте копию.')
