@@ -28,6 +28,7 @@ import {
   X,
   ChevronRight,
   Compass,
+  QrCode,
   LogIn,
 } from 'lucide-react'
 import { newDeck, validateDeck, type Deck, MAX_DOCUMENT_BYTES } from './model'
@@ -51,6 +52,8 @@ import { getCatalog, saveLocal, type CatalogRow } from './templateStore'
 import { instructions, download } from './instructions'
 import { Editor } from './Editor'
 import { Viewer } from './Viewer'
+import { ReceiveLesson, SendLesson } from './TransferScreen'
+import { parsePair, receiveHash } from './transfer'
 import { Stage } from './Stage'
 import { example } from './example'
 import relief from './assets/relief.webp'
@@ -98,6 +101,10 @@ function App() {
     [libraryError, libError] = useState(''),
     importer = useRef<HTMLInputElement>(null)
   const allowed = localMode || owner
+  const [signedInOwner, setSignedInOwner] = useState<boolean | null>(
+    client ? null : false
+  )
+  const [transferLogin, setTransferLogin] = useState(0)
   const [catalog, setCatalog] = useState<CatalogRow[]>(
     builtins.map((template) => ({ template, builtin: true }))
   )
@@ -215,6 +222,10 @@ function App() {
     password('')
     setModal(name)
   }
+  function closeTransfer() {
+    location.hash = ''
+    navigate('published')
+  }
   function navigate(next: string) {
     const protectedPages = ['templates', 'files']
 
@@ -250,6 +261,7 @@ function App() {
     if (!online && localStorage.getItem(ownerKey) === 'yes') setOwner(true)
     const { data } = client.auth.onAuthStateChange((evt, s) => {
       const ok = s?.user.id.toLowerCase() === adminId
+      setSignedInOwner(ok)
       if (ok) localStorage.setItem(ownerKey, 'yes')
       if (evt === 'SIGNED_OUT' && navigator.onLine)
         localStorage.removeItem(ownerKey)
@@ -586,6 +598,7 @@ function App() {
           await client.auth.signOut({ scope: 'local' })
           throw new Error('Для этого аккаунта доступ к редактору закрыт.')
         }
+        if (hash.startsWith('#transfer/')) setTransferLogin((n) => n + 1)
         setModal('')
       } else if (modal === 'create') await insert(newDeck(value))
       else if (modal === 'import') await importData(value)
@@ -811,6 +824,14 @@ function App() {
                 {page === 'templates'
                   ? 'Скачать инструкцию для генерации шаблона'
                   : 'Скачать инструкцию для генерации презентации'}
+              </button>
+            )}
+            {page === 'published' && (
+              <button
+                className="primary"
+                onClick={() => (location.hash = receiveHash)}
+              >
+                <QrCode size={18} /> Получить методичку с телефона
               </button>
             )}
             {allowed && page === 'library' && (
@@ -1081,7 +1102,23 @@ function App() {
   )
   return (
     <>
-      {hash.startsWith('#p/') ? (
+      {hash === receiveHash ? (
+        <ReceiveLesson
+          close={closeTransfer}
+          online={online}
+          enabled={!!client}
+        />
+      ) : hash === '#transfer' || hash.startsWith('#transfer/') ? (
+        <SendLesson
+          key={hash + ':' + transferLogin}
+          pair={parsePair(hash)}
+          close={closeTransfer}
+          login={() => dialog('login')}
+          authorized={signedInOwner}
+          online={online}
+          enabled={!!client}
+        />
+      ) : hash.startsWith('#p/') ? (
         publicDeck ? (
           <Viewer
             initialMode="slides"
