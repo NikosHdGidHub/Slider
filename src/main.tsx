@@ -67,6 +67,11 @@ function App() {
     rev = useRef(0),
     queue = useRef(Promise.resolve()),
     failure = useRef<unknown>(null)
+
+  // Во время перетаскивания изменяем документ только в памяти.
+  // Сохраняем итоговое состояние после отпускания мыши.
+  const dragPointer = useRef<number | null>(null)
+  const pendingSave = useRef<Deck | null>(null)
   const [modal, setModal] = useState(''),
     [message, notice] = useState(''),
     [busy, setBusy] = useState(''),
@@ -261,19 +266,21 @@ function App() {
     setStatus('Сохранено')
     setDoc(d)
   }
-  function change(fn: (d: Deck) => Deck) {
-    const prev = current.current
-    if (!prev) return
-    const next = fn(prev)
-    current.current = next
-    setDoc(next)
+
+  function persist(next: Deck) {
     setStatus('Сохранение…')
+
     const expected = rev.current++
+
     queue.current = queue.current.then(async () => {
       if (failure.current) return
+
       try {
         await saveEntry(next, expected)
-        if (current.current === next) setStatus('Сохранено')
+
+        if (current.current === next) {
+          setStatus('Сохранено')
+        }
       } catch (e) {
         failure.current = e
         setStatus('Ошибка записи')
@@ -281,7 +288,76 @@ function App() {
       }
     })
   }
+
+  function flushPendingSave() {
+    const next = pendingSave.current
+    pendingSave.current = null
+
+    if (next) {
+      persist(next)
+    }
+  }
+
+  function change(fn: (d: Deck) => Deck) {
+    const prev = current.current
+    if (!prev) return
+
+    const next = fn(prev)
+    if (next === prev) return
+
+    // Сразу обновляем состояние документа и изображение на экране.
+    current.current = next
+    setDoc(next)
+
+    if (dragPointer.current !== null) {
+      // Пока кнопка мыши удерживается, запись в IndexedDB
+      // не выполняется. Храним только последнее состояние.
+      pendingSave.current = next
+      setStatus('Есть несохранённые изменения')
+      return
+    }
+
+    // Обычные изменения сохраняются по прежней схеме.
+    persist(next)
+  }
+
+  useEffect(() => {
+    function startDrag(e: PointerEvent) {
+      if (e.target instanceof Element && e.target.closest('.atlas-stage')) {
+        dragPointer.current = e.pointerId
+      }
+    }
+
+    function finishDrag(e: PointerEvent) {
+      if (dragPointer.current !== e.pointerId) return
+
+      dragPointer.current = null
+      flushPendingSave()
+    }
+
+    function finishOnBlur() {
+      dragPointer.current = null
+      flushPendingSave()
+    }
+
+    // Capture позволяет завершить операцию, даже если
+    // pointerup обработан вложенным элементом редактора.
+    window.addEventListener('pointerdown', startDrag, true)
+    window.addEventListener('pointerup', finishDrag, true)
+    window.addEventListener('pointercancel', finishDrag, true)
+    window.addEventListener('blur', finishOnBlur)
+
+    return () => {
+      window.removeEventListener('pointerdown', startDrag, true)
+      window.removeEventListener('pointerup', finishDrag, true)
+      window.removeEventListener('pointercancel', finishDrag, true)
+      window.removeEventListener('blur', finishOnBlur)
+    }
+  }, [])
+
   async function closeEditor() {
+    dragPointer.current = null
+    flushPendingSave()
     await queue.current
     if (
       failure.current &&
