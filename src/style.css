@@ -1431,3 +1431,196 @@ h1 {
 .file-preview h2 {
   overflow-wrap: anywhere;
 }
+
+.transfer-screen {
+  min-height: 100dvh;
+  padding: clamp(16px, 5vw, 64px);
+  background: #eff4ed;
+}
+.transfer-panel {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: clamp(18px, 4vw, 42px);
+  border: 1px solid #d8e2d8;
+  border-radius: 18px;
+  box-shadow: 0 12px 32px #1839250d;
+  background: #fff;
+  display: grid;
+  gap: 19px;
+  min-width: 0;
+}
+.transfer-panel button,
+.transfer-panel a.primary {
+  min-height: 44px;
+  justify-self: start;
+  text-align: start;
+}
+.transfer-panel p {
+  line-height: 1.55;
+}
+.transfer-heading {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.transfer-heading h1 {
+  font-size: clamp(1.65rem, 4.8vw, 2.8rem);
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.transfer-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 45px;
+  height: 45px;
+  border-radius: 12px;
+  background: #e9f1e9;
+}
+.transfer-back {
+  padding: 0;
+  color: #285c44;
+}
+.transfer-wait {
+  display: grid;
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(16px, 3vw, 25px);
+}
+.transfer-qr {
+  width: min(100%, 280px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  background: white;
+  border: 1px solid #d8e2d8;
+  border-radius: 12px;
+}
+.transfer-qr img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: inherit;
+}
+.transfer-qr p {
+  padding: 16px;
+}
+.transfer-instructions,
+.transfer-form,
+.transfer-share,
+.transfer-student {
+  display: grid;
+  gap: 13px;
+}
+.transfer-code {
+  width: fit-content;
+  max-width: 100%;
+  display: grid;
+  gap: 5px;
+  background: #eef4ed;
+  border-radius: 10px;
+  padding: 12px 15px;
+}
+.transfer-code span,
+.transfer-time {
+  color: #4a6157;
+  font-size: 0.9rem;
+}
+.transfer-code strong {
+  font:
+    700 clamp(1.25rem, 5vw, 1.8rem) ui-monospace,
+    monospace;
+  letter-spacing: 0.18em;
+  color: #234734;
+}
+.transfer-status,
+.transfer-success {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.transfer-indicator {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: #438061;
+}
+.transfer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.transfer-actions a.primary {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.transfer-link {
+  width: 100%;
+}
+.transfer-lesson-title {
+  font-size: 1.2rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.transfer-student {
+  border-top: 1px solid #d8e2d8;
+  padding-top: 15px;
+}
+.transfer-student h2 {
+  font-size: 1.15rem;
+}
+.transfer-choices {
+  display: grid;
+  gap: 8px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.transfer-choices legend {
+  font-weight: 650;
+  margin-bottom: 9px;
+}
+.transfer-choices label,
+.transfer-confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.transfer-choices label {
+  border: 1px solid #d8e2d8;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.transfer-choices label:has(:checked) {
+  background: #eff5ef;
+  border-color: #508367;
+}
+.transfer-form input[type='radio'],
+.transfer-form input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: none;
+  accent-color: #327253;
+}
+.transfer-form input:focus-visible,
+.transfer-link:focus-visible {
+  outline: 2px solid #99651e;
+  outline-offset: 3px;
+}
+@media (max-width: 610px) {
+  .transfer-wait {
+    grid-template-columns: 1fr;
+  }
+  .transfer-form > button {
+    width: 100%;
+    justify-content: center;
+  }
+}

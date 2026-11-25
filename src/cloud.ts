@@ -35,6 +35,20 @@ function configure(): SupabaseClient | null {
 
 export const client = configure()
 
+let guestClient: SupabaseClient | undefined
+export function createGuestClient() {
+  if (!client) return null
+  guestClient ??= createClient(new URL(url).origin, key, {
+    auth: {
+      storageKey: 'atlas-transfer-guest',
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  })
+  return guestClient
+}
+
 export function isProjectStorageUrl(src: string) {
   return new URL(src).origin === new URL(url).origin
 }
@@ -137,14 +151,17 @@ export async function publishDocument(
   checkStorageWrite(error, 'Не удалось опубликовать методичку.')
 }
 
-export async function readPublic(id: string): Promise<unknown> {
+export async function readPublic(
+  id: string,
+  signal?: AbortSignal
+): Promise<unknown> {
   const address = new URL(
     storage()
       .from('presentations')
       .getPublicUrl(documentPath(id)).data.publicUrl
   )
   address.searchParams.set('revision', crypto.randomUUID())
-  const response = await fetch(address, { cache: 'no-store' })
+  const response = await fetch(address, { cache: 'no-store', signal })
   if (!response.ok)
     throw new Error(
       'Публикация недоступна. Проверьте ссылку и подключение к сети.'
@@ -193,16 +210,20 @@ export async function unpublish(id: string): Promise<void> {
   })
 }
 
-export async function listPublished(): Promise<string[]> {
+export async function listPublished(signal?: AbortSignal): Promise<string[]> {
   const ids: string[] = []
   const bucket = storage().from('presentations')
   const limit = 100
   for (let offset = 0; ; offset += limit) {
-    const { data, error } = await bucket.list('', {
-      limit,
-      offset,
-      sortBy: { column: 'name', order: 'asc' },
-    })
+    const { data, error } = await bucket.list(
+      '',
+      {
+        limit,
+        offset,
+        sortBy: { column: 'name', order: 'asc' },
+      },
+      { signal }
+    )
     if (error)
       throw new Error(
         'Не удалось загрузить список публикаций. ' + error.message
