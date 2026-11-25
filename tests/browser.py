@@ -83,7 +83,7 @@ def run(page, ctx, browser, url, temp):
     expect(page.get_by_text("Готово к офлайн-показу.", exact=False)).to_be_visible()
     ctx.set_offline(True)
     page.reload()
-    click_by_title = page.get_by_role("button", name="Тестовый урок", exact=False).first
+    click_by_title = page.get_by_role("button", name="Редактировать Тестовый урок", exact=True).first
     click_by_title.click()
     expect(page.get_by_role("textbox", name="Заметки преподавателя")).to_have_value(
         "Вторая заметка"
@@ -111,7 +111,9 @@ def run(page, ctx, browser, url, temp):
         and image["w"] == image["h"]
     )
     click("В библиотеку")
-    click("Удалить локальную методичку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
+    click("Удалить Тестовый урок")
     expect(page.get_by_text("Здесь появятся ваши методички")).to_be_visible()
     create()
     ctx.set_offline(False)

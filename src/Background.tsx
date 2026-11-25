@@ -1,3 +1,4 @@
+import { Files } from './Files'
 import { useEffect, useRef, useState } from 'react'
 import { MAX_DOCUMENT_BYTES, type Deck, type Slide } from './model'
 import { originalBackground, optimize } from './media'
@@ -6,11 +7,13 @@ export function Background({
   deck,
   update,
   reset,
+  libraryAvailable,
   notice,
 }: {
   slide: Slide
   deck: Deck
   update: (s: Slide) => void
+  libraryAvailable?: boolean
   reset?: () => void
   notice: (s: string) => void
 }) {
@@ -26,6 +29,7 @@ export function Background({
       active.current = false
     }
   }, [])
+  const [picker, setPicker] = useState(false)
   const effects = slide.effects ?? {}
   function clear() {
     const next = { ...slide }
@@ -43,6 +47,22 @@ export function Background({
         />
       </label>
       <button onClick={() => file.current?.click()}>Фоновое изображение</button>
+      {libraryAvailable && (
+        <button onClick={() => setPicker(true)}>Фон из моих файлов</button>
+      )}
+      {picker && (
+        <div className="overlay">
+          <section className="dialog">
+            <button onClick={() => setPicker(false)}>Закрыть</button>
+            <Files
+              pick={(src) => {
+                update({ ...slide, background: src })
+                setPicker(false)
+              }}
+            />
+          </section>
+        </div>
+      )}
       <input
         hidden
         ref={file}

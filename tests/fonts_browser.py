@@ -54,7 +54,7 @@ def run(page, ctx, url, files):
     page.goto(url)
     page.set_default_timeout(8000)
     click = lambda n: page.get_by_role("button", name=n, exact=True).click()
-    page.get_by_role("button", name="Черновик v1", exact=False).first.click()
+    page.get_by_role("button", name="Редактировать Черновик v1", exact=True).first.click()
     canvas = page.locator(".canvas")
     expect(canvas.get_by_text("Старая заметка")).to_be_visible()
     panel = page.locator(".inspector")
@@ -108,7 +108,7 @@ def run(page, ctx, url, files):
     expect(page.locator(".toast")).to_contain_text("Готово к офлайн")
     ctx.set_offline(True)
     page.reload()
-    page.get_by_role("button", name="Черновик v1", exact=False).first.click()
+    page.get_by_role("button", name="Редактировать Черновик v1", exact=True).first.click()
     page.evaluate("document.fonts.ready")
     assert (
         page.evaluate(
@@ -126,6 +126,8 @@ def run(page, ctx, url, files):
         "fit": False,
     }
     click("В библиотеку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     click("Импорт JSON")
     actual["resources"]["fonts"] = []
     actual["theme"]["styles"][0]["values"]["font"] = "unavailable"

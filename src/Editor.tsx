@@ -23,7 +23,6 @@ import {
   Play,
   MoreHorizontal,
   Check,
-  UploadCloud,
   FileDown,
   WifiOff,
   Palette,
@@ -49,11 +48,15 @@ import {
   type Item,
   type Slide,
 } from './model'
+import { Files } from './Files'
 import { optimize } from './media'
 import { cloudImage } from './publication'
 import { client } from './cloud'
 
 type Props = {
+  publishLabel?: string
+  canPublish?: boolean
+  libraryAvailable?: boolean
   history: HistoryControls
   deck: Deck
   styleLibrary?: StyleLibrary
@@ -72,6 +75,9 @@ type Props = {
 }
 export function Editor({
   deck,
+  publishLabel,
+  canPublish,
+  libraryAvailable,
   saveAs,
   styleLibrary,
   templates = [],
@@ -218,6 +224,26 @@ export function Editor({
     background.current = bg
     input.current?.click()
   }
+  const [picker, setPicker] = useState(false)
+  function addImage(src: string, width: number, height: number, bg: boolean) {
+    if (bg) modify((s) => ({ ...s, background: src }))
+    else {
+      const w = Math.min(700, width, (520 * width) / height),
+        h = (w * height) / width
+      const img: Item = {
+        ...newText(),
+        type: 'image',
+        src,
+        text: '',
+        x: (1280 - w) / 2,
+        y: (720 - h) / 2,
+        w,
+        h,
+      }
+      modify((s) => ({ ...s, items: [...s.items, ...additions(s, [img])] }))
+      select(img.id)
+    }
+  }
   async function insert(file: File) {
     const bg = background.current
     try {
@@ -234,25 +260,9 @@ export function Editor({
         return
       }
       const { src, width, height } = await optimize(file)
-      if (bg) modify((s) => ({ ...s, background: src }))
-      else {
-        const w = Math.min(700, width, (520 * width) / height),
-          h = (w * height) / width
-        const img: Item = {
-          ...newText(),
-          type: 'image',
-          src,
-          text: '',
-          x: (1280 - w) / 2,
-          y: (720 - h) / 2,
-          w,
-          h,
-        }
-        modify((s) => ({ ...s, items: [...s.items, ...additions(s, [img])] }))
-        select(img.id)
-      }
+      addImage(src, width, height, bg)
       if (client && navigator.onLine)
-        cloudImage(src).catch(() =>
+        cloudImage(src, file.name).catch(() =>
           notice(
             'Изображение сохранено локально. При публикации загрузка повторится.'
           )
@@ -462,6 +472,17 @@ export function Editor({
             Показать
           </button>
         )}
+        {publishLabel && (
+          <button
+            className={
+              publishLabel === 'Обновить публикацию' ? 'primary' : 'secondary'
+            }
+            disabled={!canPublish}
+            onClick={() => action('publish')}
+          >
+            {publishLabel}
+          </button>
+        )}
         {saveTemplate ? (
           <button className="secondary" onClick={saveTemplate}>
             Сохранить шаблон
@@ -481,7 +502,6 @@ export function Editor({
                   [
                     ['export', 'Экспортировать JSON', FileDown],
                     ['offline', 'Подготовить к офлайн-показу', WifiOff],
-                    ['publish', 'Опубликовать', UploadCloud],
                   ] as const
                 ).map(([key, label, Icon]) => (
                   <button
@@ -553,6 +573,36 @@ export function Editor({
               <Plus />
               Фигура
             </button>
+            {libraryAvailable && (
+              <button onClick={() => setPicker(true)}>
+                Выбрать из моих файлов
+              </button>
+            )}
+            {picker && (
+              <div className="overlay">
+                <section className="dialog">
+                  <button onClick={() => setPicker(false)}>Закрыть</button>
+                  <Files
+                    pick={async (src) => {
+                      try {
+                        const img = new Image()
+                        img.src = src
+                        await img.decode()
+                        addImage(
+                          src,
+                          img.naturalWidth,
+                          img.naturalHeight,
+                          false
+                        )
+                        setPicker(false)
+                      } catch {
+                        notice('Не удалось открыть изображение.')
+                      }
+                    }}
+                  />
+                </section>
+              </div>
+            )}
             <button onClick={() => pickImage()}>
               <ImagePlus />
               Изображение
@@ -943,6 +993,7 @@ export function Editor({
               {gridTemplateKind !== 'layout' && (
                 <>
                   <Background
+                    libraryAvailable={libraryAvailable}
                     deck={deck}
                     key={slide.id}
                     slide={slide}

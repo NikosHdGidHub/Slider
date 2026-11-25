@@ -92,6 +92,9 @@ def exercise(page, tmp):
     assert edited["slides"][1]["notes"] == "Проверка заметок"
     assert len(edited["slides"][1]["structure"]["cells"]) == 3
     click("В библиотеку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
+    click("Шаблоны")
     card = page.locator(".template-card").filter(has_text="Переименованный шаблон")
     card.locator("summary").click()
     card.get_by_role("button", name="Удалить шаблон").click()
@@ -110,9 +113,9 @@ def exercise(page, tmp):
     ).to_have_count(1)
     click("Мои методички")
     click("Импорт JSON")
-    upload("Выбрать файл JSON", ROOT / "docs/examples/water-cycle.json")
+    upload("Выбрать файл JSON", ROOT / "tests/fixtures/water-cycle.json")
     click("Открыть в редакторе")
-    expected = json.loads((ROOT / "docs/examples/water-cycle.json").read_text())
+    expected = json.loads((ROOT / "tests/fixtures/water-cycle.json").read_text())
     captures = os.getenv("ATLAS_CAPTURES")
     if captures:
         Path(captures).mkdir(parents=True, exist_ok=True)
@@ -218,6 +221,8 @@ def exercise(page, tmp):
     )
     assert doc["slides"][0]["items"][-1]["nodes"][0]["out"]
     click("В библиотеку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     import_doc(doc)
     again = export()
     assert again["slides"] == doc["slides"] and again["theme"] == doc["theme"]

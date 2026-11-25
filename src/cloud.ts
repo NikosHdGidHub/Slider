@@ -47,25 +47,31 @@ function documentPath(id: string) {
   return id.toLowerCase() + '.json'
 }
 
-const imageTypes: Record<string, string> = {
-  'image/webp': 'webp',
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-}
-
-export async function uploadImage(blob: Blob): Promise<string> {
-  const extension = imageTypes[blob.type]
-  if (!extension)
-    throw new Error('Загрузите растровое изображение PNG, WebP или JPEG.')
-  const path = crypto.randomUUID() + '.' + extension
-  const bucket = storage().from('images')
-  const { error } = await bucket.upload(path, blob, {
-    contentType: blob.type,
-    cacheControl: '31536000',
+export async function withPublicationLock<T>(
+  id: string,
+  action: () => Promise<T>
+): Promise<T> {
+  if (!client) throw Error('Подключите Supabase.')
+  const token = crypto.randomUUID()
+  const { data, error } = await client.rpc('atlas_lock_publication', {
+    document_id: id,
+    lock_token: token,
   })
-  if (error)
-    throw new Error('Не удалось загрузить изображение. ' + error.message)
-  return bucket.getPublicUrl(path).data.publicUrl
+  if (error) throw Error(error.message)
+  if (!data)
+    throw Error(
+      'Другое устройство обновляет публикацию. Повторите попытку позже.'
+    )
+  try {
+    return await action()
+  } finally {
+    // Expiration releases the lock if the connection is lost during cleanup.
+    await client
+      .from('atlas_publication_locks')
+      .delete()
+      .eq('id', id)
+      .eq('token', token)
+  }
 }
 
 export async function publishDocument(
@@ -88,8 +94,9 @@ export async function publishDocument(
 
 export async function readPublic(id: string): Promise<unknown> {
   const address = new URL(
-    storage().from('presentations').getPublicUrl(documentPath(id)).data
-      .publicUrl
+    storage()
+      .from('presentations')
+      .getPublicUrl(documentPath(id)).data.publicUrl
   )
   address.searchParams.set('revision', crypto.randomUUID())
   const response = await fetch(address, { cache: 'no-store' })
@@ -121,9 +128,11 @@ export async function readPublic(id: string): Promise<unknown> {
 }
 
 export async function unpublish(id: string): Promise<void> {
-  const { error } = await storage()
-    .from('presentations')
-    .remove([documentPath(id)])
+  const { error } = await withPublicationLock(id, async () =>
+    storage()
+      .from('presentations')
+      .remove([documentPath(id)])
+  )
   if (error)
     throw new Error('Не удалось снять методичку с публикации. ' + error.message)
 }

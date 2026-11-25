@@ -27,6 +27,11 @@ OWNER = "00000000-0000-4000-8000-000000000001"
 def flow(browser, url, tmp):
     files, templates, requests = {}, {}, []
 
+    catalog = {}
+    folders = {}
+    reject_publish = False
+    locks = {}
+
     def endpoint(route):
         r = route.request
         u = urlparse(r.url)
@@ -84,6 +89,32 @@ def flow(browser, url, tmp):
             )
         if path == "/auth/v1/logout":
             return send({})
+        if path == "/rest/v1/rpc/atlas_lock_publication":
+            key = r.post_data_json["document_id"]
+            if key in locks: return send(False)
+            locks[key] = r.post_data_json["lock_token"]
+            return send(True)
+        if path == "/rest/v1/atlas_publication_locks":
+            key=q["id"][0][3:]
+            if locks.get(key)==q["token"][0][3:]: locks.pop(key)
+            return send({})
+        if path == "/rest/v1/atlas_folders":
+            if method == "POST":
+                folders[r.post_data_json["name"]] = r.post_data_json
+                return send({},201)
+            return send(list(folders.values()))
+        if path == "/rest/v1/atlas_files":
+            key = q.get("sha", [""])[0][3:]
+            if method == "POST":
+                row = r.post_data_json
+                catalog.setdefault(row["sha"], dict(row, created_at="2026-01-01", hidden=False))
+                return send({}, 201)
+            if method == "PATCH":
+                catalog[key].update(r.post_data_json)
+                return send(catalog[key])
+            if "vnd.pgrst.object" in r.headers.get("accept",""):
+                return send(catalog.get(key))
+            return send([v for k,v in catalog.items() if (not key or key==k) and not v["hidden"]])
         if path == "/rest/v1/atlas_templates":
             if method == "GET":
                 return send(list(templates.values()))
@@ -107,7 +138,7 @@ def flow(browser, url, tmp):
             if key not in files:
                 return send({}, 404)
             if key.startswith("images/"):
-                return send(files[key], mime="image/png")
+                return send(files[key], mime="image/" + (key.rsplit(".",1)[1].replace("jpg","jpeg")))
             return send(json.loads(files[key]))
         if path == "/storage/v1/object/list/presentations":
             return send(
@@ -123,7 +154,13 @@ def flow(browser, url, tmp):
                 for name in r.post_data_json["prefixes"]:
                     files.pop(key + "/" + name, None)
                 return send([])
+            if method == "GET" and key.removeprefix("authenticated/") in files:
+                return send(files[key.removeprefix("authenticated/")],mime="application/octet-stream")
             if method == "POST":
+                if reject_publish and key.startswith("presentations/"):
+                    return send({"message":"test failure"},403)
+                if key in files and r.headers.get("x-upsert") != "true":
+                    return send({"message":"The resource already exists","statusCode":"409"},409)
                 payload = r.post_data_buffer
                 content_type = r.headers.get("content-type", "")
                 if content_type.startswith("multipart/"):
@@ -188,7 +225,7 @@ def flow(browser, url, tmp):
     click("Добавить текст")
     page.get_by_role("textbox", name="Текст", exact=True).fill("Черновой материал")
     page.get_by_label("Размещение объекта").select_option("tray")
-    action("Опубликовать")
+    click("Опубликовать")
     link = page.locator(".dialog input[readonly]").input_value()
     assert any(k.startswith("images/") for k in files)
     guest = browser.new_context()
@@ -217,6 +254,113 @@ def flow(browser, url, tmp):
     )
     click("Закрыть")
     click("В библиотеку")
+    click("Опубликованные")
+    # A second browser profile has the same teacher account but an empty IndexedDB.
+    device = browser.new_context(storage_state=ctx.storage_state(), viewport={"width": 1440, "height": 900})
+    device.route("https://atlas-test.supabase.co/**", endpoint)
+    second = device.new_page()
+    dialog_handler = lambda dialog: dialog.accept()
+    second.on("dialog", dialog_handler)
+    second.goto(url)
+    b = lambda text: second.get_by_role("button", name=text, exact=True)
+    b("Опубликованные").click()
+    b("Редактировать").click()
+    expect(b("Опубликовано")).to_be_disabled()
+    b("Слайд").click()
+    b("Фон из моих файлов").click()
+    second.locator(".file-grid button").first.click()
+    second.get_by_label("Название методички").fill("Версия со второго устройства")
+    public.reload()
+    expect(public.get_by_text("Версия со второго устройства",exact=True)).to_have_count(0)
+    b("Выбрать из моих файлов").click()
+    second.locator(".file-grid button").first.click()
+    expect(b("Обновить публикацию")).to_be_enabled()
+    b("В библиотеку").click()
+    b("Продолжить редактирование").click()
+    b("В библиотеку").click()
+    reject_publish = True
+    b("Опубликовать и выйти").click()
+    expect(second.get_by_text("Не удалось опубликовать методичку.", exact=False)).to_be_visible()
+    expect(b("Продолжить редактирование")).to_be_visible()
+    reject_publish = False
+    b("Опубликовать и выйти").click()
+    expect(second.locator(".cards .card")).to_have_count(1)
+    assert len([k for k in files if k.startswith("presentations/")]) == 1
+    assert len([k for k in files if k.startswith("images/")]) == 1
+    public.reload()
+    updated = json.loads(next(v for k,v in files.items() if k.startswith("presentations/")))
+    assert updated["title"]=="Версия со второго устройства"
+    assert any((s.get("background") or "").startswith("https://") for s in updated["slides"])
+    b("Редактировать Версия со второго устройства").click()
+    b("Действия с методичкой").click()
+    b("Подготовить к офлайн-показу").click()
+    expect(second.get_by_text("Готово к офлайн-показу.",exact=False)).to_be_visible()
+    expect(b("Опубликовано")).to_be_disabled()
+    b("В библиотеку").click()
+    device.set_offline(True)
+    second.reload()
+    b("Редактировать Версия со второго устройства").click()
+    expect(second.locator(".canvas img").first).to_be_visible()
+    assert second.locator(".canvas img").first.get_attribute("src").startswith("data:image/")
+    b("В библиотеку").click()
+    if b("Оставить локально и выйти").is_visible(): b("Оставить локально и выйти").click()
+    device.set_offline(False)
+    b("Мои файлы").click()
+    upload = second.locator("fieldset input[type=file]")
+    for filename in ["lesson.pdf", "copy.pdf"]:
+        upload.set_input_files({"name": filename,"mimeType":"application/pdf","buffer":b"%PDF-1.4\nexample"})
+        expect(second.locator("fieldset")).to_be_enabled()
+        expect(second.get_by_text("lesson.pdf",exact=True)).to_be_visible()
+    assert len([k for k in files if k.startswith("atlas-private/")]) == 1
+    second.get_by_label("Поиск по названию").fill("lesson.pdf")
+    expect(second.locator(".file-grid article")).to_have_count(1)
+    second.locator(".file-grid article").get_by_role("button",name="Убрать из каталога").click()
+    expect(second.locator(".file-grid article")).to_have_count(0)
+    assert len([k for k in files if k.startswith("atlas-private/")]) == 1
+    second.get_by_label("Поиск по названию").fill("")
+    ask = lambda dialog: dialog.accept("Материалы" if "папк" in dialog.message.lower() else "Урок.pdf")
+    second.remove_listener("dialog", dialog_handler)
+    second.on("dialog",ask)
+    b("Создать папку").click()
+    expect(second.get_by_label("Папка",exact=True)).to_have_value("Материалы")
+    pdf = {"name":"новый.pdf","mimeType":"application/pdf","buffer":b"%PDF-1.4\nsecond"}
+    upload.set_input_files(pdf)
+    expect(second.locator(".file-grid article")).to_have_count(1)
+    b("Переименовать").click()
+    expect(second.locator(".file-grid article")).to_contain_text("Урок.pdf")
+    with second.expect_download() as downloaded:
+        b("Скачать").click()
+    assert Path(downloaded.value.path()).read_bytes()==pdf["buffer"]
+    second.get_by_label("Папка", exact=True).select_option("")
+    third = ctx.new_page()
+    third.goto(url)
+    third.get_by_role("button",name="Мои файлы",exact=True).click()
+    twin = dict(pdf, name="другое.pdf",buffer=b"%PDF-1.4 concurrent")
+    third.locator("fieldset input[type=file]").set_input_files(twin)
+    upload.set_input_files(twin)
+    expect(second.get_by_text("другое.pdf",exact=True)).to_be_visible()
+    expect(third.get_by_text("другое.pdf",exact=True)).to_be_visible()
+    assert len([k for k in files if k.startswith("atlas-private/")])==3
+    third.close()
+    for ext in ["png","jpeg","webp"]:
+        uri=second.evaluate("(t)=>document.createElement('canvas').toDataURL('image/'+t)",ext)
+        upload.set_input_files({"name":"цвет."+ext,"mimeType":"image/"+ext,"buffer":base64.b64decode(uri.split(",")[1])})
+        expect(second.get_by_text("цвет."+ext,exact=True)).to_be_visible()
+    upload.set_input_files({"name":"образец.json","mimeType":"application/json","buffer":next(v for k,v in files.items() if k.startswith("presentations/"))})
+    expect(second.get_by_text("образец.json",exact=True)).to_be_visible()
+    upload.set_input_files({"name":"образец.pptx","mimeType":"application/vnd.openxmlformats-officedocument.presentationml.presentation","buffer":b"PK\x03\x04test"})
+    expect(second.get_by_text("образец.pptx",exact=True)).to_be_visible()
+    second.get_by_label("Тип файла").select_option("application/vnd")
+    expect(second.locator(".file-grid article")).to_have_count(1)
+    upload.set_input_files({"name":"bad.txt","mimeType":"text/plain","buffer":b"error"})
+    expect(second.get_by_text("Формат файла не поддерживается.",exact=False)).to_be_visible()
+    device.close()
+    click("Редактировать")
+    click("Синхронизовать")
+    click("Загрузить опубликованную версию")
+    expect(btn("Опубликовано")).to_be_disabled()
+    click("В библиотеку")
+    expect(page.locator(".cards")).to_contain_text("до синхронизации")
     click("Опубликованные")
     click("Снять с публикации")
     expect(page.get_by_text("Публикаций пока нет")).to_be_visible()

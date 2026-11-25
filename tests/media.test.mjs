@@ -83,3 +83,17 @@ test('один и тот же файл фона и объекта подгота
     delete globalThis.Image
   }
 })
+
+test('повреждённый файл по адресу с SHA-256 останавливает подготовку к офлайн-показу', async (t) => {
+  const deck = newDeck('Проверка байтов')
+  deck.slides[0].background =
+    'https://example.org/images/' + 'a'.repeat(64) + '.png'
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () =>
+      new Response('damaged', { headers: { 'Content-Type': 'image/png' } })
+  )
+  await assert.rejects(embedImages(deck), /Контрольная сумма/)
+  assert.match(deck.slides[0].background, /^https:/)
+})

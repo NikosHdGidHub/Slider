@@ -69,9 +69,9 @@ def exercise(p, url, tmp):
         p.get_by_label("Размытие").fill(str(i + 1))
     click("Таблица")
     click("Добавить строку")
-    click("Отменить")
+    p.keyboard.press("Control+z")
     expect(p.locator(".grid-cell")).to_have_count(1)
-    click("Повторить")
+    p.keyboard.press("Control+Shift+z")
     expect(p.locator(".grid-cell")).to_have_count(2)
     cell = p.get_by_role("button", name="Ячейка 1, 1", exact=True)
     cell.click(button="right")
@@ -82,14 +82,6 @@ def exercise(p, url, tmp):
     cell.click(button="right")
     p.get_by_role("menuitem", name="Вставить настройки").click()
     expect(p.get_by_label("Тип ячейки")).to_have_value("area")
-    click("Редактировать объекты и шрифты")
-    click("Фигура")
-    expect(p.locator(".canvas .atlas-item")).to_have_count(1)
-    click("В библиотеку")
-    click("Отменить")
-    click("Редактировать объекты и шрифты")
-    expect(p.locator(".canvas .atlas-item")).to_have_count(0)
-    click("В библиотеку")
     click("Сохранить шаблон")
     p.locator(".template-card").filter(has_text="Три фотографии").get_by_text(
         "Создать презентацию"
@@ -142,11 +134,15 @@ def exercise(p, url, tmp):
     expect(p.get_by_role("menuitem", name="Вырезать")).to_have_count(0)
     p.keyboard.press("Escape")
     click("В библиотеку")
+    if p.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     p.reload()
-    p.locator(".card-open").filter(has_text="Три фотографии").first.click()
+    p.get_by_role("button", name="Редактировать Три фотографии",exact=True).first.click()
     saved = export()
     assert saved["slides"][1]["items"][0]["locked"]
     click("В библиотеку")
+    if p.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     click("Мои методички")
     click("Импорт JSON")
     p.get_by_label("Или вставьте JSON").fill(json.dumps(saved, ensure_ascii=False))

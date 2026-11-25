@@ -9,8 +9,8 @@
 Каждая библиотека предлагает свою инструкцию для ИИ. «Шаблоны» формируют инструкцию для создания шаблонов, «Мои методички» — для создания готовой презентации. Оба вида JSON можно просмотреть перед импортом.
 
 - [Как работать с сеткой и неразмещённым содержимым](docs/USER_GUIDE.md#шаблоны)
-- [Инструкция для шаблонов](docs/grid/template-instructions.txt) · [Инструкция для презентаций](docs/examples/atlas-instructions.txt)
-- [Главный шаблон с рамкой](docs/grid/main-frame.json) · [Структура 2 × 2](docs/grid/structure-2x2.json) · [Презентация о круговороте воды](docs/examples/water-cycle.json)
+- [Инструкция для шаблонов](docs/grid/template-instructions.txt) · [Инструкция для презентаций](tests/fixtures/atlas-instructions.txt)
+- [Главный шаблон с рамкой](docs/grid/main-frame.json) · [Структура 2 × 2](docs/grid/structure-2x2.json) · [Презентация о круговороте воды](tests/fixtures/water-cycle.json)
 - [Отчёт о проверке формата 3 и снимки экранов](docs/GRID_REPORT.md)
 
 ## Первый запуск из исходников
@@ -37,6 +37,7 @@ npm run preview
 
 - [Подключение Supabase и настройка владельца](docs/SUPABASE_SETUP.md)
 - [Пошаговое развёртывание на GitHub Pages](docs/GITHUB_PAGES.md)
+- [Библиотека файлов, публикации и отчёт о проверках](docs/FILES_AND_PUBLICATIONS.md)
 - [Руководство преподавателя](docs/USER_GUIDE.md)
 - [Архитектурные решения и ограничения](docs/ARCHITECTURE.md)
 - [Результаты и воспроизведение проверок](docs/CHECKS.md)

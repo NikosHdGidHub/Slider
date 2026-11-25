@@ -87,6 +87,7 @@ function Padding({
   )
 }
 export function GridDesigner({
+  libraryAvailable,
   template,
   set,
   history,
@@ -94,6 +95,7 @@ export function GridDesigner({
   back,
   notice,
 }: {
+  libraryAvailable?: boolean
   template: Template
   history: HistoryControls
   set: (t: Template) => void
@@ -394,6 +396,7 @@ export function GridDesigner({
           )}
           {tab === 'bg' && !structural ? (
             <Background
+              libraryAvailable={libraryAvailable}
               deck={deck}
               key={s.id}
               slide={s}

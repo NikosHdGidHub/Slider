@@ -1,3 +1,4 @@
+import { rememberImage } from './storage'
 import { useHistory } from './StudioTools'
 import { GridDesigner } from './GridDesigner'
 import { templateFrom } from './catalog'
@@ -32,7 +33,8 @@ import { newDeck, validateDeck, type Deck, MAX_DOCUMENT_BYTES } from './model'
 import { embedImages } from './media'
 import { adminId, client, listPublished, readPublic, unpublish } from './cloud'
 import { entries, saveEntry, type Entry } from './storage'
-import { publish } from './publication'
+import { Files } from './Files'
+import { publish, fingerprint } from './publication'
 import { collectStyles } from './styleLibrary'
 import { TemplateLibrary } from './TemplateLibrary'
 import { ImportPreview } from './ImportPreview'
@@ -77,6 +79,9 @@ function App() {
     [busy, setBusy] = useState(''),
     [value, setValue] = useState(''),
     [pw, password] = useState('')
+  const [publishedTitles, setPublishedTitles] = useState<
+    Record<string, string>
+  >({})
   const [pubs, setPubs] = useState<string[]>([]),
     [publicError, pubError] = useState(''),
     [hash, setHash] = useState(location.hash),
@@ -105,12 +110,13 @@ function App() {
     },
     editingTemplate?.t.deck.id
   )
+  const [editorSession, setEditorSession] = useState(0)
   const lessonHistory = useHistory(
     doc,
     (d) => {
       if (d) change((prev) => (prev.id === d.id ? d : prev))
     },
-    doc?.id
+    doc ? doc.id + '/' + editorSession : undefined
   )
   const [preview, setPreview] = useState<Deck | null>(null)
   const access = useRef(allowed)
@@ -253,12 +259,99 @@ function App() {
     }
   }, [hash])
   useEffect(() => {
-    if (page === 'published' && owner)
-      listPublished()
-        .then(setPubs)
-        .catch((e) => notice(errorText(e)))
+    if (page !== 'published' || !owner) return
+    let live = true
+    async function load() {
+      const ids = await listPublished()
+      if (!live) return
+      setPubs(ids)
+      for (const id of ids) {
+        try {
+          const deck = validateDeck(await readPublic(id))
+          if (!live) return
+          setPublishedTitles((titles) => ({ ...titles, [id]: deck.title }))
+        } catch {
+          if (!live) return
+        }
+      }
+    }
+    load().catch((e) => {
+      if (live) notice(errorText(e))
+    })
+    return () => {
+      live = false
+    }
   }, [page, owner])
+  const [baseline, setBaseline] = useState(''),
+    [signature, setSignature] = useState<{ doc: Deck; hash: string } | null>(
+      null
+    )
+  const openedPublication = useRef('')
+  const afterExit = useRef<null | (() => Promise<void>)>(null)
+  const marker = (id: string) => ownerKey + '-published-' + id
+  useEffect(() => {
+    if (!doc || status !== 'Сохранено') return
+    let live = true
+    const timer = window.setTimeout(
+      () =>
+        fingerprint(doc)
+          .then((hash) => {
+            if (live) setSignature({ doc, hash })
+          })
+          .catch((e) => {
+            if (live) notice(errorText(e))
+          }),
+      180
+    )
+    return () => {
+      clearTimeout(timer)
+      live = false
+    }
+  }, [doc, status])
+  useEffect(() => {
+    if (!doc || status === 'Сохранено') return
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [doc, status])
+  const same =
+    !!baseline && signature?.doc === doc && signature.hash === baseline
+  const canPublish =
+    owner &&
+    online &&
+    !busy &&
+    status === 'Сохранено' &&
+    signature?.doc === doc &&
+    !same
+  async function publishedHash(id: string) {
+    if (!(await listPublished()).includes(id)) return ''
+    const remote = validateDeck(await readPublic(id))
+    if (remote.id !== id) throw Error('Идентификатор публикации не совпадает.')
+    return fingerprint(remote)
+  }
+  const documentId = doc?.id
+  useEffect(() => {
+    if (!documentId || !online || !owner) return
+    let live = true
+    const observed = openedPublication.current
+    publishedHash(documentId)
+      .then((hash) => {
+        if (live && observed === openedPublication.current) setBaseline(hash)
+      })
+      .catch((e) => {
+        if (live) notice(errorText(e))
+      })
+    return () => {
+      live = false
+    }
+  }, [documentId, online, owner])
   function open(d: Deck, revision: number) {
+    setEditorSession((value) => value + 1)
+    openedPublication.current = localStorage.getItem(marker(d.id)) || ''
+    setBaseline(openedPublication.current)
     current.current = d
     rev.current = revision
     queue.current = Promise.resolve()
@@ -355,17 +448,54 @@ function App() {
     }
   }, [])
 
+  const newerPublication =
+    !!baseline && baseline !== openedPublication.current && !same
+  async function syncPublication() {
+    const draft = current.current
+    if (!draft || !owner || !online)
+      throw Error('Для синхронизации нужен вход и подключение к сети.')
+    flushPendingSave()
+    await queue.current
+    if (failure.current) throw failure.current
+    const remote = validateDeck(await readPublic(draft.id))
+    if (remote.id !== draft.id)
+      throw Error('Идентификатор публикации не совпадает.')
+    const hash = await fingerprint(remote)
+    if (current.current !== draft)
+      throw Error('Черновик изменился. Повторите синхронизацию.')
+    const revision = rev.current
+    await saveEntry(remote, revision, false, true)
+    localStorage.setItem(marker(remote.id), hash)
+    open(remote, revision + 1)
+    setModal('')
+    await refresh()
+    notice(
+      'Открыта актуальная публикация. Предыдущий черновик сохранён в библиотеке с пометкой «до синхронизации».'
+    )
+  }
+  function requestExit(next?: () => Promise<void>) {
+    afterExit.current = next ?? null
+    if (same) void task('Сохранение…', closeEditor)
+    else setModal('leave')
+  }
   async function closeEditor() {
     dragPointer.current = null
     flushPendingSave()
     await queue.current
-    if (
-      failure.current &&
-      !confirm('Последние изменения не записаны. Выйти без сохранения?')
-    )
+    if (failure.current)
+      throw Error(
+        'Не удалось сохранить черновик. Экспортируйте JSON перед выходом.'
+      )
+    if (afterExit.current) {
+      await afterExit.current()
+      afterExit.current = null
+      setModal('')
       return
+    }
     current.current = null
     setDoc(null)
+    setModal('')
+    navigate('library')
     await refresh()
   }
   async function insert(d: Deck) {
@@ -427,7 +557,7 @@ function App() {
       else if (modal === 'import') await importData(value)
     })
   }
-  async function act(id: 'export' | 'publish' | 'offline') {
+  async function act(id: 'export' | 'publish' | 'offline', exitAfter = false) {
     const d = current.current
     if (!d) return
     await task(
@@ -454,7 +584,7 @@ function App() {
           setTimeout(() => URL.revokeObjectURL(url), 5000)
         } else if (id === 'offline') {
           await ensureShell()
-          const prepared = await embedImages(d)
+          const prepared = await embedImages(d, rememberImage)
           await queue.current
           if (current.current !== d)
             throw new Error('Методичка изменилась. Повторите подготовку.')
@@ -476,7 +606,34 @@ function App() {
             )
           )
             return
-          await publish(d)
+          flushPendingSave()
+          await queue.current
+          if (failure.current) throw failure.current
+          if (current.current !== d)
+            throw Error('Документ изменился. Повторите публикацию.')
+          const hash = await fingerprint(d)
+          const published = await publish(d, async () => {
+            const remoteHash = await publishedHash(d.id)
+            setBaseline(remoteHash)
+            if (
+              remoteHash &&
+              remoteHash !== openedPublication.current &&
+              remoteHash !== hash &&
+              !confirm(
+                'Облачная версия отличается от последней открытой на этом устройстве. Заменить её текущей методичкой?'
+              )
+            )
+              return false
+            return current.current === d
+          })
+          if (!published) return
+          localStorage.setItem(marker(d.id), hash)
+          openedPublication.current = hash
+          setBaseline(hash)
+          if (exitAfter && current.current === d) {
+            await closeEditor()
+            return
+          }
           setPubs((p) => Array.from(new Set([...p, d.id])))
           setValue(link(d.id))
           setModal('link')
@@ -513,6 +670,7 @@ function App() {
   const nav = [
     ['library', 'Мои методички', Library],
     ['templates', 'Шаблоны', Layers3],
+    ['files', 'Мои файлы', FolderOpen],
     ['published', 'Опубликованные', Globe2],
     ['guide', 'Руководство', BookOpenText],
   ] as const
@@ -598,7 +756,9 @@ function App() {
                   ? 'Руководство'
                   : page === 'templates'
                     ? 'Шаблоны'
-                    : 'Опубликованные'}
+                    : page === 'files'
+                      ? 'Мои файлы'
+                      : 'Опубликованные'}
             </h1>
             {(page === 'library' || page === 'templates') && (
               <button
@@ -751,6 +911,15 @@ function App() {
                 notice={notice}
               />
             </>
+          ) : page === 'files' ? (
+            owner && online ? (
+              <Files openJSON={importData} />
+            ) : (
+              <p>
+                Для доступа к файлам войдите как владелец и подключитесь к
+                интернету.
+              </p>
+            )
           ) : page === 'guide' ? (
             <article className="guide">
               {guide
@@ -774,16 +943,53 @@ function App() {
                       <Globe2 />
                       <div>
                         <strong>
-                          {list.find((en) => en.deck.id === id)?.deck.title ||
+                          {publishedTitles[id] ||
+                            list.find((en) => en.deck.id === id)?.deck.title ||
                             'Опубликованная методичка'}
                         </strong>
                         <a href={link(id)}>{link(id)}</a>
                       </div>
                       <button
+                        className="icon"
+                        aria-label="Редактировать"
+                        onClick={() =>
+                          task('Открываем методичку…', async () => {
+                            const remote = validateDeck(await readPublic(id))
+                            if (remote.id !== id)
+                              throw Error(
+                                'Идентификатор публикации не совпадает со ссылкой.'
+                              )
+                            const hash = await fingerprint(remote)
+                            const local = (await entries()).find(
+                              (e) => e.deck.id === id
+                            )
+                            if (local) {
+                              if (
+                                (await fingerprint(local.deck)) !== hash &&
+                                !confirm(
+                                  'На устройстве есть свой черновик. Открыть его с сохранением локальных изменений?'
+                                )
+                              )
+                                return
+                              open(local.deck, local.revision)
+                            } else {
+                              localStorage.setItem(marker(id), hash)
+                              await insert(remote)
+                              notice(
+                                'Создан черновик из публикации. Нераспределённые элементы исходного черновика доступны только на исходном устройстве.'
+                              )
+                            }
+                          })
+                        }
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
                         onClick={() => {
                           if (confirm('Снять методичку с публикации?'))
                             task('Снимаем с публикации…', async () => {
                               await unpublish(id)
+                              localStorage.removeItem(marker(id))
                               setPubs(await listPublished())
                             })
                         }}
@@ -796,10 +1002,7 @@ function App() {
                   <div className="empty">
                     <Globe2 />
                     <h3>Публикаций пока нет</h3>
-                    <p>
-                      В редакторе откройте меню действий и выберите
-                      «Опубликовать».
-                    </p>
+                    <p>В верхней панели редактора нажмите «Опубликовать».</p>
                   </div>
                 )
               ) : (
@@ -838,6 +1041,7 @@ function App() {
         <Viewer deck={watch} onClose={() => setWatch(null)} />
       ) : editingTemplate?.t.format === 3 && allowed ? (
         <GridDesigner
+          libraryAvailable={owner && online}
           template={editingTemplate.t}
           set={templateHistory.set}
           history={templateHistory}
@@ -865,6 +1069,7 @@ function App() {
         />
       ) : editingTemplate && allowed ? (
         <Editor
+          libraryAvailable={owner && online}
           key={editingTemplate.t.deck.id}
           history={templateHistory}
           gridTemplateKind={
@@ -902,10 +1107,10 @@ function App() {
         />
       ) : doc && allowed ? (
         <Editor
-          key={doc.id}
+          key={doc.id + '/' + editorSession}
           history={lessonHistory}
           saveAs={() =>
-            task('Создаём шаблон…', async () => {
+            requestExit(async () => {
               await queue.current
               if (failure.current) throw failure.current
               const t = templateFrom(current.current!)
@@ -927,9 +1132,22 @@ function App() {
           deck={doc}
           change={(fn) => lessonHistory.update((d) => d && fn(d))}
           status={status}
-          back={() => task('Сохранение…', closeEditor)}
+          libraryAvailable={owner && online}
+          publishLabel={
+            same
+              ? 'Опубликовано'
+              : newerPublication
+                ? 'Синхронизовать'
+                : baseline
+                  ? 'Обновить публикацию'
+                  : 'Опубликовать'
+          }
+          canPublish={canPublish}
+          back={() => requestExit()}
           view={() => setWatch(doc)}
-          action={act}
+          action={(id) =>
+            id === 'publish' && newerPublication ? setModal('sync') : act(id)
+          }
           notice={notice}
         />
       ) : (
@@ -966,6 +1184,8 @@ function App() {
             <h2 id="dialog-title">
               {
                 {
+                  sync: 'Публикация изменилась',
+                  leave: 'Выход из редактора',
                   preview: 'Предпросмотр импорта',
                   create: 'Новая методичка',
                   import: 'Импорт JSON',
@@ -974,7 +1194,43 @@ function App() {
                 }[modal]
               }
             </h2>
-            {modal === 'preview' && preview ? (
+            {modal === 'sync' ? (
+              <>
+                <p>
+                  Можно открыть актуальную облачную версию. Текущий черновик
+                  останется в библиотеке отдельной копией.
+                </p>
+                <button onClick={() => task('Синхронизация…', syncPublication)}>
+                  Загрузить опубликованную версию
+                </button>
+                <button onClick={() => act('publish')}>
+                  Опубликовать текущий черновик
+                </button>
+                <button onClick={() => setModal('')}>
+                  Продолжить редактирование
+                </button>
+              </>
+            ) : modal === 'leave' ? (
+              <>
+                <p>
+                  {baseline
+                    ? 'Есть неопубликованные изменения.'
+                    : 'Методичка ещё не опубликована.'}
+                </p>
+                <button
+                  disabled={!canPublish}
+                  onClick={() => act('publish', true)}
+                >
+                  Опубликовать и выйти
+                </button>
+                <button onClick={() => task('Сохранение…', closeEditor)}>
+                  Оставить локально и выйти
+                </button>
+                <button onClick={() => setModal('')}>
+                  Продолжить редактирование
+                </button>
+              </>
+            ) : modal === 'preview' && preview ? (
               <ImportPreview
                 deck={preview}
                 back={() => setModal('import')}

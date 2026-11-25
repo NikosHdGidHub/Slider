@@ -34,7 +34,12 @@ export async function entries(): Promise<Entry[]> {
     q.onerror = () => reject(q.error)
   })
 }
-export async function saveEntry(deck: Deck, revision: number, remove = false) {
+export async function saveEntry(
+  deck: Deck,
+  revision: number,
+  remove = false,
+  backupBeforeSync = false
+) {
   const db = await opened
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction('lessons', 'readwrite'),
@@ -51,7 +56,14 @@ export async function saveEntry(deck: Deck, revision: number, remove = false) {
       } else if (remove) store.delete(deck.id)
       else {
         const previous = read.result?.deck
-        if (
+        if (backupBeforeSync && previous) {
+          const backup = {
+            ...previous,
+            id: crypto.randomUUID(),
+            title: previous.title.slice(0, 970) + ' — до синхронизации',
+          }
+          store.add({ deck: backup, revision: 1, updated: Date.now() })
+        } else if (
           deck.migrated === false &&
           previous &&
           (previous.version < 3 || previous.migrated)
@@ -132,4 +144,14 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
     tx.oncomplete = () => resolve()
     tx.onabort = () => reject(tx.error ?? new Error('Запись шаблона прервана.'))
   })
+}
+
+// Offline integrity metadata shares the technical image store with upload receipts.
+export async function rememberImage(hash: string, source: string) {
+  if (!source.startsWith('data:'))
+    await imageAddress('offline-url:' + hash, source)
+  return imageAddress(
+    'offline:' + hash,
+    source.startsWith('data:') ? 'embedded' : source
+  )
 }

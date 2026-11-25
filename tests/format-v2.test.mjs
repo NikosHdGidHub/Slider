@@ -183,7 +183,7 @@ test('генератор отражает текущий каталог, иск�
   assert.deepEqual(
     validateDeck(
       readFileSync(
-        new URL('../docs/examples/water-cycle.json', import.meta.url),
+        new URL('./fixtures/water-cycle.json', import.meta.url),
         'utf8'
       )
     ),
@@ -193,7 +193,7 @@ test('генератор отражает текущий каталог, иск�
 
 test('скачиваемый пример инструкции совпадает с актуальным генератором', () => {
   const actual = readFileSync(
-    new URL('../docs/examples/atlas-instructions.txt', import.meta.url),
+    new URL('./fixtures/atlas-instructions.txt', import.meta.url),
     'utf8'
   )
   assert.equal(actual, instructions(builtins, 'Встроенные шаблоны') + '\n')

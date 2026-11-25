@@ -1,3 +1,4 @@
+import { digest } from './digest'
 import { mediaSlides } from './grid.ts'
 import { importSVG } from './vectorImport'
 import { imageSource, MAX_DOCUMENT_BYTES, validateDeck } from './model'
@@ -108,7 +109,10 @@ async function readImageResponse(response: Response): Promise<Blob> {
   return new Blob(parts, { type })
 }
 
-export async function embedImages(deck: Deck): Promise<Deck> {
+export async function embedImages(
+  deck: Deck,
+  remember?: (hash: string, url: string) => Promise<unknown>
+): Promise<Deck> {
   const copy = validateDeck(deck)
   const embedded = new Map<string, string>()
   async function embed(src: string): Promise<string> {
@@ -117,6 +121,8 @@ export async function embedImages(deck: Deck): Promise<Deck> {
     let result = src
     if (src.startsWith('data:')) {
       await decode(src)
+      if (remember)
+        await remember(await digest(await (await fetch(src)).blob()), src)
     } else {
       try {
         const response = await fetch(src, {
@@ -125,13 +131,31 @@ export async function embedImages(deck: Deck): Promise<Deck> {
         })
         if (!response.ok) throw new Error(String(response.status))
         const blob = await readImageResponse(response)
+        const checksum = await digest(blob)
+        const expected = /\/images\/([a-f0-9]{64})\.(?:png|jpg|webp)$/.exec(
+          src
+        )?.[1]
+        if (expected && expected !== checksum)
+          throw Error('Контрольная сумма не совпала.')
         if (RASTER_MIME.includes(blob.type) && blob.size <= MAX_IMAGE_BYTES) {
           result = imageSource(await dataURL(blob))
           await decode(result)
         } else {
           result = (await optimize(blob)).src
         }
-      } catch {
+        if (remember)
+          await remember(
+            RASTER_MIME.includes(blob.type)
+              ? checksum
+              : await digest(await (await fetch(result)).blob()),
+            src
+          )
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === 'Контрольная сумма не совпала.'
+        )
+          throw error
         throw new Error(
           'Не удалось сохранить изображение. Проверьте доступность файла, разрешение CORS и подключение к интернету.'
         )

@@ -58,7 +58,7 @@ def exercise(page, url, tmp):
 
     def open_lesson():
         button("Мои методички").click()
-        page.get_by_role("button", name="Урок приёмки", exact=False).first.click()
+        page.get_by_role("button", name="Редактировать Урок приёмки", exact=True).first.click()
         page.locator(".thumb").nth(1).click()
 
     lesson_text = guide("презентации")
@@ -67,7 +67,7 @@ def exercise(page, url, tmp):
         for line in lesson_text.splitlines()
         if line.startswith('{"version"')
     )
-    assert water == json.loads((ROOT / "docs/examples/water-cycle.json").read_text())
+    assert water == json.loads((ROOT / "tests/fixtures/water-cycle.json").read_text())
     click("Шаблоны")
     text = guide("шаблона")
     samples = [
@@ -90,7 +90,7 @@ def exercise(page, url, tmp):
         )
         click("Импортировать шаблон")
         card = page.locator(".template-card").filter(has_text=doc["deck"]["title"]).last
-        card.get_by_role("button", name="Редактировать", exact=True).click()
+        card.get_by_role("button", name="Редактировать", exact=False).click()
         name = "Сетка приёмки" if i else "Рамка приёмки"
         page.get_by_label("Название шаблона").fill(name)
         if i:
@@ -121,9 +121,11 @@ def exercise(page, url, tmp):
             expect(page.locator(".grid-cell")).to_have_count(3)
         click("Сохранить шаблон")
         card = page.locator(".template-card").filter(has_text=name)
-        card.get_by_role("button", name="Редактировать", exact=True).click()
+        card.get_by_role("button", name="Редактировать", exact=False).click()
         expect(page.get_by_label("Название шаблона")).to_have_value(name)
         click("В библиотеку")
+        if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+            click("Оставить локально и выйти")
 
     click("Презентации")
     page.locator(".template-card").filter(has_text="Рамка приёмки").get_by_text(
@@ -168,6 +170,8 @@ def exercise(page, url, tmp):
     capture("filled-structure")
     original = export()
     click("В библиотеку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     open_lesson()
     assert export() == original
 
@@ -185,11 +189,16 @@ def exercise(page, url, tmp):
     stored = export()
     assert all(o["slot"] == "tray" for o in stored["slides"][1]["items"])
     click("В библиотеку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     open_lesson()
     assert export() == stored
     click("Сохранить как шаблон")
+    click("Оставить локально и выйти")
     expect(page.get_by_label("Название шаблона")).to_have_value("Урок приёмки — шаблон")
     click("В библиотеку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     expect(
         page.locator(".template-card").filter(has_text="Урок приёмки — шаблон")
     ).to_have_count(1)
@@ -216,10 +225,14 @@ def exercise(page, url, tmp):
         for s in [changed["slides"][0], changed["slides"][-1]]
     )
     click("В библиотеку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     import_lesson(changed)
     assert export()["slides"] == changed["slides"]
     # Import an actual v2 release fixture. The content must match the original five slides.
     click("В библиотеку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
     legacy = json.loads((ROOT / "tests/water-v2.json").read_text())
     import_lesson(legacy)
     migrated = export()
@@ -234,9 +247,13 @@ def exercise(page, url, tmp):
     page.get_by_label("Сменить главный шаблон").select_option(label="Рамка приёмки")
     assert all(o["slot"] == "tray" for s in export()["slides"] for o in s["items"])
     click("В библиотеку")
-    page.locator(".card-open").filter(has_text="до смены шаблона").click()
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
+    page.locator(".card").filter(has_text="до смены шаблона").get_by_title("Редактировать методичку").click()
     assert export()["slides"] == legacy["slides"]
     click("В библиотеку")
+    if page.get_by_role("button", name="Оставить локально и выйти").is_visible():
+        click("Оставить локально и выйти")
 
     # Header inheritance, local overrides and drag a two-object group inside a reduced area.
     lesson = deepcopy(water)
@@ -299,14 +316,16 @@ def exercise(page, url, tmp):
     # Trigger a real IndexedDB revision conflict, keep the unsaved editor and abort save-as.
     other = page.context.new_page()
     other.goto(url)
-    other.locator(".card-open").filter(has_text=lesson["title"]).click()
+    other.get_by_role("button",name="Редактировать " + lesson["title"],exact=True).click()
     other.get_by_label("Название методички").fill("Изменено в другой вкладке")
     expect(other.locator(".edit-head small")).to_contain_text("Сохранено")
     page.get_by_label("Название методички").fill("Локальный конфликт")
     expect(page.locator(".edit-head small")).to_contain_text("Ошибка записи")
     click("Сохранить как шаблон")
+    click("Оставить локально и выйти")
     expect(page.get_by_label("Название методички")).to_have_value("Локальный конфликт")
     expect(page.locator(".grid-designer")).to_have_count(0)
+    click("Продолжить редактирование")
     assert export()["title"] == "Локальный конфликт"
     other.close()
     assert not errors, errors
