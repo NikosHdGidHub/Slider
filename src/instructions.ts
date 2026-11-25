@@ -3,14 +3,11 @@ import { collectStyles, type StyleLibrary } from './styleLibrary.ts'
 import { cellTypes } from './grid.ts'
 import { schema, builtinFonts, shapes, FORMAT_VERSION } from './schema.ts'
 import {
-  builtins,
   validateTemplate,
-  waterExample,
-  frameTemplate,
+  baseTemplate,
   twoByTwo,
   type Template,
 } from './catalog.ts'
-import { newDeck, newShape, validateDeck, type Deck } from './model.ts'
 
 export function download(
   name: string,
@@ -113,30 +110,7 @@ I. Шрифты
 J. Композиция и возраст
 Оставь поля примерно 64–80 px и просветы между карточками 32–48 px. Выбери тёмный текст на светлом фоне или светлый на тёмном; проверь контраст основного текста (ориентир 4,5:1). Используй один насыщенный акцент для смыслового центра. Не клади мелкую подпись на границу градиента. Начала однотипных заголовков и подписи под иллюстрациями выровняй по общим линиям.
 Для 5–6 лет покажи одно действие, одну крупную картинку и короткую фразу; детали рассказа помести в notes. Для младших школьников подойдут 2–3 шага с одинаковыми подписями. Старшей аудитории можно дать сопоставление величин или определений в двух колонках, сохраняя достаточный кегль. При намеренном наложении расположи фон перед текстом в массиве, затем проверь контраст и свободное место.`
-export function referenceDecks() {
-  const gallery = newDeck('Справочник фигур')
-  gallery.id = 'd1000000-0000-4000-8000-000000000000'
-  gallery.slides = Object.keys(shapes).map((key, index) => {
-    const shape = newShape(key as keyof typeof shapes)
-    const tail = String(index + 1).padStart(12, '0')
-    shape.id = 'd1000000-0001-4000-8000-' + tail
-    return {
-      ...structuredClone(gallery.slides[0]),
-      id: 'd1000000-0002-4000-8000-' + tail,
-      items: [shape],
-    }
-  })
-  const cards = structuredClone(builtins[2].deck)
-  const first = cards.slides[0].items[1]
-  first.paragraphs = [
-    { runs: [{ text: 'Лёд', bold: true, font: 'serif', color: '#174c6f' }] },
-    { runs: [{ text: 'Твёрдая вода', size: 26, italic: true }] },
-  ]
-  first.text = 'Лёд\nТвёрдая вода'
-  cards.slides[0].items[2].text = 'Вода'
-  cards.slides[0].items[3].text = 'Пар'
-  return [waterExample, cards, builtins[4].deck, gallery].map(validateDeck)
-}
+
 export function instructions(
   templates: Template[],
   scope: string,
@@ -169,16 +143,7 @@ export function instructions(
       })
     ),
     'Скопируй нужные определения стилей в theme.styles. Если байты шрифта уже есть в исходном JSON, перенеси ресурс целиком. В каталоге шаблонов fontIds перечисляет собственные шрифты. Если известен только ID, укажи его в стиле, оставь resources.fonts пустым. При импорте на этом устройстве приложение подставляет и встраивает доступный файл по ID. Для обмена между устройствами экспортируй презентацию после этой подстановки. Если файла нет, появится предупреждение и резервная гарнитура.',
-    'K. Проверенные примеры',
-    ...referenceDecks().flatMap((d, i) => [
-      [
-        'Пять мятных слайдов. Слева крупный текст, справа солнце, облако и капля. От нагревания воды до возвращения в реку.',
-        'Три пастельные карточки под одним заголовком. На первой — слово «Лёд» и пояснение меньшим курсивом. Надписи хранятся внутри фигур.',
-        'Три этапа со стрелками между ними.',
-        'По одной фигуре в верхней левой части каждого слайда. Форма соответствует очередному типу из схемы.',
-      ][i],
-      JSON.stringify(d),
-    ]),
+
     'L. Самопроверка',
     'Проверь синтаксис, версию, обязательные поля, диапазоны, уникальные UUID, ссылки на стили и шрифты. Сверь text с абзацами. Убедись, что за рамками холста нет важных объектов. Мысленно просмотри каждый слайд слева направо: читается ли заголовок, видно ли главное действие, не закрыт ли декор? Проверь размер текста на проекторе и возраст аудитории. Верни готовый JSON.',
   ].join('\n\n')
@@ -193,7 +158,7 @@ export function templateInstructions(
   scope: string,
   library = collectStyles(templates.map((t) => t.deck))
 ) {
-  const samples = [frameTemplate, twoByTwo].map(validateTemplate)
+  const samples = [baseTemplate, twoByTwo].map(validateTemplate)
   return [
     'Атлас уроков · конструктор шаблонов · формат ' + FORMAT_VERSION,
     scope,
@@ -226,7 +191,7 @@ export function templateInstructions(
         }))
       )
     ),
-    'Проверенные примеры. Фиолетовая рамка с заголовком, полноразмерная область обычного слайда и финальное Спасибо. Затем структурная сетка из трёх ячеек.',
+    'Базовые примеры: пустой главный шаблон с полноразмерной областью слайда во всех трёх схемах и структурная компоновка с описанием, изображением и выводом.',
     ...samples.map((t) => JSON.stringify(t)),
     'Перед выдачей проверь UUID, форму обёртки, число схем, целочисленные позиции, покрытие сетки, отсутствие наложений, положительную внутреннюю площадь, пропорции области, читаемость и порядок объектов.',
   ].join('\n\n')
