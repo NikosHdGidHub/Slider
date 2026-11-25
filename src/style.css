@@ -1730,3 +1730,89 @@ h1 {
     justify-content: center;
   }
 }
+
+/* Кнопка синхронизации: предупреждающая пульсация */
+
+/* Кнопка синхронизации */
+
+.editor .edit-head button.sync-attention {
+  flex: 0 0 auto;
+  min-width: 165px;
+  min-height: 42px;
+
+  padding: 10px 18px;
+  border-radius: 9px;
+
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+
+  background: #f5c842;
+  color: #533800;
+  border: 1px solid #e7a82c;
+
+  animation: sync-alert 2.2s ease-in-out infinite;
+}
+
+@keyframes sync-alert {
+  0%,
+  100% {
+    background: #f5c842;
+    color: #533800;
+    border-color: #e7a82c;
+    box-shadow: 0 0 0 0 rgba(245, 200, 66, 0.18);
+  }
+
+  50% {
+    background: #dc4848;
+    color: #ffffff;
+    border-color: #bd3030;
+    box-shadow: 0 0 0 5px rgba(220, 72, 72, 0.12);
+  }
+}
+
+.edit-head button.sync-attention:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.edit-head button.sync-attention:focus-visible {
+  outline: 3px solid #255b44;
+  outline-offset: 3px;
+}
+
+/* Учитываем настройки уменьшения анимации */
+
+@media (prefers-reduced-motion: reduce) {
+  .edit-head button.sync-attention {
+    animation: none;
+    background: #f5c842;
+    color: #533800;
+    border-color: #e7a82c;
+  }
+}
+
+/* Зелёные кнопки публикации в тёмном редакторе */
+
+.editor .edit-head button.primary {
+  flex-shrink: 0;
+  min-height: 42px;
+  padding: 10px 18px;
+  border-radius: 9px;
+
+  background: #255b44;
+  color: #ffffff;
+  border: 1px solid #347858;
+
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.editor .edit-head button.primary:hover:not(:disabled) {
+  background: #307555;
+  border-color: #408c68;
+}
+
+.editor .edit-head button.primary:disabled {
+  opacity: 0.55;
+}

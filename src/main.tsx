@@ -30,6 +30,7 @@ import {
   Compass,
   QrCode,
   LogIn,
+  RefreshCw,
 } from 'lucide-react'
 import { newDeck, validateDeck, type Deck, MAX_DOCUMENT_BYTES } from './model'
 import { embedImages } from './media'
@@ -515,11 +516,21 @@ function App() {
       'Открыта актуальная публикация. Предыдущий черновик сохранён в библиотеке с пометкой «до синхронизации».'
     )
   }
+
   function requestExit(next?: () => Promise<void>) {
     afterExit.current = next ?? null
-    if (same) void task('Сохранение…', closeEditor)
-    else setModal('leave')
+
+    // Нет публикации или локальная версия совпадает с облачной.
+    // Выходим без дополнительного диалога.
+    if (!baseline || same) {
+      void task('Сохранение…', closeEditor)
+      return
+    }
+
+    // Методичка опубликована, но есть неопубликованные изменения.
+    setModal('leave')
   }
+
   async function closeEditor() {
     dragPointer.current = null
     flushPendingSave()
@@ -1272,6 +1283,8 @@ function App() {
                 <Link2 />
               ) : modal === 'login' ? (
                 <UserRound />
+              ) : modal === 'sync' ? (
+                <RefreshCw />
               ) : (
                 <Layers3 />
               )}
@@ -1289,21 +1302,55 @@ function App() {
                 }[modal]
               }
             </h2>
+
             {modal === 'sync' ? (
               <>
-                <p>
-                  Можно открыть актуальную облачную версию. Текущий черновик
-                  останется в библиотеке отдельной копией.
+                <p className="leave-description">
+                  Облачная версия методички изменилась на другом устройстве.
+                  Выберите, какую версию использовать.
                 </p>
-                <button onClick={() => task('Синхронизация…', syncPublication)}>
-                  Загрузить опубликованную версию
-                </button>
-                <button onClick={() => act('publish')}>
-                  Опубликовать текущий черновик
-                </button>
-                <button onClick={() => setModal('')}>
-                  Продолжить редактирование
-                </button>
+
+                <div className="leave-actions">
+                  <button
+                    className="leave-action leave-action-publish"
+                    onClick={() => task('Синхронизация…', syncPublication)}
+                  >
+                    <Globe2 size={21} />
+
+                    <span className="leave-action-content">
+                      <strong>Загрузить опубликованную версию</strong>
+                      <small>
+                        Открыть актуальную методичку из облака. Текущий черновик
+                        сохранится отдельной копией.
+                      </small>
+                    </span>
+
+                    <ArrowUpRight size={18} />
+                  </button>
+
+                  <button
+                    className="leave-action leave-action-local"
+                    disabled={!canPublish}
+                    onClick={() => act('publish')}
+                  >
+                    <FolderOpen size={21} />
+
+                    <span className="leave-action-content">
+                      <strong>Опубликовать текущий черновик</strong>
+                      <small>
+                        Заменить облачную публикацию версией с этого устройства.
+                      </small>
+                    </span>
+                  </button>
+
+                  <button
+                    className="leave-action-cancel"
+                    onClick={() => setModal('')}
+                  >
+                    <Pencil size={16} />
+                    Продолжить редактирование
+                  </button>
+                </div>
               </>
             ) : modal === 'leave' ? (
               <>

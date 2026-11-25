@@ -471,10 +471,18 @@ export function Editor({
             Показать
           </button>
         )}
+
         {publishLabel && (
           <button
             className={
-              publishLabel === 'Обновить публикацию' ? 'primary' : 'secondary'
+              publishLabel === 'Синхронизовать'
+                ? canPublish
+                  ? 'secondary sync-attention'
+                  : 'secondary'
+                : publishLabel === 'Опубликовать' ||
+                    publishLabel === 'Обновить публикацию'
+                  ? 'primary'
+                  : 'secondary'
             }
             disabled={!canPublish}
             onClick={() => action('publish')}
@@ -482,6 +490,7 @@ export function Editor({
             {publishLabel}
           </button>
         )}
+
         {saveTemplate ? (
           <button className="secondary" onClick={saveTemplate}>
             Сохранить шаблон
