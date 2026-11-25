@@ -189,6 +189,9 @@ const common = {
   align: text.align,
 };
 const transform = {
+  layerName: str(200),
+  hidden: bool,
+  locked: bool,
   priorSlot: str(84),
   slot: str(84),
   fixed: bool,
@@ -294,6 +297,18 @@ export const definitions: Record<string, Rule> = {
     {
       kind: values("title", "normal", "end"),
       area: obj(box),
+      ownBackground: bool,
+      effects: obj(
+        {},
+        {
+          brightness: num(0, 200),
+          blur: num(0, 40),
+          zoom: num(50, 300),
+          x: num(0, 100),
+          y: num(0, 100),
+          fit: values("cover", "contain"),
+        },
+      ),
       structure: ref("Grid"),
       header: str(200000),
       footer: str(200000),

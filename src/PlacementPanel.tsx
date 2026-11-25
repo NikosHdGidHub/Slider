@@ -210,14 +210,6 @@ export function PlacementPanel({
           </select>
         </label>
       )}
-      <details open={tray.length > 0 || undefined}>
-        <summary>Неразмещённое содержимое ({tray.length})</summary>
-        {tray.map((o) => (
-          <button key={o.id} onClick={() => select(o.id)}>
-            {name(o)}
-          </button>
-        ))}
-      </details>
       <details>
         <summary>Группы и связи</summary>
         {slide.items

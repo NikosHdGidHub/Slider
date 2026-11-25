@@ -101,6 +101,7 @@ export function instantiate(template: Template) {
   if (template.format === 3) {
     delete deck.migrated;
     rememberArt(deck);
+    for (const slide of deck.slides) delete slide.ownBackground;
     for (const s of deck.slides)
       s.items = s.items.map((o) =>
         o.role === "decoration"

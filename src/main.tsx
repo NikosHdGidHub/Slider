@@ -1,3 +1,4 @@
+import { useHistory } from "./StudioTools";
 import { GridDesigner } from "./GridDesigner";
 import { templateFrom } from "./catalog";
 import { templateInstructions } from "./instructions";
@@ -89,6 +90,23 @@ function App() {
     t: Template;
     row?: CatalogRow;
   } | null>(null);
+  const templateHistory = useHistory(
+    editingTemplate?.t,
+    (t) => {
+      if (t)
+        setEditingTemplate((v) =>
+          v && v.t.deck.id === t.deck.id ? { ...v, t } : v,
+        );
+    },
+    editingTemplate?.t.deck.id,
+  );
+  const lessonHistory = useHistory(
+    doc,
+    (d) => {
+      if (d) change((prev) => (prev.id === d.id ? d : prev));
+    },
+    doc?.id,
+  );
   const [preview, setPreview] = useState<Deck | null>(null);
   const access = useRef(allowed);
   access.current = allowed;
@@ -734,7 +752,8 @@ function App() {
       ) : editingTemplate?.t.format === 3 && !art && allowed ? (
         <GridDesigner
           template={editingTemplate.t}
-          set={(t) => setEditingTemplate({ ...editingTemplate, t })}
+          set={templateHistory.set}
+          history={templateHistory}
           notice={notice}
           art={() => setArt(true)}
           back={() => {
@@ -761,6 +780,7 @@ function App() {
       ) : editingTemplate && allowed ? (
         <Editor
           key={editingTemplate.t.deck.id}
+          history={templateHistory}
           gridTemplateKind={
             editingTemplate.t.format === 3 ? editingTemplate.t.kind : undefined
           }
@@ -770,12 +790,10 @@ function App() {
           templates={visibleRows.map((r) => r.template)}
           description={editingTemplate.t.description}
           describe={(description) =>
-            setEditingTemplate((v) => v && { ...v, t: { ...v.t, description } })
+            templateHistory.update((t) => t && { ...t, description })
           }
           change={(fn) =>
-            setEditingTemplate(
-              (v) => v && { ...v, t: { ...v.t, deck: fn(v.t.deck) } },
-            )
+            templateHistory.update((t) => t && { ...t, deck: fn(t.deck) })
           }
           back={() => {
             if (art) {
@@ -803,6 +821,7 @@ function App() {
       ) : doc && allowed ? (
         <Editor
           key={doc.id}
+          history={lessonHistory}
           saveAs={() =>
             task("Создаём шаблон…", async () => {
               await queue.current;
@@ -825,7 +844,7 @@ function App() {
           styleLibrary={styleLibrary}
           templates={visibleRows.map((r) => r.template)}
           deck={doc}
-          change={change}
+          change={(fn) => lessonHistory.update((d) => d && fn(d))}
           status={status}
           back={() => task("Сохранение…", closeEditor)}
           view={() => setWatch(doc)}
