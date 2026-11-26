@@ -25,6 +25,7 @@ interface StageProps {
   design?: boolean
   onSlot?: (id: string) => void
   onSlotEdit?: (id: string, start: TextEditStart) => void
+  onSourceText?: (id: string, fields: Partial<Item>) => void
   textEdit?: TextEditStart & { id: string }
   onSystemStyle?: (type: TextType, fields: Characters) => void
   undo?: (redo: boolean) => void
@@ -91,6 +92,7 @@ export function Stage({
   design,
   onSlot,
   onSlotEdit,
+  onSourceText,
   textEdit,
   onSystemStyle,
   undo,
@@ -315,7 +317,8 @@ export function Stage({
                     ? '2px dashed #74918d'
                     : undefined,
                 pointerEvents:
-                  onSlot && !['area', 'empty'].includes(c.type)
+                  (onSlot && !['area', 'empty'].includes(c.type)) ||
+                  (onSourceText && textEdit?.id === v.id)
                     ? 'auto'
                     : 'none',
               }}
@@ -336,6 +339,15 @@ export function Stage({
                     deck={deck}
                     editing={!!onSelect || !!diagnostics}
                     cell={c}
+                    edit={textEdit?.id === v.id ? textEdit : undefined}
+                    finishEdit={finishTextEdit}
+                    onText={
+                      onSourceText
+                        ? (fields) => onSourceText(v.id, fields)
+                        : undefined
+                    }
+                    undo={undo}
+                    plainSource={!!onSourceText}
                     item={{
                       id: v.id,
                       type: 'text',

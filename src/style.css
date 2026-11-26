@@ -522,6 +522,15 @@ h1 {
   outline: 3px solid #2d8168;
   outline-offset: -3px;
 }
+.grid-cell.editing {
+  pointer-events: none;
+  outline: none;
+  border-color: transparent;
+}
+
+.grid-cell.editing span {
+  visibility: hidden;
+}
 .grid-divider {
   position: absolute;
   z-index: 2;

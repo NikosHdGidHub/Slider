@@ -22,6 +22,7 @@ import { useCommands, type HistoryControls, type Action } from './StudioTools'
 import { Background } from './Background'
 import { useEffect, useRef, useState } from 'react'
 import { Stage } from './Stage'
+import type { TextEditStart } from './VisualText'
 import {
   cell,
   repairSlots,
@@ -130,6 +131,13 @@ export function GridDesigner({
     [selected, select] = useState(''),
     [merge, merging] = useState(false)
   const [objects, setObjects] = useState(false)
+  const [sourceEdit, setSourceEdit] = useState<
+    | (TextEditStart & {
+        id: string
+        slideId: string
+      })
+    | null
+  >(null)
   const [inspectorRequest, requestInspector] = useState(0)
   const cellProperties = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -148,6 +156,7 @@ export function GridDesigner({
       ? (s.structure ?? blankGrid('free'))
       : deck.master.schemes[kind]
   const c = g.cells.find((v) => v.id === selected) ?? g.cells[0]
+  const activeSourceEdit = sourceEdit?.slideId === s.id ? sourceEdit : null
   function change(next: Grid) {
     try {
       validateGrid(next, structural)
@@ -184,26 +193,61 @@ export function GridDesigner({
       ),
     })
   }
-  function updateSources(value: string, every = false) {
-    if (!isTextType(c.type)) return
+  function updateSources(value: string, every = false, cellId = c.id) {
+    const field = g.cells.find((o) => o.id === cellId)
+
+    if (!field || !isTextType(field.type)) return
+
     const d = structuredClone(deck)
+
     for (const page of d.slides) {
       if (!every && page.id !== s.id) continue
+
       const ids = new Set<string>()
+
       const update = (grid: Grid | undefined, prefix: string) => {
-        for (const field of grid?.cells ?? []) {
-          if (every ? field.type !== c.type : field.id !== c.id) continue
-          field.value = value
-          ids.add(prefix + field.id)
+        for (const targetCell of grid?.cells ?? []) {
+          if (
+            every ? targetCell.type !== field.type : targetCell.id !== field.id
+          ) {
+            continue
+          }
+
+          targetCell.value = value
+
+          ids.add(prefix + targetCell.id)
         }
       }
-      if (!structural) update(d.master.schemes[page.kind ?? 'normal'], 'm/')
-      if (structural || every) update(page.structure, 's/')
+
+      if (!structural) {
+        update(d.master.schemes[page.kind ?? 'normal'], 'm/')
+      }
+
+      if (structural || every) {
+        update(page.structure, 's/')
+      }
+
       page.items = page.items.filter(
         (item) => item.fixed || !ids.has(target(item))
       )
     }
+
     set({ ...template, deck: d })
+  }
+  function editSource(cellId: string, start: TextEditStart = {}) {
+    const field = g.cells.find((o) => o.id === cellId)
+
+    if (!field || !isTextType(field.type) || merge) {
+      return
+    }
+
+    select(field.id)
+
+    setSourceEdit({
+      ...start,
+      id: (structural ? 's/' : 'm/') + field.id,
+      slideId: s.id,
+    })
   }
   function pick(v: Cell) {
     if (!merge) {
@@ -375,7 +419,10 @@ export function GridDesigner({
             </small>
             <IconButton
               label="Оформление и объекты"
-              onClick={() => setObjects(true)}
+              onClick={() => {
+                setSourceEdit(null)
+                setObjects(true)
+              }}
             >
               <Captions />
             </IconButton>
@@ -402,6 +449,7 @@ export function GridDesigner({
                   aria-pressed={v === kind}
                   key={v}
                   onClick={() => {
+                    setSourceEdit(null)
                     choose(v)
                     select('')
                     merging(false)
@@ -682,12 +730,38 @@ export function GridDesigner({
               slide={s}
               showSource
               diagnostics
+              textEdit={activeSourceEdit ?? undefined}
+              finishTextEdit={() =>
+                setSourceEdit((current) =>
+                  current === activeSourceEdit ? null : current
+                )
+              }
+              onSourceText={(id, fields) => {
+                if (typeof fields.text !== 'string') return
+
+                const prefix = structural ? 's/' : 'm/'
+
+                if (!id.startsWith(prefix)) return
+
+                updateSources(fields.text, false, id.slice(prefix.length))
+              }}
+              undo={(redo) =>
+                history.actions
+                  .find((a) => a.key === (redo ? 'shift+z' : 'z'))
+                  ?.run()
+              }
             />
             {rectangles(g).map(({ cell: o, outer: b }) => (
               <button
                 key={o.id}
                 aria-label={'Ячейка ' + (o.row + 1) + ', ' + (o.col + 1)}
-                className={'grid-cell ' + (o.id === c.id ? 'selected' : '')}
+                className={
+                  'grid-cell ' +
+                  (o.id === c.id ? 'selected ' : '') +
+                  (activeSourceEdit?.id === (structural ? 's/' : 'm/') + o.id
+                    ? 'editing'
+                    : '')
+                }
                 style={{
                   left: b.x / 12.8 + '%',
                   top: b.y / 7.2 + '%',
@@ -698,7 +772,19 @@ export function GridDesigner({
                   select(o.id)
                   context.open(e, commands(o))
                 }}
-                onClick={() => pick(o)}
+                onClick={(e) => {
+                  if (merge || !isTextType(o.type)) {
+                    pick(o)
+                    return
+                  }
+
+                  editSource(o.id, {
+                    point: {
+                      left: e.clientX,
+                      top: e.clientY,
+                    },
+                  })
+                }}
               >
                 <span>{cellTypes[o.type]}</span>
               </button>

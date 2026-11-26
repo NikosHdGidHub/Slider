@@ -148,11 +148,13 @@ export function TextBlock({
   onText,
   onSystemStyle,
   undo,
+  plainSource = false,
 }: {
   item: Item
   deck?: Deck
   cell?: Cell
   editing: boolean
+  plainSource?: boolean
   edit?: TextEditStart
   finishEdit?: () => void
   undo?: (redo: boolean) => void
@@ -162,7 +164,7 @@ export function TextBlock({
   const box = useRef<HTMLDivElement>(null)
   const style = typography(item, deck, cell)
   const type = itemTextType(item, cell)
-  const flexible = type === 'text'
+  const flexible = type === 'text' && !plainSource
   const active = !!edit && !!onText
   const [overflow, setOverflow] = useState(false)
   const padding = Array.isArray(style.padding)
