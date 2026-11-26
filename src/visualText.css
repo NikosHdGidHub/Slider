@@ -1,0 +1,46 @@
+.atlas-slide-text {
+  display: flex;
+  flex-direction: column;
+  font-synthesis: none;
+}
+.atlas-slide-text > div {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.atlas-visual-text {
+  cursor: text;
+  pointer-events: auto;
+  user-select: text;
+}
+.atlas-visual-text .ProseMirror {
+  min-height: 1em;
+  outline: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  counter-reset: atlas-list;
+}
+.atlas-visual-text .ProseMirror p {
+  margin: 0 0 var(--atlas-paragraph-spacing, 0);
+}
+.atlas-visual-text .ProseMirror p:not([data-list='number']) {
+  counter-reset: atlas-list;
+}
+.atlas-visual-text .ProseMirror p[data-list='number'] {
+  counter-increment: atlas-list;
+}
+.atlas-visual-text .ProseMirror p[data-list='number']::before {
+  content: counter(atlas-list) '. ';
+}
+.atlas-visual-text .ProseMirror p[data-list='bullet']::before {
+  content: '• ';
+}
+.atlas-stage [contenteditable='true'] {
+  user-select: text;
+}
+.text-align-tools,
+.text-selection-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-block: 0.45rem;
+}

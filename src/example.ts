@@ -45,8 +45,7 @@ example.slides = pages.map(([title, body, notes], i): Slide => {
       y: 82,
       w: 500,
       h: 50,
-      size: 24,
-      color: '#315748',
+      overrides: { size: 24, color: '#315748' },
     },
     {
       ...newText(),
@@ -55,8 +54,7 @@ example.slides = pages.map(([title, body, notes], i): Slide => {
       y: 194,
       w: 590,
       h: 210,
-      size: 75,
-      color: '#183f34',
+      overrides: { size: 75, color: '#183f34' },
     },
     {
       ...newText(),
@@ -65,8 +63,7 @@ example.slides = pages.map(([title, body, notes], i): Slide => {
       y: 430,
       w: 520,
       h: 200,
-      size: 36,
-      color: '#315748',
+      overrides: { size: 36, color: '#315748' },
     },
   ]
   return slide

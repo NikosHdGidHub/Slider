@@ -9,7 +9,7 @@ import {
 } from '../src/instructions.ts'
 import { schema } from '../src/schema.ts'
 import { mediaSlides } from '../src/grid.ts'
-import { validateDeck } from '../src/model.ts'
+import { sourceText, validateDeck } from '../src/model.ts'
 import { validateTemplate } from '../src/catalog.ts'
 import { fixtureIcon, validatedFixtures } from './instruction-fixtures.mjs'
 
@@ -61,7 +61,7 @@ for (const key of [
       assert.notEqual(output.id, template.deck.id)
       assert.deepEqual(output.master.schemes, template.deck.master.schemes)
       assert.deepEqual(output.theme, template.deck.theme)
-      assert.equal(output.header, template.deck.header)
+      assert.equal(output.version, 4)
       assert.ok(mediaSlides(output).every((slide) => !slide.notes))
       for (const [index, slide] of output.slides.entries()) {
         const source = template.deck.slides[index]
@@ -165,10 +165,21 @@ test('unsafe addresses and keys produce actionable errors without exposing value
 test('cell, run, art and overrides keep their referenced font', async () => {
   const template = structuredClone(generated.fonts)
   const property = template.deck.resources.fonts[0]
-  template.deck.theme.styles.forEach((value) => {
-    value.values.font = 'sans'
-  })
-  template.deck.master.schemes.title.cells[0].style = { font: property.id }
+  for (const style of Object.values(template.deck.theme.systemStyles))
+    style.font = 'sans'
+  const cellStyle = {
+    id: 'typedCell',
+    label: 'Рамка',
+    values: { font: property.id },
+  }
+  template.deck.theme.styles.push(cellStyle)
+  const first = template.deck.master.schemes.title.cells[0]
+  template.deck.master.schemes.title.cells[0] = {
+    ...first,
+    type: 'text',
+    value: 'Исходный текст',
+    textStyle: cellStyle.id,
+  }
   const fixed = template.deck.slides[0].items[0]
   fixed.paragraphs = [{ runs: [{ text: fixed.text, font: property.id }] }]
   assert.deepEqual(
@@ -193,7 +204,16 @@ test('automatic pruning preserves every reachable constraint and reports the mat
       /"\$ref":"#\/\$defs\/([^"]+)"/g
     )
     for (const [, key] of references)
-      assert.deepEqual(result.$defs[key], schema.$defs[key])
+      assert.deepEqual(
+        result.$defs[key],
+        JSON.parse(
+          JSON.stringify(schema.$defs[key], (field, value) =>
+            field === 'description' && typeof value === 'string'
+              ? undefined
+              : value
+          )
+        )
+      )
     assert.equal(result.$defs.Presentation.additionalProperties, false)
   }
 })
@@ -226,7 +246,10 @@ for (const [kind, name] of [
 
 test('control generation round trips with frame, decor, grid, assets and the same font bytes', () => {
   const frame = validateDeck(fixture('water-frame'))
-  assert.equal(frame.header, generated.frame.deck.header)
+  assert.equal(
+    sourceText(frame.master.schemes.normal.cells[0]),
+    sourceText(generated.frame.deck.master.schemes.normal.cells[0])
+  )
   assert.equal(frame.slides.length, 5)
   assert.ok(
     frame.slides.every((slide) =>
@@ -235,8 +258,22 @@ test('control generation round trips with frame, decor, grid, assets and the sam
   )
   const complex = validateDeck(fixture('solar-grid'))
   assert.deepEqual(
-    complex.slides[1].structure,
-    generated.grid.deck.slides[1].structure
+    complex.slides[1].structure.cells.map((c) => [
+      c.id,
+      c.bindingType ?? c.type,
+      c.row,
+      c.col,
+      c.rows,
+      c.cols,
+    ]),
+    generated.grid.deck.slides[1].structure.cells.map((c) => [
+      c.id,
+      c.type,
+      c.row,
+      c.col,
+      c.rows,
+      c.cols,
+    ])
   )
   assert.equal(
     complex.slides[1].items.find((item) => item.type === 'image').src,
@@ -244,7 +281,13 @@ test('control generation round trips with frame, decor, grid, assets and the sam
   )
   const fonts = validateDeck(fixture('algorithm-font'))
   assert.deepEqual(fonts.resources.fonts, generated.fonts.deck.resources.fonts)
-  assert.ok(fonts.slides[0].items.some((item) => item.style === 'title'))
+  assert.ok(
+    fonts.slides[0].items.some((item) =>
+      fonts.theme.styles.some(
+        (s) => s.id === item.style && s.values.font === 'teacherFont'
+      )
+    )
+  )
   assert.equal(
     validateDeck(fixture('map-standard')).master.name,
     'По умолчанию'

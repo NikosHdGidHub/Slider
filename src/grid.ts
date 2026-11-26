@@ -1,13 +1,8 @@
 import type { Box, Deck, Item, Slide, TextStyle } from './model.ts'
+import { textTypes, isTextType, type StrictTextType } from './textTypes.ts'
 export const cellTypes = {
-  title: 'Заголовок',
-  subtitle: 'Подзаголовок',
-  description: 'Описание',
-  text: 'Текст',
-  header: 'Верхний колонтитул',
-  footer: 'Нижний колонтитул',
+  ...textTypes,
   image: 'Изображение',
-  caption: 'Подпись',
   area: 'Область слайда',
   free: 'Свободный блок',
   empty: 'Пустая ячейка',
@@ -29,6 +24,8 @@ export interface Cell {
   width?: number
   value?: string
   style?: TextStyle
+  textStyle?: string
+  bindingType?: StrictTextType
 }
 export interface Grid {
   rows: number[]
@@ -48,7 +45,16 @@ export function cell(
   type: CellType = 'empty',
   id = 'c' + crypto.randomUUID()
 ): Cell {
-  return { id, row, col, type, rows: 1, cols: 1, padding: [0, 0, 0, 0] }
+  return {
+    id,
+    row,
+    col,
+    type,
+    rows: 1,
+    cols: 1,
+    padding: [0, 0, 0, 0],
+    ...(isTextType(type) ? { value: textTypes[type] } : {}),
+  }
 }
 export function blankGrid(type: CellType = 'area'): Grid {
   return {
@@ -191,6 +197,14 @@ export function accepts(c: CellType, o: Item) {
       : !['area', 'empty'].includes(c) && o.type === 'text')
   )
 }
+export function acceptsItem(cell: Cell, item: Item) {
+  return (
+    accepts(cell.type, item) &&
+    (!isTextType(cell.type) ||
+      cell.type === 'text' ||
+      (!item.style && !item.overrides && !item.paragraphs))
+  )
+}
 export function target(o: Item) {
   return o.slot ?? 'free'
 }
@@ -208,17 +222,21 @@ export function pose(o: Item, all: Slot[]) {
         y: 0,
         w: slot.box.w / k,
         h: slot.box.h / k,
-        ...(o.type === 'text'
-          ? { overrides: { ...slot.cell.style, ...o.overrides, fit: true } }
-          : {}),
       }
   return { item, x: slot.box.x, y: slot.box.y, k, fixed: !free }
 }
 export function freezeDecoration(o: Item, locations: Slot[]): Item {
   const p = pose(o, locations)
   if (!p || o.fixed) return o
+  const cell = locations.find((slot) => slot.id === target(o))?.cell
   return {
     ...p.item,
+    ...(isTextType(cell?.type) && o.type === 'text'
+      ? {
+          textType: cell.type,
+          ...(cell.textStyle ? { style: cell.textStyle } : {}),
+        }
+      : {}),
     fixed: true,
     role: 'decoration',
     x: p.x + p.k * p.item.x,
@@ -264,7 +282,7 @@ export function structureSlide(master: Master, s: Slide, grid?: Grid): Slide {
   })
   return next
 }
-function templateResources(deck: Deck, template: Deck) {
+export function templateResources(deck: Deck, template: Deck) {
   const imported = structuredClone(template)
   const fonts = [...deck.resources.fonts],
     styles = [...deck.theme.styles]
@@ -283,6 +301,7 @@ function templateResources(deck: Deck, template: Deck) {
     if (style.font && fontMap.has(style.font))
       style.font = fontMap.get(style.font)
   }
+  Object.values(imported.theme.systemStyles).forEach(remap)
   for (const def of imported.theme.styles) {
     remap(def.values)
     const present = styles.find((v) => v.id === def.id)
@@ -311,8 +330,10 @@ function templateResources(deck: Deck, template: Deck) {
     ...Object.values(master.schemes),
     ...imported.slides.flatMap((s) => (s.structure ? [s.structure] : [])),
   ])
-    for (const c of g.cells) if (c.style) remap(c.style)
-  for (const s of imported.slides)
+    for (const c of g.cells)
+      if (c.textStyle && styleMap.has(c.textStyle))
+        c.textStyle = styleMap.get(c.textStyle)
+  for (const s of mediaSlides(imported))
     for (const o of s.items) {
       if (o.style && styleMap.has(o.style)) o.style = styleMap.get(o.style)
       if (o.overrides) remap(o.overrides)
@@ -331,6 +352,7 @@ export function setStructure(deck: Deck, slide: Slide, template?: Deck): Deck {
   return {
     ...deck,
     resources: merged ? { fonts: merged.fonts } : deck.resources,
+    theme: merged ? { ...deck.theme, styles: merged.styles } : deck.theme,
     slides: deck.slides.map((s) => (s.id === next.id ? next : s)),
   }
 }
@@ -394,6 +416,7 @@ export function switchMaster(deck: Deck, template: Deck): Deck {
   const { imported, fonts, styles } = templateResources(deck, template),
     master = imported.master
   rememberArt(imported)
+  const semanticType = (c?: Cell) => c?.bindingType ?? c?.type
   const slides = deck.slides.map((s) => {
     const kind = s.kind ?? 'normal',
       sample = imported.slides.find((v) => v.kind === kind)
@@ -411,7 +434,8 @@ export function switchMaster(deck: Deck, template: Deck): Deck {
             available.some(
               (v) =>
                 v.id === target(o) &&
-                v.cell.type === old.find((p) => p.id === v.id)?.cell.type
+                semanticType(v.cell) ===
+                  semanticType(old.find((p) => p.id === v.id)?.cell)
             )
         )
         .map(target)
@@ -423,8 +447,8 @@ export function switchMaster(deck: Deck, template: Deck): Deck {
         if (id === 'tray' || deck.migrated) return bind(o, 'tray')
         const prev = old.find((v) => v.id === id)
         const valid = (v: Slot) =>
-          v.cell.type === prev?.cell.type &&
-          accepts(v.cell.type, o) &&
+          semanticType(v.cell) === semanticType(prev?.cell) &&
+          acceptsItem(v.cell, o) &&
           ((!occupied.has(v.id) && (!reserved.has(v.id) || v.id === id)) ||
             v.cell.type === 'free') &&
           v.id.split('/')[0] === id.split('/')[0]
@@ -457,7 +481,11 @@ export function switchMaster(deck: Deck, template: Deck): Deck {
     master,
     migrated: false,
     slides,
-    theme: { styles, palette: imported.theme.palette },
+    theme: {
+      styles,
+      systemStyles: imported.theme.systemStyles,
+      palette: imported.theme.palette,
+    },
     resources: { fonts },
   }
 }
@@ -469,7 +497,7 @@ export function checkBindings(d: Deck, s: Slide) {
     const v = all.find((v) => v.id === target(o))
     if (
       !v ||
-      !accepts(v.cell.type, o) ||
+      !acceptsItem(v.cell, o) ||
       (v.cell.type !== 'free' && taken.has(v.id))
     )
       throw Error('Объект ' + o.id + ' несовместим со слотом ' + target(o))
@@ -484,9 +512,7 @@ export function repairSlots(master: Master, s: Slide): Slide {
     ...s,
     items: s.items.map((o) => {
       if (o.fixed || target(o) === 'tray') return o
-      const dest = all.find(
-        (v) => v.id === target(o) && accepts(v.cell.type, o)
-      )
+      const dest = all.find((v) => v.id === target(o) && acceptsItem(v.cell, o))
       if (!dest || (dest.cell.type !== 'free' && used.has(dest.id)))
         return bind(o, 'tray')
       used.add(dest.id)
@@ -499,7 +525,9 @@ export function repairSlots(master: Master, s: Slide): Slide {
 export function linkCaptions(master: Master, s: Slide): Slide {
   const all = slots(master, s),
     items = [...s.items]
-  for (const cap of all.filter((v) => v.cell.type === 'caption')) {
+  for (const cap of all.filter(
+    (v) => (v.cell.bindingType ?? v.cell.type) === 'caption'
+  )) {
     const images = all.filter(
       (v) =>
         v.cell.type === 'image' &&

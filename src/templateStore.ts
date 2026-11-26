@@ -1,6 +1,11 @@
 import { client } from './cloud'
 import { builtins, validateTemplate, type Template } from './catalog'
-import { localTemplates, writeTemplate, type TemplateEntry } from './storage'
+import {
+  localTemplates,
+  saveOriginal,
+  writeTemplate,
+  type TemplateEntry,
+} from './storage'
 export interface CatalogRow {
   template: Template
   entry?: TemplateEntry
@@ -38,6 +43,7 @@ export async function getCatalog(
           const template = validateTemplate(row.document)
           if (template.deck.id !== row.id)
             throw new Error('Некорректный ID в облаке')
+          await saveOriginal('template', row.id, row.document)
           remote.push({ template, remote: row.revision })
         }
         if (data.length < 20) break

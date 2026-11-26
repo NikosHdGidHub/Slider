@@ -1,9 +1,9 @@
+import { FORMAT_VERSION } from './schema'
 import {
   desktopEditingMessage,
   isPhone,
   useLibraryScroll,
 } from './libraryNavigation'
-import { rememberImage } from './storage'
 import { useHistory } from './StudioTools'
 import { GridDesigner } from './GridDesigner'
 import { templateFrom } from './catalog'
@@ -33,7 +33,13 @@ import {
   LogIn,
   RefreshCw,
 } from 'lucide-react'
-import { newDeck, validateDeck, type Deck, MAX_DOCUMENT_BYTES } from './model'
+import {
+  newDeck,
+  readJSON,
+  validateDeck,
+  type Deck,
+  MAX_DOCUMENT_BYTES,
+} from './model'
 import { embedImages } from './media'
 import {
   adminId,
@@ -43,7 +49,13 @@ import {
   readPublic,
   unpublish,
 } from './cloud'
-import { entries, saveEntry, type Entry } from './storage'
+import {
+  entries,
+  saveEntry,
+  rememberImage,
+  saveOriginal,
+  type Entry,
+} from './storage'
 import { FileLibrary } from './Files'
 import { publish, fingerprint } from './publication'
 import { collectStyles } from './styleLibrary'
@@ -55,13 +67,12 @@ import { useStoredPreference } from './workspacePreferences'
 import { ImportPreview } from './ImportPreview'
 import { builtins, validateTemplate, type Template } from './catalog'
 import { getCatalog, saveLocal, type CatalogRow } from './templateStore'
-import { download, referencedFonts } from './instructions'
+import { download } from './instructions'
 import { Editor } from './Editor'
 import { Viewer } from './Viewer'
 import { ReceiveLesson, SendLesson } from './TransferScreen'
 import { parsePair, receiveHash } from './transfer'
 import { Stage } from './Stage'
-import { builtinFonts } from './schema'
 import { example } from './example'
 import { registerShell, ensureShell } from './offline'
 import guide from '../docs/USER_GUIDE.md?raw'
@@ -206,7 +217,7 @@ function App() {
     }
   }
   async function prepareForOffline(deck: Deck) {
-    await ensureShell()
+    await ensureShell(deck)
 
     const prepared = await embedImages(deck, rememberImage)
 
@@ -638,22 +649,11 @@ function App() {
   }
   async function importData(raw: string) {
     if (!allowEditing()) return
-    const d = validateDeck(raw)
-    const used = referencedFonts(d)
-    for (const font of d.resources.fonts) used.delete(font.id)
-    const fallback = [...used].some(
-      (font) => !Object.hasOwn(builtinFonts, font)
-    )
-      ? collectStyles([
-          ...visibleRows.map((row) => row.template.deck),
-          ...list.map((entry) => entry.deck),
-        ])
-      : undefined
-    for (const font of fallback?.fonts ?? [])
-      if (used.has(font.id)) d.resources.fonts.push(structuredClone(font))
-    if (new Blob([JSON.stringify(d)]).size > MAX_DOCUMENT_BYTES)
-      throw new Error('Со встроенными шрифтами файл превышает 64 МиБ.')
-    validateDeck(d)
+    const available = collectStyles([
+      ...visibleRows.map((row) => row.template.deck),
+      ...list.map((entry) => entry.deck),
+    ]).fonts
+    const d = validateDeck(raw, available)
     setValue(raw)
     setPreview(d)
     setModal('preview')
@@ -713,7 +713,7 @@ function App() {
         if (id === 'export') {
           exportDeck(d)
         } else if (id === 'offline') {
-          await ensureShell()
+          await ensureShell(d)
           const prepared = await embedImages(d, rememberImage)
           await queue.current
           if (current.current !== d)
@@ -1149,7 +1149,7 @@ function App() {
           onPrepare={prepareForOffline}
           onClose={() => setWatch(null)}
         />
-      ) : editingTemplate?.t.format === 3 && allowed && !phone ? (
+      ) : editingTemplate?.t.format === FORMAT_VERSION && allowed && !phone ? (
         <GridDesigner
           key={editingTemplate.t.deck.id}
           libraryAvailable={owner && online}
@@ -1184,7 +1184,9 @@ function App() {
           key={editingTemplate.t.deck.id}
           history={templateHistory}
           gridTemplateKind={
-            editingTemplate.t.format === 3 ? editingTemplate.t.kind : undefined
+            editingTemplate.t.format === FORMAT_VERSION
+              ? editingTemplate.t.kind
+              : undefined
           }
           deck={editingTemplate.t.deck}
           status="Редактор шаблона"
@@ -1430,7 +1432,9 @@ function App() {
                 back={() => setModal('import')}
                 accept={() =>
                   task('Импорт…', async () => {
-                    await insert({ ...preview, id: crypto.randomUUID() })
+                    const deck = { ...preview, id: crypto.randomUUID() }
+                    await saveOriginal('lesson', deck.id, readJSON(value))
+                    await insert(deck)
                     setPreview(null)
                   })
                 }

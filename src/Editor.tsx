@@ -11,7 +11,7 @@ import { PlacementPanel } from './PlacementPanel'
 import {
   slots,
   target,
-  accepts,
+  acceptsItem,
   linkCaptions,
   applyKind,
   inheritedBackground,
@@ -51,8 +51,11 @@ import {
 import { applyLayout, type Template } from './catalog'
 import { importSVG } from './vectorImport'
 import { Stage } from './Stage'
+import { isTextType } from './textTypes'
+import type { TextSelectionControls } from './VisualText'
 import {
   newSlide,
+  sourceText,
   newText,
   newShape,
   validateDeck,
@@ -115,6 +118,10 @@ export function Editor({
   const [sid, choose] = useState(initialSlideId ?? deck.slides[0].id),
     [sel, select] = useState('')
   const [inspectorRequest, requestInspector] = useState(0)
+  const [selectedSlot, setSelectedSlot] = useState('')
+  const [editItem, setEditItem] = useState('')
+  const [textControls, setTextControls] =
+    useState<TextSelectionControls | null>(null)
   const thumbnailList = useRef<HTMLDivElement>(null)
   const slide = deck.slides.find((s) => s.id === sid) || deck.slides[0],
     idx = deck.slides.indexOf(slide),
@@ -134,6 +141,24 @@ export function Editor({
     })
   }
   const chosenSlot = useRef('')
+  const locations = slots(deck.master, slide)
+  const activeSlot = locations.find((v) => v.id === selectedSlot)
+  const itemCell = item?.fixed
+    ? undefined
+    : locations.find((v) => v.id === item?.slot)?.cell
+  function editSource(id: string, text?: string) {
+    const dest = locations.find((v) => v.id === id)
+    if (!dest || !isTextType(dest.cell.type)) return
+    const entry = {
+      ...newText(),
+      text: text ?? sourceText(dest.cell),
+      slot: id,
+    }
+    modify((s) => ({ ...s, items: [...s.items, entry] }))
+    select(entry.id)
+    if (text === undefined) setEditItem(entry.id)
+    requestInspector((value) => value + 1)
+  }
   function additions(s: Slide, added: Item[]) {
     const available = slots(deck.master, s),
       used = new Set(s.items.map(target))
@@ -142,12 +167,12 @@ export function Editor({
         available.find(
           (v) =>
             v.id === chosenSlot.current &&
-            accepts(v.cell.type, o) &&
+            acceptsItem(v.cell, o) &&
             (v.cell.type === 'free' || !used.has(v.id))
         ) ??
         available.find(
           (v) =>
-            v.cell.type !== 'free' && accepts(v.cell.type, o) && !used.has(v.id)
+            v.cell.type !== 'free' && acceptsItem(v.cell, o) && !used.has(v.id)
         ) ??
         available.find((v) => v.cell.type === 'free')
       if (!match && saveTemplate && gridTemplateKind !== 'layout')
@@ -372,7 +397,7 @@ export function Editor({
             })
         }
       }
-      if (!o.fixed) {
+      if (!o.fixed || saveTemplate) {
         actions.push(
           {
             name: o.locked ? 'Разблокировать' : 'Заблокировать',
@@ -473,7 +498,9 @@ export function Editor({
             { text: 'Текст', shape: 'Фигура', image: 'Изображение' }[
               o.type
             ]}{' '}
-          {o.fixed || o.locked ? '🔒' : ''}
+          {o.fixed ? ' · закреплён' : ''}
+          {o.locked ? ' · заблокирован' : ''}
+          {o.role === 'decoration' ? ' · декор' : ''}
           {o.hidden ? ' · скрыт' : ''}
         </button>
       ))
@@ -686,83 +713,72 @@ export function Editor({
         }
         properties={
           <>
-            {!saveTemplate && (
-              <PlacementPanel
-                key={slide.id}
-                deck={deck}
-                slide={slide}
-                templates={templates}
-                update={(next) => change(() => next)}
-                select={select}
-                selected={item?.locked ? '' : sel}
-                notice={notice}
-                saveAs={saveAs}
-              />
-            )}
-            {!saveTemplate && (
-              <>
-                {slide.items.some((o) => target(o) === 'tray') && (
-                  <PropertySection
-                    id="unplaced"
-                    title="Нераспределённые элементы"
-                    initial
-                  >
-                    <div className="layer-list">{rows(true)}</div>
-                  </PropertySection>
-                )}
-                <PropertySection id="layers" title="Слои" initial>
-                  <div className="layer-list">
-                    {rows(false)}
-                    <button
-                      onClick={() => select('')}
-                      onContextMenu={(e) =>
-                        context.open(e, [
-                          { name: 'Свойства фона', run: () => select('') },
-                        ])
-                      }
-                    >
-                      🔒 Фон
-                    </button>
-                  </div>
-                </PropertySection>
+            <PlacementPanel
+              key={slide.id}
+              deck={deck}
+              slide={slide}
+              templates={templates}
+              update={(next) => change(() => next)}
+              select={select}
+              selected={item?.locked ? '' : sel}
+              notice={notice}
+              saveAs={saveAs}
+              design={!!saveTemplate}
+            />
+            <>
+              {slide.items.some((o) => target(o) === 'tray') && (
                 <PropertySection
-                  id="object-actions"
-                  title={item ? 'Действия с объектом' : 'Буфер обмена'}
+                  id="unplaced"
+                  title="Нераспределённые элементы"
+                  initial
                 >
-                  {actions.map((a) => (
-                    <button key={a.name} onClick={a.run}>
-                      {a.name}
-                    </button>
-                  ))}
+                  <div className="layer-list">{rows(true)}</div>
                 </PropertySection>
-              </>
-            )}
-            {saveTemplate && slide.items.length > 0 && (
-              <label>
-                Объекты слайда
-                <select
-                  aria-label="Объекты слайда"
-                  value={sel}
-                  onChange={(e) => select(e.target.value)}
-                >
-                  <option value="">Слайд целиком</option>
-                  {slide.items
-                    .filter((o) => saveTemplate || !o.fixed)
-                    .map((o, i) => (
-                      <option key={o.id} value={o.id}>
-                        {i + 1}.{' '}
-                        {o.text.slice(0, 32) ||
-                          (o.type === 'image'
-                            ? 'Изображение'
-                            : (shapes[o.shape!] ?? 'Текст'))}
-                        {o.role === 'decoration' ? ' · оформление' : ''}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              )}
+              <PropertySection id="layers" title="Слои" initial>
+                <div className="layer-list">
+                  {rows(false)}
+                  <button
+                    onClick={() => select('')}
+                    onContextMenu={(e) =>
+                      context.open(e, [
+                        { name: 'Свойства фона', run: () => select('') },
+                      ])
+                    }
+                  >
+                    🔒 Фон
+                  </button>
+                </div>
+              </PropertySection>
+              <PropertySection
+                id="object-actions"
+                title={item ? 'Действия с объектом' : 'Буфер обмена'}
+              >
+                {actions.map((a) => (
+                  <button key={a.name} onClick={a.run}>
+                    {a.name}
+                  </button>
+                ))}
+              </PropertySection>
+            </>
+            {!item && activeSlot && isTextType(activeSlot.cell.type) && (
+              <PropertySection
+                id="slot-source"
+                title="Содержание ячейки"
+                initial
+              >
+                <p>
+                  {sourceText(activeSlot.cell) || 'Пустое исходное значение'}
+                </p>
+                <button onClick={() => editSource(activeSlot.id)}>
+                  Редактировать на холсте
+                </button>
+              </PropertySection>
             )}
             {item && !editable(item) ? (
-              <small>Слой закреплён или заблокирован</small>
+              <small>
+                {item.locked ? 'Слой заблокирован' : 'Слой закреплён в шаблоне'}
+              </small>
             ) : item ? (
               <>
                 {item.type === 'image' && (
@@ -810,6 +826,17 @@ export function Editor({
                     key={item.id}
                     deck={deck}
                     item={item}
+                    cell={itemCell}
+                    controls={textControls}
+                    reset={
+                      isTextType(itemCell?.type)
+                        ? () => {
+                            setSelectedSlot(target(item))
+                            removeItem()
+                            select('')
+                          }
+                        : undefined
+                    }
                     patch={(v) => patch(item.id, v)}
                   />
                 )}
@@ -818,21 +845,21 @@ export function Editor({
                     ?.cell.type === 'free') && (
                   <GeometryPanel
                     item={item}
+                    canPin={gridTemplateKind === 'presentation'}
                     patch={(v) => {
                       if (
                         gridTemplateKind === 'presentation' &&
-                        v.role === 'decoration'
-                      )
+                        v.fixed === true
+                      ) {
                         patch(item.id, {
-                          ...freezeDecoration(item, slots(deck.master, slide)),
-                          role: v.role,
+                          ...freezeDecoration(item, locations),
+                          role: item.role,
                         })
-                      else if (item.fixed && v.role === 'content') {
+                      } else if (item.fixed && v.fixed === false) {
                         const free = slots(deck.master, slide).find(
                           (p) => p.cell.type === 'free'
                         )
                         patch(item.id, {
-                          role: 'content',
                           fixed: undefined,
                           slot: free?.id ?? 'tray',
                           ...(free
@@ -1094,48 +1121,32 @@ export function Editor({
             selected={sel}
             onSlot={(id) => {
               chosenSlot.current = id
-              const dest = slots(deck.master, slide).find((v) => v.id === id)!
-              const existing = slide.items.find((o) => target(o) === id)
-              if (dest.cell.type === 'free') {
-                select('')
-                return
-              }
-              if (existing) {
-                select(existing.id)
-                return
-              }
-              if (dest.cell.type === 'header' || dest.cell.type === 'footer') {
-                select('')
-                notice(
-                  'Введите общее значение или переопределение в панели колонтитула.'
-                )
-                return
-              }
-              if (dest.cell.type === 'image') {
-                pickImage()
-                return
-              }
-              const text = {
-                ...newText(),
-                text: dest.cell.value ?? '',
-                slot: id,
-              }
-              modify((s) => ({ ...s, items: [...s.items, text] }))
-              select(text.id)
+              setSelectedSlot(id)
+              select('')
+              const dest = locations.find((v) => v.id === id)
+              if (dest?.cell.type === 'image') pickImage()
+              else if (isTextType(dest?.cell.type))
+                requestInspector((value) => value + 1)
             }}
+            onSlotEdit={editSource}
+            editItem={editItem}
+            registerText={setTextControls}
+            undo={(redo) =>
+              history.actions
+                .find((a) => a.key === (redo ? 'shift+z' : 'z'))
+                ?.run()
+            }
             onText={patch}
             onNodes={(id, nodes) => patch(id, { nodes })}
             onEditText={(id) => {
               select(id)
               requestInspector((value) => value + 1)
-              requestAnimationFrame(() => {
-                const field = document.getElementById('atlas-edit-text')
-                const section = field?.closest('details')
-                if (section) section.open = true
-                requestAnimationFrame(() => field?.focus())
-              })
             }}
-            onSelect={select}
+            onSelect={(id) => {
+              if (id !== sel) setEditItem('')
+              setSelectedSlot('')
+              select(id)
+            }}
             onMove={(id, x, y) =>
               modify((s) => {
                 const a = s.items.find((o) => o.id === id)!
@@ -1147,7 +1158,9 @@ export function Editor({
                       : a.group &&
                           a.group === o.group &&
                           editable(o) &&
-                          target(a) === target(o)
+                          (a.fixed
+                            ? o.fixed
+                            : !o.fixed && target(a) === target(o))
                         ? { ...o, x: o.x + x - a.x, y: o.y + y - a.y }
                         : o
                   ),

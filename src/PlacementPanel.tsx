@@ -1,10 +1,11 @@
+import { FORMAT_VERSION } from './schema'
 import { PropertySection } from './Workspace'
 import { useState } from 'react'
 import {
   slots,
   cellTypes,
   target,
-  accepts,
+  acceptsItem,
   linkCaptions,
   setStructure,
   switchMaster,
@@ -22,6 +23,7 @@ export function PlacementPanel({
   selected,
   notice,
   saveAs,
+  design = false,
 }: {
   deck: Deck
   slide: Slide
@@ -31,11 +33,13 @@ export function PlacementPanel({
   selected: string
   notice: (s: string) => void
   saveAs?: () => void
+  design?: boolean
 }) {
   const [marked, mark] = useState<string[]>([])
   const all = slots(deck.master, slide),
     tray = slide.items.filter((o) => target(o) === 'tray'),
     item = slide.items.find((o) => o.id === selected)
+  const eligible = slide.items.filter((o) => !o.locked && (design || !o.fixed))
   const name = (o: Item) =>
     o.text.slice(0, 28) ||
     { shape: 'Фигура', image: 'Изображение', text: 'Текст' }[o.type]
@@ -63,84 +67,47 @@ export function PlacementPanel({
   }
   return (
     <>
-      <PropertySection id="slide-templates" title="Шаблоны слайда" initial>
-        <small>Главный шаблон · {deck.master.name}</small>
-        <label>
-          Сменить главный шаблон
-          <select
-            value=""
-            onChange={(e) => {
-              const t = templates.find((t) => t.deck.id === e.target.value)
-              if (!t) return
-              if (
-                !confirm(
-                  deck.migrated
-                    ? 'Исходная композиция каждого слайда перейдёт в неразмещённое содержимое. В библиотеке сохранится копия прежней методички. Продолжить?'
-                    : 'Применить главный шаблон ко всей методичке?'
-                )
-              )
-                return
-              try {
-                const next = switchMaster(deck, t.deck)
-                update(validateDeck(next))
-                const n = next.slides.reduce(
-                  (a, s) =>
-                    a + s.items.filter((o) => target(o) === 'tray').length,
-                  0
-                )
-                notice(n ? 'Неразмещённых объектов: ' + n : 'Шаблон применён.')
-                select('')
-              } catch (err) {
-                notice((err as Error).message)
-              }
-            }}
-          >
-            <option value="">Выберите шаблон</option>
-            {templates
-              .filter((t) => t.kind === 'presentation' && t.format === 3)
-              .map((t) => (
-                <option key={t.deck.id} value={t.deck.id}>
-                  {t.deck.title}
-                </option>
-              ))}
-          </select>
-        </label>
-        {all.some((v) => v.cell.type === 'area') && (
+      {!design && (
+        <PropertySection id="slide-templates" title="Шаблоны слайда" initial>
+          <small>Главный шаблон · {deck.master.name}</small>
           <label>
-            Режим области слайда
+            Сменить главный шаблон
             <select
-              aria-label="Режим области слайда"
-              value={slide.structure ? 'structured' : 'free'}
+              value=""
               onChange={(e) => {
-                if (e.target.value === 'structured') return
                 const t = templates.find((t) => t.deck.id === e.target.value)
+                if (!t) return
                 if (
-                  t &&
-                  slide.items.some(
-                    (o) =>
-                      !o.fixed &&
-                      !target(o).startsWith('m/') &&
-                      target(o) !== 'tray'
-                  ) &&
                   !confirm(
-                    'Текущее размещение будет сброшено. Перенести объекты области в неразмещённое содержимое этого слайда?'
+                    deck.migrated
+                      ? 'Исходная композиция каждого слайда перейдёт в неразмещённое содержимое. В библиотеке сохранится копия прежней методички. Продолжить?'
+                      : 'Применить главный шаблон ко всей методичке?'
                   )
                 )
                   return
                 try {
-                  update(validateDeck(setStructure(deck, slide, t?.deck)))
+                  const next = switchMaster(deck, t.deck)
+                  update(validateDeck(next))
+                  const n = next.slides.reduce(
+                    (a, s) =>
+                      a + s.items.filter((o) => target(o) === 'tray').length,
+                    0
+                  )
+                  notice(
+                    n ? 'Неразмещённых объектов: ' + n : 'Шаблон применён.'
+                  )
                   select('')
                 } catch (err) {
                   notice((err as Error).message)
                 }
               }}
             >
-              <option value="free">Свободное размещение</option>
-              {slide.structure && (
-                <option value="structured">Текущая структура</option>
-              )}
+              <option value="">Выберите шаблон</option>
               {templates
-                .filter((t) => t.kind === 'layout' && t.format === 3)
+                .filter(
+                  (t) =>
+                    t.kind === 'presentation' && t.format === FORMAT_VERSION
+                )
                 .map((t) => (
                   <option key={t.deck.id} value={t.deck.id}>
                     {t.deck.title}
@@ -148,41 +115,55 @@ export function PlacementPanel({
                 ))}
             </select>
           </label>
-        )}
-        {saveAs && <button onClick={saveAs}>Сохранить как шаблон</button>}
-      </PropertySection>
-      {all
-        .filter((v) => v.cell.type === 'header' || v.cell.type === 'footer')
-        .map((v) => {
-          const k = v.cell.type as 'header' | 'footer'
-          return (
-            <PropertySection key={v.id} id={k} title={cellTypes[k]}>
-              <label>
-                Для всей методички
-                <input
-                  value={deck[k] ?? v.cell.value ?? ''}
-                  onChange={(e) => update({ ...deck, [k]: e.target.value })}
-                />
-              </label>
-              <label>
-                Для этого слайда
-                <input
-                  value={slide[k] ?? deck[k] ?? v.cell.value ?? ''}
-                  onChange={(e) => replace({ ...slide, [k]: e.target.value })}
-                />
-              </label>
-              <button
-                onClick={() => {
-                  const next = { ...slide }
-                  delete next[k]
-                  replace(next)
+          {all.some((v) => v.cell.type === 'area') && (
+            <label>
+              Режим области слайда
+              <select
+                aria-label="Режим области слайда"
+                value={slide.structure ? 'structured' : 'free'}
+                onChange={(e) => {
+                  if (e.target.value === 'structured') return
+                  const t = templates.find((t) => t.deck.id === e.target.value)
+                  if (
+                    t &&
+                    slide.items.some(
+                      (o) =>
+                        !o.fixed &&
+                        !target(o).startsWith('m/') &&
+                        target(o) !== 'tray'
+                    ) &&
+                    !confirm(
+                      'Текущее размещение будет сброшено. Перенести объекты области в неразмещённое содержимое этого слайда?'
+                    )
+                  )
+                    return
+                  try {
+                    update(validateDeck(setStructure(deck, slide, t?.deck)))
+                    select('')
+                  } catch (err) {
+                    notice((err as Error).message)
+                  }
                 }}
               >
-                Вернуть общее значение
-              </button>
-            </PropertySection>
-          )
-        })}
+                <option value="free">Свободное размещение</option>
+                {slide.structure && (
+                  <option value="structured">Текущая структура</option>
+                )}
+                {templates
+                  .filter(
+                    (t) => t.kind === 'layout' && t.format === FORMAT_VERSION
+                  )
+                  .map((t) => (
+                    <option key={t.deck.id} value={t.deck.id}>
+                      {t.deck.title}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
+          {saveAs && <button onClick={saveAs}>Сохранить как шаблон</button>}
+        </PropertySection>
+      )}
       {item && !item.fixed && (
         <PropertySection id="placement" title="Размещение" initial>
           <label>
@@ -196,7 +177,7 @@ export function PlacementPanel({
               {all
                 .filter(
                   (v) =>
-                    accepts(v.cell.type, item) &&
+                    acceptsItem(v.cell, item) &&
                     (v.cell.type === 'free' ||
                       !slide.items.some(
                         (o) => o.id !== item.id && target(o) === v.id
@@ -211,47 +192,51 @@ export function PlacementPanel({
           </label>
         </PropertySection>
       )}
-      {!!slide.items.some((o) => !o.fixed) && (
+      {!!eligible.length && (
         <PropertySection id="groups" title="Группы и связи">
-          {slide.items
-            .filter((o) => !o.fixed)
-            .map((o) => (
-              <label className="toggle" key={o.id}>
-                <input
-                  type="checkbox"
-                  checked={marked.includes(o.id)}
-                  onChange={(e) =>
-                    mark(
-                      e.target.checked
-                        ? [...marked, o.id]
-                        : marked.filter((id) => id !== o.id)
-                    )
-                  }
-                />
-                {name(o)}
-              </label>
-            ))}
+          {eligible.map((o) => (
+            <label className="toggle" key={o.id}>
+              <input
+                type="checkbox"
+                checked={marked.includes(o.id)}
+                onChange={(e) =>
+                  mark(
+                    e.target.checked
+                      ? [...marked, o.id]
+                      : marked.filter((id) => id !== o.id)
+                  )
+                }
+              />
+              {name(o)}
+            </label>
+          ))}
           {(['group', 'relation'] as const).map((key, i) => (
             <button
               key={key}
               disabled={marked.length < 2}
               onClick={() => {
-                const members = slide.items.filter((o) => marked.includes(o.id))
+                const members = eligible.filter((o) => marked.includes(o.id))
+                const fixedGroup = design && members.every((o) => o.fixed)
+                const freeGroup =
+                  members.every(
+                    (o) => !o.fixed && target(o) === target(members[0])
+                  ) &&
+                  all.find((v) => v.id === target(members[0]))?.cell.type ===
+                    'free'
                 if (
                   members.length < 2 ||
-                  (key === 'group' &&
-                    (new Set(members.map(target)).size !== 1 ||
-                      all.find((v) => v.id === target(members[0]))?.cell
-                        .type !== 'free'))
+                  (key === 'group' && !fixedGroup && !freeGroup)
                 ) {
-                  notice('Для группы выберите объекты одного свободного блока.')
+                  notice(
+                    'Выберите объекты одного свободного блока или закреплённые слои.'
+                  )
                   return
                 }
                 const id = 'g' + crypto.randomUUID()
                 replace({
                   ...slide,
                   items: slide.items.map((o) =>
-                    marked.includes(o.id) ? { ...o, [key]: id } : o
+                    members.includes(o) ? { ...o, [key]: id } : o
                   ),
                 })
                 mark([])

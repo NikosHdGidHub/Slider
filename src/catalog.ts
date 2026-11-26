@@ -1,4 +1,9 @@
-import { check, definitions } from './schema.ts'
+import {
+  check,
+  definitions,
+  legacyDefinitions,
+  FORMAT_VERSION,
+} from './schema.ts'
 import {
   kinds,
   blankGrid,
@@ -7,6 +12,7 @@ import {
   slots,
   rememberArt,
   mediaSlides,
+  templateResources,
 } from './grid.ts'
 import {
   MAX_DOCUMENT_BYTES,
@@ -18,7 +24,7 @@ import {
 } from './model.ts'
 
 export interface Template {
-  format?: 3
+  format?: typeof FORMAT_VERSION
   kind: 'presentation' | 'layout'
   description: string
   deck: Deck
@@ -34,14 +40,20 @@ export function validateTemplate(value: unknown): Template {
       (k) => !['deck', 'kind', 'description', 'format'].includes(k)
     ) ||
     !['presentation', 'layout'].includes(String(value.kind)) ||
-    ('format' in value && value.format !== 3) ||
+    ('format' in value &&
+      value.format !== 3 &&
+      value.format !== FORMAT_VERSION) ||
     typeof value.description !== 'string' ||
     value.description.length > 2000
   )
     throw new Error('Ожидается шаблон с полями kind, description и deck.')
   if (new Blob([JSON.stringify(value)]).size > MAX_DOCUMENT_BYTES)
     throw new Error('Шаблон превышает 64 МиБ.')
-  if ('format' in value) check(definitions.Template, value, 'Шаблон')
+  if ('format' in value) {
+    const rules =
+      value.format === FORMAT_VERSION ? definitions : legacyDefinitions
+    check(rules.Template, value, 'Шаблон', rules)
+  }
   const deck = validateDeck(value.deck)
   const isDeck = value.kind === 'presentation'
   if (deck.slides.length !== (isDeck ? 3 : 1))
@@ -65,7 +77,7 @@ export function validateTemplate(value: unknown): Template {
   if ('format' in value && !isDeck && !deck.slides[0].structure)
     throw Error('Структурному шаблону нужна сетка')
   return {
-    ...('format' in value ? { format: 3 as const } : {}),
+    ...('format' in value ? { format: FORMAT_VERSION } : {}),
     kind: isDeck ? 'presentation' : 'layout',
     description: value.description,
     deck,
@@ -92,7 +104,7 @@ export function copyDeck(source: Deck, title = source.title) {
 }
 export function instantiate(template: Template) {
   const deck = copyDeck(template.deck)
-  if (template.format === 3) {
+  if (template.format === FORMAT_VERSION) {
     delete deck.migrated
     rememberArt(deck)
     for (const slide of deck.slides) delete slide.ownBackground
@@ -112,35 +124,15 @@ export function applyLayout(d: Deck, sid: string, template: Template): Deck {
     template.kind !== 'layout'
   )
     throw new Error('Выберите обычный слайд и компоновку.')
-  const layout = copyDeck(template.deck)
-  const fonts = [...d.resources.fonts]
-  const mapping = new Map<string, string>()
-  for (const font of layout.resources.fonts) {
-    const existing = fonts.find((f) => f.id === font.id)
-    if (existing?.data === font.data) continue
-    if (existing) {
-      const id = 'f' + crypto.randomUUID()
-      mapping.set(font.id, id)
-      font.id = id
-    }
-    fonts.push(font)
-  }
-  const remap = (s: { font?: string }) => {
-    if (s.font && mapping.has(s.font)) s.font = mapping.get(s.font)
-  }
-  layout.theme.styles.forEach((s) => remap(s.values))
-  const styles = [
-    ...d.theme.styles,
-    ...layout.theme.styles.filter(
-      (s) => !d.theme.styles.some((t) => t.id === s.id)
-    ),
-  ]
+  const {
+    imported: layout,
+    fonts,
+    styles,
+  } = templateResources(d, copyDeck(template.deck))
   const src = layout.slides[0],
     area = slide.area ?? { x: 0, y: 0, w: 1280, h: 720 },
     from = src.area ?? { x: 0, y: 0, w: 1280, h: 720 }
   const items = src.items.map((o) => {
-    if (o.overrides) remap(o.overrides)
-    o.paragraphs?.forEach((p) => p.runs.forEach(remap))
     return {
       ...o,
       x: area.x + ((o.x - from.x) * area.w) / from.w,
@@ -181,7 +173,7 @@ export function createGridTemplate(
     deck.slides[0].kind = 'normal'
     deck.slides[0].structure = blankGrid('text')
   }
-  return { format: 3, kind, description: '', deck }
+  return { format: FORMAT_VERSION, kind, description: '', deck }
 }
 export function templateFrom(deck: Deck): Template {
   const selected = kinds.map((k) =>
@@ -196,7 +188,7 @@ export function templateFrom(deck: Deck): Template {
   delete d.master.art
   d.master.name = d.title
   return validateTemplate({
-    format: 3,
+    format: FORMAT_VERSION,
     kind: 'presentation',
     description: '',
     deck: d,

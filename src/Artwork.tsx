@@ -7,30 +7,51 @@ import {
 } from 'react'
 import {
   paragraphs,
-  richText,
   typography,
+  itemTextType,
   type Characters,
   type Deck,
   type FontAsset,
   type Item,
   type PathNode,
 } from './model'
-const families: Record<string, string> = {
-  sans: 'Atlas Sans',
-  serif: 'Atlas Serif',
-  mono: 'Atlas Mono',
-  legacy: 'Arial',
+import { fontCatalog, fontPath } from './fontCatalog'
+import type { Cell } from './grid'
+import { VisualText, type TextSelectionControls } from './VisualText'
+
+const builtinDocuments = new WeakSet<Document>()
+function installBuiltins(doc: Document) {
+  if (builtinDocuments.has(doc)) return
+  builtinDocuments.add(doc)
+  for (const [id, font] of Object.entries(fontCatalog)) {
+    for (const [file, weight, style, unicodeRange] of font.faces) {
+      doc.fonts.add(
+        new FontFace(
+          'Atlas-' + id,
+          'url(' + new URL(fontPath(id, file), doc.baseURI).href + ')',
+          {
+            weight,
+            style,
+            ...(unicodeRange ? { unicodeRange } : {}),
+            display: 'swap',
+          }
+        )
+      )
+    }
+  }
 }
 const assets = new WeakMap<FontAsset, string>()
 export function fontFamily(id: string | undefined, deck?: Deck) {
   const font = deck?.resources.fonts.find((f) => f.id === id)
   if (!font)
     return (
-      (id && Object.hasOwn(families, id) ? families[id] : families.sans) +
-      ', Arial, sans-serif'
+      (id === 'legacy'
+        ? 'Arial'
+        : 'Atlas-' + (id && Object.hasOwn(fontCatalog, id) ? id : 'sans')) +
+      ', Atlas-sans, Arial, sans-serif'
     )
   if (!assets.has(font)) assets.set(font, 'AtlasUser' + crypto.randomUUID())
-  return assets.get(font) + ', Atlas Sans, sans-serif'
+  return assets.get(font) + ', Atlas-sans, sans-serif'
 }
 const registered = new WeakMap<
   Document,
@@ -43,7 +64,9 @@ export function useFonts(
   const [error, setError] = useState('')
   useLayoutEffect(() => {
     const doc = host.current?.ownerDocument
-    if (!doc || !deck) return
+    if (!doc) return
+    installBuiltins(doc)
+    if (!deck) return
     let active = true
     setError('')
     const cache = registered.get(doc) ?? new Map()
@@ -82,48 +105,68 @@ export function useFonts(
   return error
 }
 function chars(s: Characters, deck?: Deck): CSSProperties {
+  const font =
+    s.font && Object.hasOwn(fontCatalog, s.font)
+      ? fontCatalog[s.font]
+      : undefined
+  const requested = Number(s.weight ?? 400)
+  const weight =
+    font?.weights.reduce(
+      (near, n) =>
+        Math.abs(n - requested) < Math.abs(near - requested) ? n : near,
+      font.weights[0]
+    ) ?? requested
   return {
     fontFamily: s.font ? fontFamily(s.font, deck) : undefined,
     color: s.color,
-    fontWeight: s.bold === undefined ? undefined : s.bold ? 700 : 400,
-    fontStyle:
-      s.italic === undefined ? undefined : s.italic ? 'italic' : 'normal',
+    fontWeight: weight,
+    fontStyle: s.italic && (font?.italic ?? false) ? 'italic' : 'normal',
     textDecoration:
       [s.underline ? 'underline' : '', s.strike ? 'line-through' : '']
         .filter(Boolean)
-        .join(' ') || undefined,
+        .join(' ') || 'none',
     backgroundColor: s.highlight,
     letterSpacing: s.tracking,
   }
 }
+function effectColor(color: string, opacity: number) {
+  return (
+    color +
+    Math.round(opacity * 255)
+      .toString(16)
+      .padStart(2, '0')
+  )
+}
 export function TextBlock({
   item,
   deck,
+  cell,
   editing,
+  autoEdit,
+  onEdit,
   onText,
+  registerText,
+  undo,
 }: {
   item: Item
   deck?: Deck
+  cell?: Cell
   editing: boolean
+  autoEdit?: boolean
+  onEdit?: () => void
+  undo?: (redo: boolean) => void
   onText?: (fields: Partial<Item>) => void
+  registerText?: (controls: TextSelectionControls | null) => void
 }) {
   const box = useRef<HTMLDivElement>(null)
-  const style = typography(item, deck)
-  const [editingRun, setEditingRun] = useState('')
-  const canceled = useRef(false)
-  function commit(i: number, j: number, text: string) {
-    setEditingRun('')
-    if (canceled.current || !onText) return
-    const parts = [...paragraphs(item)]
-    if (parts[i].runs[j].text === text) return
-    parts[i] = {
-      ...parts[i],
-      runs: parts[i].runs.map((r, k) => (j === k ? { ...r, text } : r)),
-    }
-    const fields = richText(parts)
-    onText(item.paragraphs ? fields : { text: fields.text })
-  }
+  const style = typography(item, deck, cell)
+  const flexible = itemTextType(item, cell) === 'text'
+  const [active, setActive] = useState(!!autoEdit)
   const [overflow, setOverflow] = useState(false)
+  const padding = Array.isArray(style.padding)
+    ? style.padding
+    : Array(4).fill(style.padding)
+  const [top, right, bottom, left] = padding
   useLayoutEffect(() => {
     const el = box.current!
     const content = el.firstElementChild as HTMLElement
@@ -133,8 +176,8 @@ export function TextBlock({
       function fits(size: number) {
         content.style.fontSize = size + 'px'
         return (
-          content.scrollHeight <= el.clientHeight - 2 * style.padding + 1 &&
-          content.scrollWidth <= el.clientWidth - 2 * style.padding + 1
+          content.scrollHeight <= el.clientHeight - top - bottom + 1 &&
+          content.scrollWidth <= el.clientWidth - left - right + 1
         )
       }
       let ok = fits(style.size)
@@ -161,104 +204,120 @@ export function TextBlock({
       live = false
       fonts.removeEventListener('loadingdone', measure)
     }
-  }, [item, deck?.theme, deck?.resources])
+  }, [item, deck?.theme, deck?.resources, cell, active])
   let number = 0
+  const { textShadow: shadow, textGlow: glow, textStroke: stroke } = style
+  const runStyle = (run: Characters): CSSProperties => {
+    const applied = chars({ ...style, ...run }, deck)
+    if (run.size !== undefined) applied.fontSize = run.size / style.size + 'em'
+    return applied
+  }
   return (
     <>
       <div
         ref={box}
         className="atlas-slide-text"
         data-overflow={overflow || undefined}
+        onDoubleClick={(event) => {
+          if (!onText) return
+          event.preventDefault()
+          event.stopPropagation()
+          onEdit?.()
+          setActive(true)
+        }}
         style={{
-          padding: style.padding,
+          padding: padding.map((n) => n + 'px').join(' '),
           boxSizing: 'border-box',
           textAlign: style.align,
           lineHeight: style.leading,
+          justifyContent:
+            style.verticalAlign === 'bottom'
+              ? 'safe end'
+              : style.verticalAlign === 'middle'
+                ? 'safe center'
+                : 'start',
         }}
       >
         <div
-          style={{
-            fontSize: style.size,
-            fontFamily: fontFamily(style.font, deck),
-            color: style.color,
-          }}
+          style={
+            {
+              ...chars(style, deck),
+              backgroundColor: undefined,
+              textDecoration: undefined,
+              fontSize: style.size,
+              fontFamily: fontFamily(style.font, deck),
+              textShadow:
+                [
+                  shadow &&
+                    `${shadow.x}px ${shadow.y}px ${shadow.blur}px ${effectColor(shadow.color, shadow.opacity)}`,
+                  glow &&
+                    `0 0 ${glow.radius}px ${effectColor(glow.color, glow.intensity)}`,
+                ]
+                  .filter(Boolean)
+                  .join(', ') || undefined,
+              WebkitTextStroke: stroke
+                ? `${stroke.width}px ${effectColor(stroke.color, stroke.opacity)}`
+                : undefined,
+              '--atlas-paragraph-spacing': (style.paragraphSpacing ?? 0) + 'px',
+            } as CSSProperties
+          }
         >
-          {paragraphs(item).map((p, i) => {
-            number = p.list === 'number' ? number + 1 : 0
-            return (
-              <div
-                key={i}
-                style={{
-                  paddingLeft: p.indent,
-                  marginBottom: p.after,
-                  display: 'flex',
-                  justifyContent:
-                    style.align === 'center'
-                      ? 'center'
-                      : style.align === 'right'
-                        ? 'flex-end'
-                        : 'flex-start',
-                }}
-              >
-                {p.list && (
-                  <span style={{ marginRight: '.35em' }}>
-                    {p.list === 'bullet' ? '•' : number + '.'}
-                  </span>
-                )}
-                <div style={{ minWidth: 0, whiteSpace: 'pre-wrap' }}>
-                  {p.runs.map((r, j) => (
-                    <span
-                      key={j}
-                      contentEditable={
-                        editingRun === i + '.' + j
-                          ? 'plaintext-only'
-                          : undefined
-                      }
-                      suppressContentEditableWarning
-                      onDoubleClick={(e) => {
-                        if (!onText) return
-                        e.stopPropagation()
-                        const el = e.currentTarget
-                        canceled.current = false
-                        setEditingRun(i + '.' + j)
-                        requestAnimationFrame(() => el.focus())
-                      }}
-                      onPointerDown={(e) => {
-                        if (editingRun === i + '.' + j) e.stopPropagation()
-                      }}
-                      onBlur={(e) => {
-                        if (editingRun === i + '.' + j)
-                          commit(
-                            i,
-                            j,
-                            e.currentTarget.innerText.replace(/\u200b/g, '')
-                          )
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') {
-                          canceled.current = true
-                          e.currentTarget.textContent = r.text
-                          e.currentTarget.blur()
-                        } else if (
-                          e.key === 'Enter' &&
-                          (e.ctrlKey || e.metaKey)
-                        )
-                          e.currentTarget.blur()
-                      }}
-                      style={{
-                        ...chars({ ...style, ...r }, deck),
-                        fontSize: r.size
-                          ? r.size / style.size + 'em'
-                          : undefined,
-                      }}
-                    >
-                      {r.text || '\u200b'}
+          {active && onText ? (
+            <VisualText
+              item={item}
+              flexible={flexible}
+              onText={onText}
+              finish={() => setActive(false)}
+              register={registerText}
+              undo={undo}
+              runStyle={runStyle}
+            />
+          ) : (
+            paragraphs(
+              flexible ? item : { ...item, paragraphs: undefined }
+            ).map((p, i, parts) => {
+              number = p.list === 'number' ? number + 1 : 0
+              return (
+                <div
+                  key={i}
+                  style={{
+                    paddingLeft: p.indent,
+                    marginBottom:
+                      p.after ??
+                      (i + 1 < parts.length
+                        ? style.paragraphSpacing
+                        : undefined),
+                    display: 'flex',
+                    justifyContent:
+                      style.align === 'center'
+                        ? 'center'
+                        : style.align === 'right'
+                          ? 'flex-end'
+                          : 'flex-start',
+                  }}
+                >
+                  {p.list && (
+                    <span style={{ marginRight: '.35em' }}>
+                      {p.list === 'bullet' ? '•' : number + '.'}
                     </span>
-                  ))}
+                  )}
+                  <div
+                    style={{
+                      minWidth: 0,
+                      whiteSpace: 'pre-wrap',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {p.runs.map((run, j) => (
+                      <span key={j} style={runStyle(run)}>
+                        {run.text || '​'}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
       </div>
       {overflow && editing && (

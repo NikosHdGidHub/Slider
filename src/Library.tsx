@@ -1,3 +1,5 @@
+import { download } from './instructions'
+import { unreadableDocuments } from './storage'
 import { useState, type ReactNode } from 'react'
 import { ArrowDownUp, LayoutGrid, List, Search, X } from 'lucide-react'
 import { ActionMenu, type MenuItem } from './ActionMenu'
@@ -251,5 +253,33 @@ export function LibraryCard({
       </div>
       {description && <p className="lib-card-description">{description}</p>}
     </article>
+  )
+}
+
+export function MigrationFailures({ kind }: { kind: 'lesson' | 'template' }) {
+  const failures = unreadableDocuments(kind)
+  if (!failures.length) return null
+  return (
+    <details className="lib-migration-failures">
+      <summary>Не удалось открыть документы · {failures.length}</summary>
+      <ul>
+        {failures.map(({ title, message, source }, index) => (
+          <li key={index}>
+            <strong>{title}</strong>
+            <p>{message}</p>
+            <button
+              onClick={() =>
+                download(
+                  'atlas-original-' + (index + 1) + '.json',
+                  JSON.stringify(source, null, 2)
+                )
+              }
+            >
+              Скачать исходный JSON
+            </button>
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }

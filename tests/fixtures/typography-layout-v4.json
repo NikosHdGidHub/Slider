@@ -1,0 +1,267 @@
+{
+  "format": 4,
+  "kind": "layout",
+  "description": "Слева пояснение опыта, справа изображение, снизу обсуждение.",
+  "deck": {
+    "version": 4,
+    "master": {
+      "name": "Опыт и наблюдение",
+      "schemes": {
+        "title": {
+          "rows": [
+            1
+          ],
+          "cols": [
+            1
+          ],
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cells": [
+            {
+              "id": "body",
+              "row": 0,
+              "col": 0,
+              "type": "area",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        "normal": {
+          "rows": [
+            1
+          ],
+          "cols": [
+            1
+          ],
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cells": [
+            {
+              "id": "body",
+              "row": 0,
+              "col": 0,
+              "type": "area",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        "end": {
+          "rows": [
+            1
+          ],
+          "cols": [
+            1
+          ],
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cells": [
+            {
+              "id": "body",
+              "row": 0,
+              "col": 0,
+              "type": "area",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "id": "a7100401-0000-4000-8000-000000000002",
+    "title": "Опыт и наблюдение",
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "theme": {
+      "palette": [
+        "#163e49",
+        "#e5f4ef",
+        "#f8bd56"
+      ],
+      "systemStyles": {
+        "title": {
+          "font": "sans",
+          "color": "#183e45",
+          "fit": true,
+          "minSize": 16,
+          "size": 56,
+          "weight": "700"
+        },
+        "subtitle": {
+          "font": "sans",
+          "color": "#183e45",
+          "fit": true,
+          "minSize": 16,
+          "size": 40
+        },
+        "description": {
+          "font": "sans",
+          "color": "#183e45",
+          "fit": true,
+          "minSize": 16,
+          "size": 32
+        },
+        "text": {
+          "font": "sans",
+          "color": "#183e45",
+          "fit": true,
+          "minSize": 16,
+          "size": 32
+        },
+        "header": {
+          "font": "sans",
+          "color": "#183e45",
+          "fit": true,
+          "minSize": 16,
+          "size": 24
+        },
+        "footer": {
+          "font": "sans",
+          "color": "#183e45",
+          "fit": true,
+          "minSize": 16,
+          "size": 24
+        },
+        "caption": {
+          "font": "sans",
+          "color": "#183e45",
+          "fit": true,
+          "minSize": 16,
+          "size": 22
+        }
+      },
+      "styles": [
+        {
+          "id": "conclusionStyle",
+          "label": "Обсуждение",
+          "values": {
+            "font": "golos-text",
+            "size": 34,
+            "color": "#264a46",
+            "padding": [
+              6,
+              12,
+              6,
+              12
+            ]
+          }
+        }
+      ]
+    },
+    "resources": {
+      "fonts": []
+    },
+    "slides": [
+      {
+        "id": "a7100401-0000-4000-8000-000000000003",
+        "color": "#ffffff",
+        "background": null,
+        "notes": "",
+        "items": [],
+        "kind": "normal",
+        "structure": {
+          "rows": [
+            2,
+            1
+          ],
+          "cols": [
+            1,
+            1
+          ],
+          "padding": [
+            24,
+            24,
+            24,
+            24
+          ],
+          "cells": [
+            {
+              "id": "description",
+              "row": 0,
+              "col": 0,
+              "type": "description",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                20,
+                20,
+                20,
+                20
+              ],
+              "value": "Описание",
+              "width": 2,
+              "border": "#aca0be"
+            },
+            {
+              "id": "image",
+              "row": 0,
+              "col": 1,
+              "type": "image",
+              "rows": 1,
+              "cols": 1,
+              "padding": [
+                20,
+                20,
+                20,
+                20
+              ],
+              "width": 2,
+              "border": "#aca0be"
+            },
+            {
+              "id": "conclusion",
+              "row": 1,
+              "col": 0,
+              "type": "text",
+              "rows": 1,
+              "cols": 2,
+              "padding": [
+                20,
+                20,
+                20,
+                20
+              ],
+              "value": "Что изменилось в ходе опыта?",
+              "width": 2,
+              "border": "#aca0be",
+              "textStyle": "conclusionStyle"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

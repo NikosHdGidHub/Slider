@@ -1,3 +1,6 @@
+import type { Deck } from './model'
+import { offlineFontPaths } from './textFonts'
+
 let registration: Promise<ServiceWorkerRegistration> | undefined
 
 function register(): Promise<ServiceWorkerRegistration> {
@@ -30,7 +33,7 @@ export function registerShell(): void {
   }
 }
 
-export async function ensureShell(): Promise<void> {
+export async function ensureShell(deck: Deck): Promise<void> {
   const registered = await register()
   await new Promise<void>((resolve, reject) => {
     let channel: MessageChannel | undefined
@@ -56,7 +59,10 @@ export async function ensureShell(): Promise<void> {
           return finish(false)
         channel = new MessageChannel()
         channel.port1.onmessage = (event) => finish(event.data === true)
-        ready.active.postMessage('atlas-check-shell', [channel.port2])
+        ready.active.postMessage(
+          { type: 'atlas-check-shell', fonts: offlineFontPaths(deck) },
+          [channel.port2]
+        )
       })
       .catch(() => finish(false))
   })

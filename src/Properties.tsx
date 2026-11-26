@@ -1,19 +1,30 @@
-import { PropertySection } from './Workspace'
+import {
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignVerticalJustifyStart,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+} from 'lucide-react'
+import { fontCatalog } from './fontCatalog'
+import { textTypeIds, textTypes, isTextType, type TextType } from './textTypes'
+import { type Cell, type Insets } from './grid'
+import type { TextSelectionControls } from './VisualText'
+import { IconButton, PropertySection } from './Workspace'
 import { fontFamily } from './Artwork'
 import { useRef, useState } from 'react'
 import { installStyle, type StyleLibrary } from './styleLibrary'
-import { builtinFonts, shapes } from './schema'
+import { shapes } from './schema'
 import {
   newShape,
-  paragraphs,
-  richText,
+  itemTextType,
+  replaceStyle,
   typography,
   verifyFont,
   type Characters,
   type Deck,
   type FontAsset,
   type Item,
-  type Paragraph,
   type TextStyle,
 } from './model'
 type Change = (fn: (d: Deck) => Deck) => void
@@ -93,66 +104,143 @@ function CharacterFields({
   values,
   onChange,
   deck,
+  selection = false,
+  onUpload,
 }: {
   values: Characters
   onChange: (s: Characters) => void
   deck: Deck
+  selection?: boolean
+  onUpload?: (file: File) => void
 }) {
+  const [search, setSearch] = useState('')
+  const fileInput = useRef<HTMLInputElement>(null)
+  const font = values.font ?? 'sans'
+  const fonts = [
+    ...Object.entries(fontCatalog).map(([id, f]) => ({ id, label: f.label })),
+    ...deck.resources.fonts,
+  ]
+  const variants = fontCatalog[font] ?? { weights: [400], italic: false }
+  const match = (text: string) =>
+    text.toLocaleLowerCase('ru').includes(search.trim().toLocaleLowerCase('ru'))
   return (
     <>
+      <label>
+        Поиск гарнитуры
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </label>
       <label>
         Гарнитура
         <select
           aria-label="Гарнитура"
-          value={values.font ?? 'sans'}
-          onChange={(e) => onChange({ font: e.target.value })}
+          value={font}
+          style={{ fontFamily: fontFamily(font, deck) }}
+          onChange={(e) => {
+            const id = e.target.value
+            if (id === '@upload') {
+              fileInput.current?.click()
+              return
+            }
+            const target = fontCatalog[id] ?? { weights: [400], italic: false }
+            if (selection) onChange({ font: id })
+            else
+              onChange({
+                font: id,
+                ...(!target.weights.includes(Number(values.weight ?? 400))
+                  ? {
+                      weight: String(
+                        target.weights.includes(400) ? 400 : target.weights[0]
+                      ),
+                    }
+                  : {}),
+                ...(!target.italic && values.italic ? { italic: false } : {}),
+              })
+          }}
         >
-          {Object.entries(builtinFonts).map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-          {deck.resources.fonts.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label}
-            </option>
-          ))}
+          {fonts
+            .filter((f) => f.id === font || match(f.label) || match(f.id))
+            .map(({ id, label }) => (
+              <option
+                key={id}
+                value={id}
+                style={{ fontFamily: fontFamily(id, deck) }}
+              >
+                {label}
+              </option>
+            ))}
+          {onUpload && <option value="@upload">Загрузить шрифт…</option>}
         </select>
       </label>
-      <Num
-        label="Размер шрифта"
-        value={values.size ?? 32}
-        min={1}
-        max={1024}
-        change={(size) => onChange({ size })}
-      />
-      <Color
-        label="Цвет текста"
-        value={values.color ?? '#163e49'}
-        change={(color) => onChange({ color })}
-      />
+      {onUpload && (
+        <input
+          ref={fileInput}
+          type="file"
+          hidden
+          aria-label="Загрузить шрифт"
+          accept=".woff2,.woff,.ttf,.otf"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            e.target.value = ''
+            if (file) onUpload(file)
+          }}
+        />
+      )}
+      <div className="field-pair">
+        <Num
+          label="Размер шрифта"
+          value={values.size ?? 32}
+          min={1}
+          max={1024}
+          change={(size) => onChange({ size })}
+        />
+        <label>
+          Насыщенность
+          <select
+            value={values.weight ?? '400'}
+            onChange={(e) => onChange({ weight: e.target.value })}
+          >
+            {variants.weights.map((weight) => (
+              <option key={weight} value={weight}>
+                {weight}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="field-pair">
+        <Color
+          label="Цвет текста"
+          value={values.color ?? '#183e45'}
+          change={(color) => onChange({ color })}
+        />
+        <Color
+          label="Выделение маркером"
+          value={values.highlight ?? '#fff4aa'}
+          change={(highlight) => onChange({ highlight })}
+        />
+      </div>
       <div className="switches">
         {(
           [
-            ['bold', 'Полужирный'],
             ['italic', 'Курсив'],
             ['underline', 'Подчёркивание'],
             ['strike', 'Зачёркивание'],
           ] as const
-        ).map(([key, label]) => (
-          <Toggle
-            key={key}
-            label={label}
-            value={!!values[key]}
-            change={(v) => onChange({ [key]: v })}
-          />
-        ))}
+        )
+          .filter(([key]) => key !== 'italic' || variants.italic)
+          .map(([key, label]) => (
+            <Toggle
+              key={key}
+              label={label}
+              value={!!values[key]}
+              change={(v) => onChange({ [key]: v })}
+            />
+          ))}
       </div>
-      <Color
-        label="Выделение маркером"
-        value={values.highlight ?? '#fff4aa'}
-        change={(highlight) => onChange({ highlight })}
-      />
       <Num
         label="Интервал между буквами"
         value={values.tracking ?? 0}
@@ -164,57 +252,247 @@ function CharacterFields({
     </>
   )
 }
+
+const alignments = {
+  align: [
+    ['left', 'Слева', AlignLeft],
+    ['center', 'По центру горизонтали', AlignCenter],
+    ['right', 'Справа', AlignRight],
+  ],
+  verticalAlign: [
+    ['top', 'Сверху', AlignVerticalJustifyStart],
+    ['middle', 'По центру вертикали', AlignVerticalJustifyCenter],
+    ['bottom', 'Снизу', AlignVerticalJustifyEnd],
+  ],
+} as const
+
 function StyleFields({
   deck,
   values,
   change,
+  onUpload,
 }: {
   deck: Deck
   values: TextStyle
   change: (v: TextStyle) => void
+  onUpload: (file: File) => void
 }) {
+  const padding: Insets = Array.isArray(values.padding)
+    ? values.padding
+    : [0, 0, 0, 0]
+  const shadow = values.textShadow ?? {
+    color: '#000000',
+    opacity: 0.6,
+    x: 2,
+    y: 3,
+    blur: 4,
+  }
+  const stroke = values.textStroke ?? { color: '#000000', opacity: 1, width: 1 }
+  const glow = values.textGlow ?? {
+    color: '#fff4aa',
+    intensity: 0.5,
+    radius: 7,
+  }
   return (
     <>
-      <CharacterFields deck={deck} values={values} onChange={change} />
-      <label>
-        Выравнивание
-        <select
-          aria-label="Выравнивание"
-          value={values.align ?? 'left'}
-          onChange={(e) => change({ align: e.target.value as Item['align'] })}
+      <CharacterFields
+        deck={deck}
+        values={values}
+        onChange={change}
+        onUpload={onUpload}
+      />
+      {values.highlight && (
+        <button onClick={() => change({ highlight: undefined })}>
+          Убрать маркер
+        </button>
+      )}
+      {Object.entries(alignments).map(([key, choices]) => (
+        <div
+          key={key}
+          className="text-align-tools"
+          role="group"
+          aria-label={
+            key === 'align'
+              ? 'Горизонтальное выравнивание'
+              : 'Вертикальное выравнивание'
+          }
         >
-          <option value="left">Слева</option>
-          <option value="center">По центру</option>
-          <option value="right">Справа</option>
-        </select>
-      </label>
-      <Num
-        label="Межстрочный интервал"
-        min={0.6}
-        max={4}
-        step={0.05}
-        value={values.leading ?? 1.18}
-        change={(leading) => change({ leading })}
-      />
-      <Num
-        label="Внутренний отступ"
-        min={0}
-        max={512}
-        value={values.padding ?? 0}
-        change={(padding) => change({ padding })}
-      />
+          {choices.map(([id, label, Icon], index) => (
+            <IconButton
+              key={id}
+              label={label}
+              aria-pressed={
+                (values[key as keyof typeof alignments] ?? choices[0][0]) ===
+                choices[index][0]
+              }
+              onClick={() => change({ [key]: id })}
+            >
+              <Icon size={16} />
+            </IconButton>
+          ))}
+        </div>
+      ))}
+      <div className="field-pair">
+        <Num
+          label="Межстрочный интервал"
+          min={0.6}
+          max={4}
+          step={0.05}
+          value={values.leading ?? 1.18}
+          change={(leading) => change({ leading })}
+        />
+        <Num
+          label="После абзаца"
+          min={0}
+          max={256}
+          value={values.paragraphSpacing ?? 0}
+          change={(paragraphSpacing) => change({ paragraphSpacing })}
+        />
+      </div>
+      <fieldset>
+        <legend>Внутренние отступы текста</legend>
+        <div className="field-pair">
+          {['Сверху', 'Справа', 'Снизу', 'Слева'].map((label, index) => (
+            <Num
+              key={label}
+              label={label}
+              min={0}
+              max={512}
+              value={padding[index]}
+              change={(n) => {
+                const next: Insets = [...padding]
+                next[index] = n
+                change({ padding: next })
+              }}
+            />
+          ))}
+        </div>
+      </fieldset>
       <Toggle
         label="Автоподгонка"
         value={values.fit ?? true}
         change={(fit) => change({ fit })}
       />
-      <Num
-        label="Минимальный размер"
-        min={1}
-        max={1024}
-        value={values.minSize ?? 16}
-        change={(minSize) => change({ minSize })}
-      />
+      {(values.fit ?? true) && (
+        <Num
+          label="Минимальный размер"
+          min={1}
+          max={1024}
+          value={values.minSize ?? 16}
+          change={(minSize) => change({ minSize })}
+        />
+      )}
+      <PropertySection id="text-effects" title="Эффекты текста">
+        <Toggle
+          label="Тень текста"
+          value={!!values.textShadow}
+          change={(on) => change({ textShadow: on ? shadow : undefined })}
+        />
+        {values.textShadow && (
+          <>
+            <Color
+              label="Цвет тени"
+              value={shadow.color}
+              change={(color) => change({ textShadow: { ...shadow, color } })}
+            />
+            <Num
+              label="Непрозрачность тени"
+              min={0}
+              max={1}
+              step={0.05}
+              value={shadow.opacity}
+              change={(opacity) =>
+                change({ textShadow: { ...shadow, opacity } })
+              }
+            />
+            <div className="field-pair">
+              <Num
+                label="Смещение X"
+                min={-200}
+                max={200}
+                value={shadow.x}
+                change={(x) => change({ textShadow: { ...shadow, x } })}
+              />
+              <Num
+                label="Смещение Y"
+                min={-200}
+                max={200}
+                value={shadow.y}
+                change={(y) => change({ textShadow: { ...shadow, y } })}
+              />
+            </div>
+            <Num
+              label="Размытие тени"
+              min={0}
+              max={100}
+              value={shadow.blur}
+              change={(blur) => change({ textShadow: { ...shadow, blur } })}
+            />
+          </>
+        )}
+        <Toggle
+          label="Обводка текста"
+          value={!!values.textStroke}
+          change={(on) => change({ textStroke: on ? stroke : undefined })}
+        />
+        {values.textStroke && (
+          <>
+            <Color
+              label="Цвет обводки"
+              value={stroke.color}
+              change={(color) => change({ textStroke: { ...stroke, color } })}
+            />
+            <Num
+              label="Толщина обводки"
+              min={0}
+              max={32}
+              value={stroke.width}
+              change={(width) => change({ textStroke: { ...stroke, width } })}
+            />
+            <Num
+              label="Непрозрачность обводки"
+              min={0}
+              max={1}
+              step={0.05}
+              value={stroke.opacity}
+              change={(opacity) =>
+                change({ textStroke: { ...stroke, opacity } })
+              }
+            />
+          </>
+        )}
+        <Toggle
+          label="Свечение текста"
+          value={!!values.textGlow}
+          change={(on) => change({ textGlow: on ? glow : undefined })}
+        />
+        {values.textGlow && (
+          <>
+            <Color
+              label="Цвет свечения"
+              value={glow.color}
+              change={(color) => change({ textGlow: { ...glow, color } })}
+            />
+            <Num
+              label="Радиус свечения"
+              min={0}
+              max={100}
+              value={glow.radius}
+              change={(radius) => change({ textGlow: { ...glow, radius } })}
+            />
+            <Num
+              label="Интенсивность свечения"
+              min={0}
+              max={1}
+              step={0.05}
+              value={glow.intensity}
+              change={(intensity) =>
+                change({ textGlow: { ...glow, intensity } })
+              }
+            />
+          </>
+        )}
+      </PropertySection>
     </>
   )
 }
@@ -262,385 +540,379 @@ export function StylesPanel({
   change: Change
   notice: (v: string) => void
 }) {
-  const [id, setID] = useState(deck.theme.styles[0]?.id ?? '')
+  const [id, setID] = useState('text')
+  const [replacement, setReplacement] = useState('')
   const selected = deck.theme.styles.find((s) => s.id === id)
-  const [previewFont, setPreviewFont] = useState('')
+  const values = isTextType(id)
+    ? deck.theme.systemStyles[id]
+    : (selected?.values ?? deck.theme.systemStyles.text)
+  function createStyle(copy?: TextStyle) {
+    if (deck.theme.styles.length >= 128) {
+      notice('В документе уже 128 стилей.')
+      return
+    }
+    const label = prompt('Название стиля')?.trim()
+    if (!label) return
+    const id = 's' + crypto.randomUUID()
+    change((d) => ({
+      ...d,
+      theme: {
+        ...d.theme,
+        styles: [
+          ...d.theme.styles,
+          { id, label: label.slice(0, 100), values: { ...copy } },
+        ],
+      },
+    }))
+    setID(id)
+  }
+  async function addFont(file: File) {
+    try {
+      const font = await fontFile(file)
+      change((d) => {
+        if (d.resources.fonts.some((existing) => existing.id === font.id))
+          return d
+        if (d.resources.fonts.length >= 32)
+          throw new Error('В документе уже 32 шрифта.')
+        return { ...d, resources: { fonts: [...d.resources.fonts, font] } }
+      })
+      notice('Шрифт доступен в списке гарнитур.')
+    } catch (error) {
+      notice((error as Error).message)
+    }
+  }
   return (
-    <PropertySection id="styles" title="Шрифты и общие стили">
-      <PropertySection id="theme" title="Палитра темы">
-        {deck.theme.palette.map((value, index) => (
-          <Color
-            key={index}
-            value={value}
-            label={'Цвет палитры ' + (index + 1)}
-            change={(color) =>
+    <PropertySection id="styles" title="Стили текста">
+      <PropertySection id="text-resources" title="Ресурсы оформления">
+        <PropertySection id="theme" title="Палитра темы">
+          {deck.theme.palette.map((value, index) => (
+            <Color
+              key={index}
+              value={value}
+              label={'Цвет палитры ' + (index + 1)}
+              change={(color) =>
+                change((d) => ({
+                  ...d,
+                  theme: {
+                    ...d.theme,
+                    palette: d.theme.palette.map((v, j) =>
+                      j === index ? color : v
+                    ),
+                  },
+                }))
+              }
+            />
+          ))}
+          <button
+            disabled={deck.theme.palette.length >= 32}
+            onClick={() =>
               change((d) => ({
                 ...d,
-                theme: {
-                  ...d.theme,
-                  palette: d.theme.palette.map((v, j) =>
-                    j === index ? color : v
-                  ),
-                },
+                theme: { ...d.theme, palette: [...d.theme.palette, '#ffffff'] },
               }))
             }
-          />
-        ))}
-        <button
-          disabled={deck.theme.palette.length >= 32}
-          onClick={() =>
-            change((d) => ({
-              ...d,
-              theme: { ...d.theme, palette: [...d.theme.palette, '#ffffff'] },
-            }))
-          }
-        >
-          Добавить цвет палитры
-        </button>
-      </PropertySection>
-      <label>
-        Загрузить шрифт
-        <input
-          type="file"
-          accept=".woff2,.woff,.ttf,.otf"
-          onChange={async (e) => {
-            const file = e.target.files?.[0]
-            e.target.value = ''
-            if (!file) return
-            try {
-              const f = await fontFile(file)
-              if (
-                deck.resources.fonts.length >= 32 &&
-                !deck.resources.fonts.some((font) => font.id === f.id)
-              )
-                throw new Error('В документе уже 32 шрифта.')
-              setPreviewFont(f.id)
-              change((d) =>
-                d.resources.fonts.some((v) => v.id === f.id)
-                  ? d
-                  : { ...d, resources: { fonts: [...d.resources.fonts, f] } }
-              )
-              notice('Шрифт доступен в списке гарнитур.')
-            } catch (err) {
-              notice((err as Error).message)
-            }
-          }}
-        />
-      </label>
-      {previewFont && (
-        <p
-          aria-label="Образец шрифта"
-          style={{ fontFamily: fontFamily(previewFont, deck) }}
-        >
-          {deck.resources.fonts.find((f) => f.id === previewFont)?.label}
-          <br />
-          Съешь ещё этих мягких французских булок. 012345
-        </p>
-      )}
-      {library && (
-        <label>
-          Добавить из библиотеки
-          <select
-            aria-label="Добавить из библиотеки"
-            value=""
-            onChange={(e) => {
-              const [kind, id] = e.target.value.split(':')
-              try {
-                const next = installStyle(
-                  deck,
-                  library,
-                  kind === 'font' ? { font: id } : { style: id }
-                )
-                change(() => next)
-                notice('Добавлено в документ.')
-              } catch (err) {
-                notice((err as Error).message)
-              }
-            }}
           >
-            <option value="">Стиль или шрифт</option>
-            <optgroup label="Стили">
-              {library.styles.map((s) => (
-                <option key={s.id} value={'style:' + s.id}>
-                  {s.label} · {s.id}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Шрифты">
-              {library.fonts.map((f) => (
-                <option key={f.id} value={'font:' + f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        </label>
-      )}
-      <label>
-        Общий стиль
-        <select
-          aria-label="Общий стиль"
-          value={id}
-          onChange={(e) => setID(e.target.value)}
-        >
-          {deck.theme.styles.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        onClick={() => {
-          if (deck.theme.styles.length >= 128) {
-            notice('В документе уже 128 стилей.')
-            return
-          }
-          const label = prompt('Название стиля')?.trim()
-          if (!label) return
-          const key = 's' + crypto.randomUUID()
-          change((d) => ({
-            ...d,
-            theme: {
-              ...d.theme,
-              styles: [
-                ...d.theme.styles,
-                {
-                  id: key,
-                  label: label.slice(0, 100),
-                  values: { font: 'sans', size: 32 },
-                },
-              ],
-            },
-          }))
-          setID(key)
-        }}
-      >
-        Создать стиль
-      </button>
-      {selected && (
-        <StyleFields
-          values={selected.values}
-          deck={deck}
-          change={(v) =>
-            change((d) => ({
-              ...d,
-              theme: {
-                ...d.theme,
-                styles: d.theme.styles.map((s) =>
-                  s.id === id ? { ...s, values: { ...s.values, ...v } } : s
-                ),
-              },
-            }))
-          }
-        />
-      )}
-    </PropertySection>
-  )
-}
-export function TextPanel({
-  item,
-  deck,
-  patch,
-}: {
-  item: Item
-  deck: Deck
-  patch: (v: Partial<Item>) => void
-}) {
-  const [pi, paragraph] = useState(0),
-    [ri, run] = useState(0)
-  const input = useRef<HTMLTextAreaElement>(null)
-  const parts = paragraphs(item),
-    p = Math.min(pi, parts.length - 1),
-    r = Math.min(ri, parts[p].runs.length - 1),
-    part = parts[p],
-    span = part.runs[r]
-  const update = (val: Partial<Paragraph>) =>
-    patch(richText(parts.map((v, i) => (i === p ? { ...v, ...val } : v))))
-  const marked = (val: Partial<typeof span>) =>
-    update({ runs: part.runs.map((s, i) => (i === r ? { ...s, ...val } : s)) })
-  const style = typography(item, deck)
-  return (
-    <PropertySection id="text" title="Текст и оформление" initial>
-      <label>
-        {item.paragraphs ? 'Текст фрагмента' : 'Текст'}
-        <textarea
-          aria-label={item.paragraphs ? 'Текст фрагмента' : 'Текст'}
-          id="atlas-edit-text"
-          ref={input}
-          value={item.paragraphs ? span.text : item.text}
-          onChange={(e) =>
-            item.paragraphs
-              ? marked({ text: e.target.value })
-              : patch({ text: e.target.value })
-          }
-        />
-      </label>
-      <PropertySection id="paragraphs" title="Абзацы и фрагменты">
-        <label>
-          Абзац
-          <select
-            aria-label="Абзац"
-            value={p}
-            onChange={(e) => {
-              paragraph(+e.target.value)
-              run(0)
-            }}
-          >
-            {parts.map((_, i) => (
-              <option key={i} value={i}>
-                {i + 1}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Фрагмент
-          <select
-            aria-label="Фрагмент"
-            value={r}
-            onChange={(e) => run(+e.target.value)}
-          >
-            {part.runs.map((s, i) => (
-              <option key={i} value={i}>
-                {i + 1}. {s.text.slice(0, 22)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          onClick={() => {
-            if (!item.paragraphs && parts.length > 1) {
-              patch(richText(parts))
-              paragraph(0)
-              run(0)
-              return
-            }
-            const start = input.current!.selectionStart,
-              end = input.current!.selectionEnd
-            if (start === end) {
-              update({ runs: [...part.runs, { text: 'Фрагмент' }] })
-              run(part.runs.length)
-              return
-            }
-            const before = span.text.slice(0, start),
-              middle = span.text.slice(start, end),
-              after = span.text.slice(end)
-            update({
-              runs: [
-                ...part.runs.slice(0, r),
-                ...[before, middle, after]
-                  .filter(Boolean)
-                  .map((text) => ({ ...span, text })),
-                ...part.runs.slice(r + 1),
-              ],
-            })
-            run(r + (before ? 1 : 0))
-          }}
-        >
-          Выделить фрагмент
-        </button>
-        <button
-          onClick={() => {
-            patch(richText([...parts, { runs: [{ text: 'Абзац' }] }]))
-            paragraph(parts.length)
-            run(0)
-          }}
-        >
-          Добавить абзац
-        </button>
-        <button
-          disabled={parts.length === 1}
-          onClick={() => {
-            patch(richText(parts.filter((_, i) => i !== p)))
-            paragraph(0)
-            run(0)
-          }}
-        >
-          Удалить абзац
-        </button>
-        <button
-          disabled={part.runs.length === 1}
-          onClick={() => {
-            update({ runs: part.runs.filter((_, i) => i !== r) })
-            run(0)
-          }}
-        >
-          Удалить фрагмент
-        </button>
-        <label>
-          Список
-          <select
-            aria-label="Список"
-            value={part.list ?? ''}
-            onChange={(e) => {
-              const next = { ...part }
-              if (e.target.value)
-                next.list = e.target.value as Paragraph['list']
-              else delete next.list
-              patch(richText(parts.map((v, i) => (i === p ? next : v))))
-            }}
-          >
-            <option value="">Без маркера</option>
-            <option value="bullet">Маркированный</option>
-            <option value="number">Нумерованный</option>
-          </select>
-        </label>
-        <Num
-          label="Отступ абзаца"
-          min={0}
-          max={512}
-          value={part.indent ?? 0}
-          change={(indent) => update({ indent })}
-        />
-        <Num
-          label="После абзаца"
-          min={0}
-          max={256}
-          value={part.after ?? 0}
-          change={(after) => update({ after })}
-        />
-        <CharacterFields
-          values={{ ...style, ...span }}
-          deck={deck}
-          onChange={marked}
-        />
+            Добавить цвет палитры
+          </button>
+        </PropertySection>
+        {library && (
+          <label>
+            Добавить из библиотеки
+            <select
+              aria-label="Добавить из библиотеки"
+              value=""
+              onChange={(e) => {
+                const [kind, id] = e.target.value.split(':')
+                try {
+                  const next = installStyle(
+                    deck,
+                    library,
+                    kind === 'font' ? { font: id } : { style: id }
+                  )
+                  change(() => next)
+                  notice('Добавлено в документ.')
+                } catch (err) {
+                  notice((err as Error).message)
+                }
+              }}
+            >
+              <option value="">Стиль или шрифт</option>
+              <optgroup label="Стили">
+                {library.styles.map((s) => (
+                  <option key={s.id} value={'style:' + s.id}>
+                    {s.label} · {s.id}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Шрифты">
+                {library.fonts.map((f) => (
+                  <option key={f.id} value={'font:' + f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </label>
+        )}
       </PropertySection>
       <label>
         Стиль текста
         <select
           aria-label="Стиль текста"
-          value={item.style ?? ''}
-          onChange={(e) => patch({ style: e.target.value || undefined })}
+          value={isTextType(id) || selected ? id : 'text'}
+          onChange={(e) => setID(e.target.value)}
         >
-          <option value="">Свой стиль</option>
-          {deck.theme.styles.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
+          <optgroup label="Системные">
+            {textTypeIds.map((type) => (
+              <option key={type} value={type}>
+                {textTypes[type]}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Пользовательские">
+            {deck.theme.styles.map((style) => (
+              <option key={style.id} value={style.id}>
+                {style.label}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </label>
+      <button onClick={() => createStyle()}>Создать стиль</button>
+      <button onClick={() => createStyle(values)}>Дублировать стиль</button>
+      {selected && (
+        <>
+          <label>
+            Название стиля
+            <input
+              key={id}
+              defaultValue={selected.label}
+              maxLength={100}
+              onBlur={(e) => {
+                const label = e.target.value.trim()
+                if (!label) {
+                  e.target.value = selected.label
+                  return
+                }
+                change((d) => ({
+                  ...d,
+                  theme: {
+                    ...d.theme,
+                    styles: d.theme.styles.map((s) =>
+                      s.id === id ? { ...s, label } : s
+                    ),
+                  },
+                }))
+              }}
+            />
+          </label>
+          <label>
+            Заменить ссылки при удалении
+            <select
+              aria-label="Заменить ссылки при удалении"
+              value={replacement}
+              onChange={(e) => setReplacement(e.target.value)}
+            >
+              <option value="">Системный стиль «Текст»</option>
+              {deck.theme.styles
+                .filter((s) => s.id !== id)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <button
+            onClick={() => {
+              const next = deck.theme.styles.some(
+                (s) => s.id === replacement && s.id !== id
+              )
+                ? replacement
+                : undefined
+              change((d) => replaceStyle(d, id, next))
+              setID(next ?? 'text')
+              setReplacement('')
+            }}
+          >
+            Удалить стиль
+          </button>
+        </>
+      )}
       <StyleFields
+        onUpload={addFont}
+        values={values}
         deck={deck}
-        values={style}
-        change={(v) => {
-          const base = !item.style
-            ? {
-                ...(v.size !== undefined ? { size: v.size } : {}),
-                ...(v.color ? { color: v.color } : {}),
-                ...(v.align ? { align: v.align } : {}),
-              }
-            : {}
-          patch({ ...base, overrides: { ...item.overrides, ...v } })
-        }}
+        change={(fields) =>
+          change((d) => {
+            const update = (style: TextStyle) =>
+              Object.fromEntries(
+                Object.entries({ ...style, ...fields }).filter(
+                  ([, value]) => value !== undefined
+                )
+              )
+            return {
+              ...d,
+              theme:
+                isTextType(id) || !selected
+                  ? {
+                      ...d.theme,
+                      systemStyles: {
+                        ...d.theme.systemStyles,
+                        [isTextType(id) ? id : 'text']: update(values),
+                      },
+                    }
+                  : {
+                      ...d.theme,
+                      styles: d.theme.styles.map((style) =>
+                        style.id === id
+                          ? { ...style, values: update(style.values) }
+                          : style
+                      ),
+                    },
+            }
+          })
+        }
       />
-      <button onClick={() => patch({ overrides: undefined })}>
-        Сбросить переопределения
-      </button>
     </PropertySection>
   )
 }
+
+export function TextPanel({
+  item,
+  cell,
+  deck,
+  patch,
+  controls,
+  reset,
+}: {
+  item: Item
+  cell?: Cell
+  deck: Deck
+  patch: (v: Partial<Item>) => void
+  controls?: TextSelectionControls | null
+  reset?: () => void
+}) {
+  const type = itemTextType(item, cell)
+  const style = typography(item, deck, cell)
+  return (
+    <PropertySection id="text" title="Содержание текста" initial>
+      <div data-text-controls>
+        {!isTextType(cell?.type) && (
+          <label>
+            Тип текста
+            <select
+              value={type}
+              onChange={(e) => {
+                const textType = e.target.value as TextType
+                patch(
+                  textType === 'text'
+                    ? { textType }
+                    : {
+                        textType,
+                        paragraphs: undefined,
+                        overrides: undefined,
+                        style: undefined,
+                      }
+                )
+              }}
+            >
+              {textTypeIds.map((id) => (
+                <option value={id} key={id}>
+                  {textTypes[id]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {type === 'text' && !cell?.textStyle && (
+          <label>
+            Пользовательский стиль
+            <select
+              aria-label="Пользовательский стиль"
+              value={item.style ?? ''}
+              onChange={(e) =>
+                patch({
+                  style: e.target.value || undefined,
+                  overrides: undefined,
+                })
+              }
+            >
+              <option value="">Системный стиль «Текст»</option>
+              {deck.theme.styles.map((s) => (
+                <option value={s.id} key={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {(!item.paragraphs || type !== 'text') && (
+          <label>
+            Текст
+            <textarea
+              id="atlas-edit-text"
+              maxLength={200000}
+              value={item.text}
+              onChange={(e) =>
+                patch({ text: e.target.value, paragraphs: undefined })
+              }
+            />
+          </label>
+        )}
+        {reset && (
+          <button onClick={reset}>Вернуть исходный текст ячейки</button>
+        )}
+        {type === 'text' && controls ? (
+          <PropertySection
+            id="selection-format"
+            title="Форматирование выделения"
+            initial
+          >
+            <div className="text-selection-tools">
+              <button onClick={() => controls.list('bullet')}>
+                Маркированный список
+              </button>
+              <button onClick={() => controls.list('number')}>
+                Нумерованный список
+              </button>
+              <button onClick={() => controls.indent(24)}>
+                Увеличить отступ
+              </button>
+              <button onClick={() => controls.indent(-24)}>
+                Уменьшить отступ
+              </button>
+              <button onClick={() => controls.appearance(null)}>
+                Сбросить форматирование
+              </button>
+            </div>
+            <CharacterFields
+              selection
+              values={{ ...style, ...controls.values }}
+              deck={deck}
+              onChange={controls.appearance}
+            />
+            <Num
+              label="Интервал после выделенного абзаца"
+              value={controls.paragraphAfter ?? style.paragraphSpacing ?? 0}
+              min={0}
+              max={256}
+              change={controls.spacing}
+            />
+          </PropertySection>
+        ) : (
+          type === 'text' && (
+            <small>
+              Дважды щёлкните текст на холсте, чтобы редактировать и
+              форматировать выделение.
+            </small>
+          )
+        )}
+      </div>
+    </PropertySection>
+  )
+}
+
 export function ShapePanel({
   item,
   patch,
@@ -900,8 +1172,10 @@ export function ShapePanel({
 export function GeometryPanel({
   item,
   patch,
+  canPin,
 }: {
   item: Item
+  canPin?: boolean
   patch: (v: Partial<Item>) => void
 }) {
   return (
@@ -933,6 +1207,13 @@ export function GeometryPanel({
         value={item.opacity ?? 1}
         change={(opacity) => patch({ opacity })}
       />
+      {canPin && (
+        <Toggle
+          label="Закрепить в шаблоне"
+          value={!!item.fixed}
+          change={(fixed) => patch({ fixed })}
+        />
+      )}
       <Toggle
         label="Отразить по горизонтали"
         value={!!item.flipX}

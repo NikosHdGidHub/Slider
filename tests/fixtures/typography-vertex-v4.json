@@ -1,0 +1,1027 @@
+{
+  "format": 4,
+  "kind": "presentation",
+  "description": "Контрольный макет про 3D-моделирование",
+  "deck": {
+    "version": 4,
+    "id": "a7100017-0000-4000-8000-000000000001",
+    "title": "Vertex · тест типографики",
+    "master": {
+      "name": "Vertex",
+      "schemes": {
+        "title": {
+          "padding": [
+            38,
+            68,
+            36,
+            68
+          ],
+          "rows": [
+            1,
+            2.2,
+            2.65,
+            1.4,
+            0.75
+          ],
+          "cols": [
+            1,
+            0.9
+          ],
+          "cells": [
+            {
+              "id": "top",
+              "row": 0,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "header",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "АТЛАС УРОКОВ   /   УЧЕБНАЯ СТУДИЯ"
+            },
+            {
+              "id": "heading",
+              "row": 1,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "title",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "VERTEX / 3D-МОДЕЛИРОВАНИЕ"
+            },
+            {
+              "id": "summary",
+              "row": 2,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "description",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "КОМПОЗИЦИЯ, СЕТКА И ФОРМА"
+            },
+            {
+              "id": "detail",
+              "row": 3,
+              "col": 0,
+              "rows": 1,
+              "cols": 1,
+              "type": "text",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "Точка, ребро и грань"
+            },
+            {
+              "id": "aside",
+              "row": 3,
+              "col": 1,
+              "rows": 1,
+              "cols": 1,
+              "type": "empty",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "bottom",
+              "row": 4,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "footer",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "3D STUDIO / УЧЕБНЫЙ ПРАКТИКУМ"
+            }
+          ]
+        },
+        "normal": {
+          "padding": [
+            38,
+            68,
+            36,
+            68
+          ],
+          "rows": [
+            1,
+            2.2,
+            2.65,
+            1.4,
+            0.75
+          ],
+          "cols": [
+            1,
+            0.9
+          ],
+          "cells": [
+            {
+              "id": "top",
+              "row": 0,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "header",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "АТЛАС УРОКОВ   /   УЧЕБНАЯ СТУДИЯ"
+            },
+            {
+              "id": "heading",
+              "row": 1,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "text",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "Модель и координаты",
+              "bindingType": "title",
+              "textStyle": "migrated-style-1"
+            },
+            {
+              "id": "summary",
+              "row": 2,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "description",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "Разместите точку на координатной плоскости."
+            },
+            {
+              "id": "detail",
+              "row": 3,
+              "col": 0,
+              "rows": 1,
+              "cols": 1,
+              "type": "text",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "Точка, ребро и грань"
+            },
+            {
+              "id": "aside",
+              "row": 3,
+              "col": 1,
+              "rows": 1,
+              "cols": 1,
+              "type": "empty",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "bottom",
+              "row": 4,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "footer",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "3D STUDIO / УЧЕБНЫЙ ПРАКТИКУМ"
+            }
+          ]
+        },
+        "end": {
+          "padding": [
+            38,
+            68,
+            36,
+            68
+          ],
+          "rows": [
+            1,
+            2.2,
+            2.65,
+            1.4,
+            0.75
+          ],
+          "cols": [
+            1,
+            0.9
+          ],
+          "cells": [
+            {
+              "id": "top",
+              "row": 0,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "header",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "АТЛАС УРОКОВ   /   УЧЕБНАЯ СТУДИЯ"
+            },
+            {
+              "id": "heading",
+              "row": 1,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "text",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "СОЗДАЙТЕ ОБЪЁМ",
+              "bindingType": "title",
+              "textStyle": "migrated-style-2"
+            },
+            {
+              "id": "summary",
+              "row": 2,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "description",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "Проверьте форму с трёх ракурсов."
+            },
+            {
+              "id": "detail",
+              "row": 3,
+              "col": 0,
+              "rows": 1,
+              "cols": 1,
+              "type": "text",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "Точка, ребро и грань"
+            },
+            {
+              "id": "aside",
+              "row": 3,
+              "col": 1,
+              "rows": 1,
+              "cols": 1,
+              "type": "empty",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "bottom",
+              "row": 4,
+              "col": 0,
+              "rows": 1,
+              "cols": 2,
+              "type": "footer",
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "value": "3D STUDIO / УЧЕБНЫЙ ПРАКТИКУМ"
+            }
+          ]
+        }
+      }
+    },
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "theme": {
+      "styles": [
+        {
+          "id": "migrated-style-1",
+          "label": "Заголовок · прежнее оформление",
+          "values": {
+            "font": "manrope",
+            "leading": 1.18,
+            "minSize": 16,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "fit": true,
+            "size": 52,
+            "color": "#f2f8ff",
+            "align": "left",
+            "weight": "700"
+          }
+        },
+        {
+          "id": "migrated-style-2",
+          "label": "Заголовок · прежнее оформление",
+          "values": {
+            "font": "manrope",
+            "leading": 1.18,
+            "minSize": 16,
+            "padding": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "fit": true,
+            "size": 88,
+            "color": "#f2f8ff",
+            "align": "left",
+            "weight": "700"
+          }
+        }
+      ],
+      "palette": [
+        "#10192d",
+        "#38c5c1",
+        "#b2cde1",
+        "#f2f8ff"
+      ],
+      "systemStyles": {
+        "title": {
+          "font": "manrope",
+          "leading": 1.18,
+          "minSize": 16,
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "fit": true,
+          "size": 64,
+          "color": "#f2f8ff",
+          "align": "left",
+          "weight": "700",
+          "verticalAlign": "middle",
+          "textGlow": {
+            "color": "#38c5c1",
+            "intensity": 0.3,
+            "radius": 12
+          }
+        },
+        "subtitle": {
+          "font": "sans",
+          "color": "#183e45",
+          "fit": true,
+          "minSize": 16,
+          "size": 40
+        },
+        "description": {
+          "font": "sans",
+          "leading": 1.18,
+          "minSize": 16,
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "fit": true,
+          "size": 26,
+          "color": "#b2cde1",
+          "align": "left"
+        },
+        "text": {
+          "font": "sans",
+          "leading": 1.18,
+          "minSize": 16,
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "fit": true,
+          "size": 30,
+          "color": "#f2f8ff",
+          "align": "left"
+        },
+        "header": {
+          "font": "golos-text",
+          "leading": 1.18,
+          "minSize": 16,
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "fit": true,
+          "size": 22,
+          "color": "#38c5c1",
+          "align": "left",
+          "weight": "700"
+        },
+        "footer": {
+          "font": "jetbrains-mono",
+          "leading": 1.18,
+          "minSize": 16,
+          "padding": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "fit": true,
+          "size": 19,
+          "color": "#38c5c1",
+          "align": "left"
+        },
+        "caption": {
+          "font": "sans",
+          "color": "#183e45",
+          "fit": true,
+          "minSize": 16,
+          "size": 22
+        }
+      }
+    },
+    "resources": {
+      "fonts": []
+    },
+    "slides": [
+      {
+        "id": "a7100017-0000-4000-8000-000000000002",
+        "kind": "title",
+        "color": "#10192d",
+        "background": null,
+        "notes": "Попросите рассказать, что меняется при вращении модели.",
+        "items": [
+          {
+            "id": "a7100017-0000-4000-8000-000000000014",
+            "type": "text",
+            "x": 897,
+            "y": 355,
+            "w": 304,
+            "h": 38,
+            "text": "VIEWPORT / 3D",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "overrides": {
+              "font": "mono",
+              "leading": 1.18,
+              "minSize": 16,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "fit": true,
+              "size": 26,
+              "color": "#38c5c1",
+              "align": "left"
+            }
+          },
+          {
+            "id": "a7100017-0000-4000-8000-000000000015",
+            "type": "text",
+            "x": 1001,
+            "y": 536,
+            "w": 164,
+            "h": 38,
+            "text": "X / Y / Z",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "locked": true,
+            "overrides": {
+              "font": "mono",
+              "leading": 1.18,
+              "minSize": 16,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "fit": true,
+              "size": 23,
+              "color": "#b2cde1",
+              "align": "left"
+            }
+          },
+          {
+            "id": "a7100017-0000-4000-8000-000000000016",
+            "type": "shape",
+            "x": 955,
+            "y": 403,
+            "w": 162,
+            "h": 118,
+            "text": "",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "layerName": "Куб · контур",
+            "shape": "path",
+            "fill": {
+              "type": "none"
+            },
+            "stroke": "#38c5c1",
+            "strokeWidth": 2,
+            "group": "cube",
+            "nodes": [
+              {
+                "x": 0,
+                "y": 30
+              },
+              {
+                "x": 50,
+                "y": 0
+              },
+              {
+                "x": 100,
+                "y": 30
+              },
+              {
+                "x": 100,
+                "y": 77
+              },
+              {
+                "x": 50,
+                "y": 100
+              },
+              {
+                "x": 0,
+                "y": 77
+              }
+            ],
+            "closed": true
+          },
+          {
+            "id": "a7100017-0000-4000-8000-000000000017",
+            "type": "shape",
+            "x": 955,
+            "y": 403,
+            "w": 162,
+            "h": 118,
+            "text": "",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "layerName": "Куб · рёбра",
+            "shape": "path",
+            "fill": {
+              "type": "none"
+            },
+            "stroke": "#38c5c1",
+            "strokeWidth": 2,
+            "group": "cube",
+            "nodes": [
+              {
+                "x": 0,
+                "y": 30
+              },
+              {
+                "x": 50,
+                "y": 56
+              },
+              {
+                "x": 100,
+                "y": 30
+              },
+              {
+                "x": 50,
+                "y": 56
+              },
+              {
+                "x": 50,
+                "y": 100
+              }
+            ],
+            "closed": false
+          },
+          {
+            "id": "a7100017-0000-4000-8000-00000000005a",
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "w": 100,
+            "h": 80,
+            "text": "Точка, ребро и грань\nПроверьте в пространстве",
+            "src": "",
+            "slot": "m/detail",
+            "paragraphs": [
+              {
+                "list": "bullet",
+                "indent": 12,
+                "runs": [
+                  {
+                    "text": "Точка",
+                    "color": "#38c5c1",
+                    "weight": "700"
+                  },
+                  {
+                    "text": ", ребро и грань"
+                  }
+                ]
+              },
+              {
+                "list": "bullet",
+                "indent": 12,
+                "runs": [
+                  {
+                    "text": "Проверьте в пространстве"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "a7100017-0000-4000-8000-000000000003",
+        "kind": "normal",
+        "color": "#10192d",
+        "background": null,
+        "notes": "Попросите рассказать, что меняется при вращении модели.",
+        "items": [
+          {
+            "id": "a7100017-0000-4000-8000-00000000001e",
+            "type": "text",
+            "x": 897,
+            "y": 355,
+            "w": 304,
+            "h": 38,
+            "text": "VIEWPORT / 3D",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "overrides": {
+              "font": "mono",
+              "leading": 1.18,
+              "minSize": 16,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "fit": true,
+              "size": 26,
+              "color": "#38c5c1",
+              "align": "left"
+            }
+          },
+          {
+            "id": "a7100017-0000-4000-8000-00000000001f",
+            "type": "text",
+            "x": 1001,
+            "y": 536,
+            "w": 164,
+            "h": 38,
+            "text": "X / Y / Z",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "locked": true,
+            "overrides": {
+              "font": "mono",
+              "leading": 1.18,
+              "minSize": 16,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "fit": true,
+              "size": 23,
+              "color": "#b2cde1",
+              "align": "left"
+            }
+          },
+          {
+            "id": "a7100017-0000-4000-8000-000000000020",
+            "type": "shape",
+            "x": 955,
+            "y": 403,
+            "w": 162,
+            "h": 118,
+            "text": "",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "layerName": "Куб · контур",
+            "shape": "path",
+            "fill": {
+              "type": "none"
+            },
+            "stroke": "#38c5c1",
+            "strokeWidth": 2,
+            "group": "cube",
+            "nodes": [
+              {
+                "x": 0,
+                "y": 30
+              },
+              {
+                "x": 50,
+                "y": 0
+              },
+              {
+                "x": 100,
+                "y": 30
+              },
+              {
+                "x": 100,
+                "y": 77
+              },
+              {
+                "x": 50,
+                "y": 100
+              },
+              {
+                "x": 0,
+                "y": 77
+              }
+            ],
+            "closed": true
+          },
+          {
+            "id": "a7100017-0000-4000-8000-000000000021",
+            "type": "shape",
+            "x": 955,
+            "y": 403,
+            "w": 162,
+            "h": 118,
+            "text": "",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "layerName": "Куб · рёбра",
+            "shape": "path",
+            "fill": {
+              "type": "none"
+            },
+            "stroke": "#38c5c1",
+            "strokeWidth": 2,
+            "group": "cube",
+            "nodes": [
+              {
+                "x": 0,
+                "y": 30
+              },
+              {
+                "x": 50,
+                "y": 56
+              },
+              {
+                "x": 100,
+                "y": 30
+              },
+              {
+                "x": 50,
+                "y": 56
+              },
+              {
+                "x": 50,
+                "y": 100
+              }
+            ],
+            "closed": false
+          },
+          {
+            "id": "a7100400-0000-4000-8000-000000000001",
+            "slot": "m/bottom",
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1,
+            "text": "",
+            "src": ""
+          }
+        ]
+      },
+      {
+        "id": "a7100017-0000-4000-8000-000000000004",
+        "kind": "end",
+        "color": "#10192d",
+        "background": null,
+        "notes": "Попросите рассказать, что меняется при вращении модели.",
+        "items": [
+          {
+            "id": "a7100017-0000-4000-8000-000000000028",
+            "type": "text",
+            "x": 897,
+            "y": 355,
+            "w": 304,
+            "h": 38,
+            "text": "VIEWPORT / 3D",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "overrides": {
+              "font": "mono",
+              "leading": 1.18,
+              "minSize": 16,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "fit": true,
+              "size": 26,
+              "color": "#38c5c1",
+              "align": "left"
+            }
+          },
+          {
+            "id": "a7100017-0000-4000-8000-000000000029",
+            "type": "text",
+            "x": 1001,
+            "y": 536,
+            "w": 164,
+            "h": 38,
+            "text": "X / Y / Z",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "locked": true,
+            "overrides": {
+              "font": "mono",
+              "leading": 1.18,
+              "minSize": 16,
+              "padding": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "fit": true,
+              "size": 23,
+              "color": "#b2cde1",
+              "align": "left"
+            }
+          },
+          {
+            "id": "a7100017-0000-4000-8000-00000000002a",
+            "type": "shape",
+            "x": 955,
+            "y": 403,
+            "w": 162,
+            "h": 118,
+            "text": "",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "layerName": "Куб · контур",
+            "shape": "path",
+            "fill": {
+              "type": "none"
+            },
+            "stroke": "#38c5c1",
+            "strokeWidth": 2,
+            "group": "cube",
+            "nodes": [
+              {
+                "x": 0,
+                "y": 30
+              },
+              {
+                "x": 50,
+                "y": 0
+              },
+              {
+                "x": 100,
+                "y": 30
+              },
+              {
+                "x": 100,
+                "y": 77
+              },
+              {
+                "x": 50,
+                "y": 100
+              },
+              {
+                "x": 0,
+                "y": 77
+              }
+            ],
+            "closed": true
+          },
+          {
+            "id": "a7100017-0000-4000-8000-00000000002b",
+            "type": "shape",
+            "x": 955,
+            "y": 403,
+            "w": 162,
+            "h": 118,
+            "text": "",
+            "src": "",
+            "fixed": true,
+            "role": "decoration",
+            "layerName": "Куб · рёбра",
+            "shape": "path",
+            "fill": {
+              "type": "none"
+            },
+            "stroke": "#38c5c1",
+            "strokeWidth": 2,
+            "group": "cube",
+            "nodes": [
+              {
+                "x": 0,
+                "y": 30
+              },
+              {
+                "x": 50,
+                "y": 56
+              },
+              {
+                "x": 100,
+                "y": 30
+              },
+              {
+                "x": 50,
+                "y": 56
+              },
+              {
+                "x": 50,
+                "y": 100
+              }
+            ],
+            "closed": false
+          },
+          {
+            "id": "a7100017-0000-4000-8000-00000000005b",
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "w": 100,
+            "h": 80,
+            "text": "ФИНАЛ / ПРАКТИКА",
+            "src": "",
+            "slot": "m/bottom"
+          }
+        ]
+      }
+    ]
+  }
+}

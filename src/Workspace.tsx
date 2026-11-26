@@ -141,6 +141,7 @@ export function PropertySection({
   return (
     <details
       className="property-section"
+      data-section={id}
       open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
     >

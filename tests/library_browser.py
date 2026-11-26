@@ -94,7 +94,7 @@ def import_lesson(page, name):
 
 def db_seed(page, decks, rows, extra=0):
     page.evaluate("""({decks, rows, extra}) => new Promise((resolve, reject) => {
-      const db = indexedDB.open('atlas-lessons-v1', 2);
+      const db = indexedDB.open('atlas-lessons-v1');
       db.onerror = () => reject(db.error);
       db.onsuccess = () => {
         const conn = db.result, tx = conn.transaction(['lessons', 'templates'], 'readwrite');

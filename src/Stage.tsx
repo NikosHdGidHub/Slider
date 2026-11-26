@@ -1,7 +1,9 @@
 import { defaultMaster, slots, pose, target } from './grid'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { Item, Slide, Deck } from './model'
+import { sourceText, type Item, type Slide, type Deck } from './model'
+import { isTextType } from './textTypes'
+import type { TextSelectionControls } from './VisualText'
 import './viewer.css'
 import { PathHandles } from './PathHandles'
 import { TextBlock, VectorShape, useFonts } from './Artwork'
@@ -15,6 +17,11 @@ interface StageProps {
   diagnostics?: boolean
   design?: boolean
   onSlot?: (id: string) => void
+  onSlotEdit?: (id: string) => void
+  editItem?: string
+  registerText?: (controls: TextSelectionControls | null) => void
+  undo?: (redo: boolean) => void
+  showSource?: boolean
   selected?: string
   onSelect?: (id: string) => void
   onMove?: (id: string, x: number, y: number) => void
@@ -75,6 +82,11 @@ export function Stage({
   diagnostics,
   design,
   onSlot,
+  onSlotEdit,
+  editItem,
+  registerText,
+  undo,
+  showSource,
   onNodes,
   onText,
   selected,
@@ -235,16 +247,10 @@ export function Stage({
         {fontError && <span className="overflow-badge">{fontError}</span>}
         {locations.map((v) => {
           const c = v.cell
-          const repeated =
-            c.type === 'header' || c.type === 'footer'
-              ? (slide[c.type] ?? deck?.[c.type])
-              : undefined
-          const value =
-            ['area', 'image', 'free', 'empty'].includes(c.type) ||
-            slide.items.some((o) => target(o) === v.id)
-              ? ''
-              : (repeated ?? c.value)
-          const font = c.style
+          const show =
+            isTextType(c.type) &&
+            (showSource || !slide.items.some((o) => target(o) === v.id))
+          const value = show ? sourceText(c) : ''
           return (
             <div
               key={v.id}
@@ -253,6 +259,11 @@ export function Stage({
                 if (!onSlot || ['area', 'empty'].includes(c.type)) return
                 e.stopPropagation()
                 onSlot(v.id)
+              }}
+              onDoubleClick={(event) => {
+                if (!show || !onSlotEdit) return
+                event.stopPropagation()
+                onSlotEdit(v.id)
               }}
               style={{
                 position: 'absolute',
@@ -277,7 +288,7 @@ export function Stage({
                     : 'none',
               }}
             >
-              {value && (
+              {show && (
                 <div
                   style={{
                     position: 'absolute',
@@ -291,7 +302,8 @@ export function Stage({
                 >
                   <TextBlock
                     deck={deck}
-                    editing={!!onSelect}
+                    editing={!!onSelect || !!diagnostics}
+                    cell={c}
                     item={{
                       id: v.id,
                       type: 'text',
@@ -301,10 +313,6 @@ export function Stage({
                       h: v.box.h / v.scale,
                       text: value,
                       src: '',
-                      size: 32,
-                      color: '#183e45',
-                      align: 'left',
-                      overrides: { ...font, fit: true },
                     }}
                   />
                 </div>
@@ -313,7 +321,15 @@ export function Stage({
           )
         })}
         {slide.items.map((original) => {
-          if (original.hidden) return null
+          if (
+            original.hidden ||
+            (showSource &&
+              !original.fixed &&
+              isTextType(
+                locations.find((v) => v.id === target(original))?.cell.type
+              ))
+          )
+            return null
           const p = pose(original, locations)
           if (!p) return null
           const factor = original.contentScale ?? 1
@@ -407,6 +423,11 @@ export function Stage({
                               : undefined
                           }
                           item={item}
+                          cell={hostSlot?.cell}
+                          autoEdit={editItem === item.id}
+                          registerText={registerText}
+                          undo={undo}
+                          onEdit={() => onEditText?.(item.id)}
                           deck={deck}
                           editing={!!onSelect || !!diagnostics}
                         />

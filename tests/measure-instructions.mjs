@@ -12,8 +12,19 @@ const scope = 'Встроенные, локальные и облачные ша
 const baseline = process.argv[2]
   ? await import(pathToFileURL(resolve(process.argv[2], 'src/instructions.ts')))
   : undefined
-const oldPresentation = baseline?.instructions(templates, scope)
-const oldTemplate = baseline?.templateInstructions(templates, scope)
+const priorFixtures = baseline?.presentationInstructionsForTemplate
+  ? (
+      await import(
+        pathToFileURL(
+          resolve(process.argv[2], 'tests/instruction-fixtures.mjs')
+        )
+      )
+    ).validatedFixtures()
+  : undefined
+const oldPresentation = baseline?.instructions?.(templates, scope)
+const oldTemplate = baseline?.instructions
+  ? baseline.templateInstructions(templates, scope)
+  : undefined
 const reports = []
 const byteLength = (text) => Buffer.byteLength(text, 'utf8')
 
@@ -22,7 +33,8 @@ function report(label, text, old) {
   const bytes = byteLength(text)
   const oldBytes = old ? byteLength(old) : undefined
   const json = Object.fromEntries(
-    blocks
+    text
+      .split('\n')
       .filter((block) => block.startsWith('{'))
       .map((block) => {
         const value = JSON.parse(block)
@@ -33,7 +45,9 @@ function report(label, text, old) {
               ? 'seed'
               : value.deck
                 ? 'example'
-                : Object.keys(value)[0],
+                : value.fonts && value.cellTypes
+                  ? 'reference'
+                  : Object.keys(value)[0],
           value,
         ]
       })
@@ -51,6 +65,14 @@ function report(label, text, old) {
       ? Math.round(((oldBytes - bytes) / oldBytes) * 1000) / 10
       : undefined,
     schema: byteLength(JSON.stringify(json.schema)),
+    catalog: json.reference
+      ? byteLength(JSON.stringify(json.reference.fonts))
+      : 0,
+    document: seed
+      ? byteLength(JSON.stringify(seed))
+      : json.example
+        ? byteLength(JSON.stringify(json.example))
+        : 0,
     seed: seed ? byteLength(JSON.stringify(json.seed)) - fonts : 0,
     geometry: byteLength(
       blocks.find((block) => block.startsWith('[{"kind"')) ?? ''
@@ -73,8 +95,14 @@ for (const kind of [
   report(
     kind,
     await presentationInstructionsForTemplate(inputs[kind]),
-    oldPresentation
+    priorFixtures
+      ? await baseline.presentationInstructionsForTemplate(priorFixtures[kind])
+      : oldPresentation
   )
 for (const kind of ['presentation', 'layout'])
-  report('new ' + kind, templateInstructions(kind), oldTemplate)
+  report(
+    'new ' + kind,
+    templateInstructions(kind),
+    priorFixtures ? baseline.templateInstructions(kind) : oldTemplate
+  )
 console.table(reports)

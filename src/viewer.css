@@ -333,21 +333,6 @@ body.atlas-projector {
     flex-basis: 54px;
   }
 }
-@font-face {
-  font-family: 'Atlas Sans';
-  src: url('./assets/fonts/Sans.woff') format('woff');
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Atlas Serif';
-  src: url('./assets/fonts/Serif.woff') format('woff');
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Atlas Mono';
-  src: url('./assets/fonts/SansMono.woff') format('woff');
-  font-display: swap;
-}
 .atlas-shape {
   position: absolute;
   inset: 0;

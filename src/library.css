@@ -574,3 +574,11 @@
     overflow-y: auto;
   }
 }
+
+.lib-migration-failures {
+  margin-block: 12px;
+  color: var(--lib-ink);
+}
+.lib-migration-failures summary {
+  cursor: pointer;
+}

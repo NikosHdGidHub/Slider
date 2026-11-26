@@ -44,7 +44,11 @@ export function selectionFixtures() {
     'Меловая рамка',
     'Верхний колонтитул и экзаменационная рамка'
   )
-  frame.deck.header = 'Школа · Кафедра естествознания'
+  frame.deck.theme.systemStyles.header = {
+    size: 23,
+    weight: '700',
+    color: '#31614f',
+  }
   for (const role of ['title', 'normal', 'end']) {
     frame.deck.master.schemes[role] = {
       rows: [1, 8],
@@ -54,7 +58,7 @@ export function selectionFixtures() {
         {
           ...cell(0, 0, 'header', 'header'),
           padding: [0, 14, 0, 14],
-          style: { size: 23, bold: true, color: '#31614f' },
+          value: 'Школа · Кафедра естествознания',
         },
         cell(1, 0, 'area', 'body'),
       ],
@@ -77,9 +81,7 @@ export function selectionFixtures() {
     slide.items.push(
       fixed(
         text('АТЛАС', 1090, 47, 105, 31, {
-          size: 22,
-          color: '#28614a',
-          align: 'right',
+          overrides: { size: 22, color: '#28614a', align: 'right' },
         })
       )
     )
@@ -111,7 +113,15 @@ export function selectionFixtures() {
     'Лаборатория 2 × 3',
     'Объединённые ячейки и слот для изображения'
   )
-  grid.deck.header = 'Наблюдения и доказательства'
+  grid.deck.theme.systemStyles.header = {
+    size: 20,
+    weight: '700',
+    color: '#2b6350',
+  }
+  grid.deck.theme.systemStyles.footer = { size: 19, color: '#45665a' }
+  grid.deck.theme.systemStyles.title = { size: 46, weight: '700' }
+  grid.deck.theme.systemStyles.description = { size: 38 }
+  grid.deck.theme.systemStyles.caption = { size: 28 }
   grid.deck.master.schemes.normal = {
     rows: [1, 8, 1],
     cols: [1],
@@ -119,13 +129,12 @@ export function selectionFixtures() {
     cells: [
       {
         ...cell(0, 0, 'header', 'header'),
-        style: { size: 20, bold: true, color: '#2b6350' },
+        value: 'Наблюдения и доказательства',
       },
       cell(1, 0, 'area', 'body'),
       {
         ...cell(2, 0, 'footer', 'footer'),
         value: 'Лабораторная тетрадь',
-        style: { size: 19, color: '#45665a' },
       },
     ],
   }
@@ -138,13 +147,11 @@ export function selectionFixtures() {
         ...cell(0, 0, 'title', 'question'),
         cols: 2,
         padding: [9, 20, 8, 20],
-        style: { size: 46, bold: true },
       },
       {
         ...cell(1, 0, 'description', 'reason'),
         padding: [10, 20, 12, 20],
         fill: '#e7f0e9',
-        style: { size: 38 },
       },
       {
         ...cell(1, 1, 'image', 'photo'),
@@ -155,7 +162,6 @@ export function selectionFixtures() {
         ...cell(2, 0, 'caption', 'answer'),
         cols: 2,
         padding: [8, 20, 8, 20],
-        style: { size: 28 },
       },
     ],
   }
@@ -173,17 +179,12 @@ export function selectionFixtures() {
   )
   fonts.deck.resources.fonts = [font('Sans')]
   fonts.deck.theme.palette = ['#113c36', '#e2eee7', '#cf7a43']
-  fonts.deck.theme.styles[0].values.font = 'teacherFont'
-  fonts.deck.theme.styles[2].values.font = 'teacherFont'
-  fonts.deck.master.schemes.title.cells[0].style = {
-    font: 'teacherFont',
-    size: 38,
-  }
+  fonts.deck.theme.systemStyles.title.font = 'teacherFont'
+  fonts.deck.theme.systemStyles.text.font = 'teacherFont'
   fonts.deck.slides[0].items.push(
     fixed({
       ...text('УЧЕБНАЯ СЕРИЯ', 80, 610, 420, 45, {
-        size: 28,
-        overrides: { font: 'teacherFont' },
+        overrides: { font: 'teacherFont', size: 28 },
       }),
     })
   )
@@ -237,8 +238,12 @@ export function selectionFixtures() {
     'LOCAL_ONLY_CANARY, изменения ещё на устройстве'
   )
   local.deck.resources.fonts = [font('Serif')]
-  local.deck.theme.styles[0].values.font = 'teacherFont'
-  local.deck.theme.styles[0].label = 'UNRELATED_STYLE_CANARY'
+  local.deck.theme.systemStyles.title.font = 'teacherFont'
+  local.deck.theme.styles.push({
+    id: 'localTitle',
+    label: 'UNRELATED_STYLE_CANARY',
+    values: { font: 'teacherFont' },
+  })
   local.deck.slides[0].color = '#ecf6ee'
 
   return {

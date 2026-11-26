@@ -30,6 +30,7 @@ import {
   blankGrid,
   rectangles,
   validateGrid,
+  target,
   kinds,
   type Cell,
   type Grid,
@@ -37,7 +38,9 @@ import {
   type Kind,
   type CellType,
 } from './grid'
-import { builtinFonts } from './schema'
+import { StylesPanel } from './Properties'
+import { sourceText } from './model'
+import { isTextType, textTypes } from './textTypes'
 import type { Template } from './catalog'
 
 export function editTrack(
@@ -164,6 +167,43 @@ export function GridDesigner({
       ...g,
       cells: g.cells.map((o) => (o.id === c.id ? { ...o, ...v } : o)),
     })
+  }
+  function changeType(type: CellType) {
+    if (type === c.type) return
+    const { style, textStyle, bindingType, value, ...geometry } = c
+    change({
+      ...g,
+      cells: g.cells.map((o) =>
+        o.id === c.id
+          ? {
+              ...geometry,
+              type,
+              ...(isTextType(type) ? { value: textTypes[type] } : {}),
+            }
+          : o
+      ),
+    })
+  }
+  function updateSources(value: string, every = false) {
+    if (!isTextType(c.type)) return
+    const d = structuredClone(deck)
+    for (const page of d.slides) {
+      if (!every && page.id !== s.id) continue
+      const ids = new Set<string>()
+      const update = (grid: Grid | undefined, prefix: string) => {
+        for (const field of grid?.cells ?? []) {
+          if (every ? field.type !== c.type : field.id !== c.id) continue
+          field.value = value
+          ids.add(prefix + field.id)
+        }
+      }
+      if (!structural) update(d.master.schemes[page.kind ?? 'normal'], 'm/')
+      if (structural || every) update(page.structure, 's/')
+      page.items = page.items.filter(
+        (item) => item.fixed || !ids.has(target(item))
+      )
+    }
+    set({ ...template, deck: d })
   }
   function pick(v: Cell) {
     if (!merge) {
@@ -476,9 +516,7 @@ export function GridDesigner({
                   Тип ячейки
                   <select
                     value={c.type}
-                    onChange={(e) =>
-                      patch({ type: e.target.value as CellType })
-                    }
+                    onChange={(e) => changeType(e.target.value as CellType)}
                   >
                     {Object.entries(cellTypes)
                       .filter(
@@ -493,103 +531,69 @@ export function GridDesigner({
                       ))}
                   </select>
                 </label>
-                {!['area', 'empty', 'image', 'free'].includes(c.type) && (
+                {isTextType(c.type) && (
                   <>
                     <label>
                       Исходный текст
                       <textarea
-                        value={c.value ?? ''}
-                        onChange={(e) => patch({ value: e.target.value })}
+                        maxLength={200000}
+                        value={sourceText(c)}
+                        onChange={(e) => updateSources(e.target.value)}
                       />
                     </label>
-                    <label>
-                      Размер текста
-                      <input
-                        type="number"
-                        value={c.style?.size ?? 32}
-                        min={1}
-                        max={1024}
-                        onChange={(e) =>
-                          patch({
-                            style: {
-                              ...c.style,
-                              size: Math.min(
-                                1024,
-                                Math.max(1, +e.target.value)
-                              ),
-                            },
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Гарнитура
-                      <select
-                        value={c.style?.font ?? 'sans'}
-                        onChange={(e) =>
-                          patch({ style: { ...c.style, font: e.target.value } })
-                        }
-                      >
-                        {[
-                          ...Object.entries(builtinFonts),
-                          ...deck.resources.fonts.map((f) => [f.id, f.label]),
-                        ].map(([k, n]) => (
-                          <option key={k} value={k}>
-                            {n}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Выравнивание
-                      <select
-                        value={c.style?.align ?? 'left'}
-                        onChange={(e) =>
-                          patch({
-                            style: {
-                              ...c.style,
-                              align: e.target.value as
-                                | 'left'
-                                | 'center'
-                                | 'right',
-                            },
-                          })
-                        }
-                      >
-                        <option value="left">По левому краю</option>
-                        <option value="center">По центру</option>
-                        <option value="right">По правому краю</option>
-                      </select>
-                    </label>
-                    <label>
-                      Начертание
-                      <select
-                        value={c.style?.bold ? 'bold' : 'regular'}
-                        onChange={(e) =>
-                          patch({
-                            style: {
-                              ...c.style,
-                              bold: e.target.value === 'bold',
-                            },
-                          })
-                        }
-                      >
-                        <option value="regular">Обычное</option>
-                        <option value="bold">Полужирное</option>
-                      </select>
-                    </label>
-                    <label>
-                      Цвет текста
-                      <input
-                        type="color"
-                        value={c.style?.color ?? '#183e45'}
-                        onChange={(e) =>
-                          patch({
-                            style: { ...c.style, color: e.target.value },
-                          })
-                        }
-                      />
-                    </label>
+                    <button
+                      title={
+                        structural
+                          ? 'Все ячейки текущей компоновки'
+                          : 'Все схемы и вложенные сетки текущего шаблона'
+                      }
+                      onClick={() => updateSources(sourceText(c), true)}
+                    >
+                      Применить ко всем ячейкам этого типа
+                    </button>
+                    <button
+                      onClick={() =>
+                        updateSources(
+                          textTypes[c.type as keyof typeof textTypes]
+                        )
+                      }
+                    >
+                      Сбросить исходный текст
+                    </button>
+                    {c.bindingType && (
+                      <small>
+                        Прежний тип привязки · {textTypes[c.bindingType]}
+                      </small>
+                    )}
+                    {c.type === 'text' && (
+                      <label>
+                        Пользовательский стиль
+                        <select
+                          aria-label="Пользовательский стиль"
+                          value={c.textStyle ?? ''}
+                          onChange={(e) => {
+                            if (e.target.value)
+                              patch({ textStyle: e.target.value })
+                            else {
+                              const { textStyle, ...rest } = c
+                              change({
+                                ...g,
+                                cells: g.cells.map((o) =>
+                                  o.id === c.id ? rest : o
+                                ),
+                              })
+                            }
+                          }}
+                        >
+                          <option value="">Системный стиль «Текст»</option>
+                          {deck.theme.styles.map((style) => (
+                            <option value={style.id} key={style.id}>
+                              {style.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                   </>
                 )}
                 <label>
@@ -629,6 +633,11 @@ export function GridDesigner({
                 />
               </div>
             </PropertySection>
+            <StylesPanel
+              deck={deck}
+              notice={notice}
+              change={(update) => set({ ...template, deck: update(deck) })}
+            />
             {!structural && (
               <PropertySection id="grid-background" title="Фон">
                 <Background
@@ -671,6 +680,8 @@ export function GridDesigner({
             <Stage
               deck={structural ? { ...deck, master: defaultMaster() } : deck}
               slide={s}
+              showSource
+              diagnostics
             />
             {rectangles(g).map(({ cell: o, outer: b }) => (
               <button

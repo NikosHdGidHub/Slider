@@ -5,14 +5,28 @@ import {
   checkBindings,
   type Master,
   type Grid,
+  type Insets,
+  type Cell,
+  slots,
 } from './grid.ts'
 import {
   builtinFonts,
   check,
   definitions,
+  legacyDefinitions,
   FORMAT_VERSION,
   type shapes,
 } from './schema.ts'
+import {
+  defaultSystemStyles,
+  isTextType,
+  textTypes as textTypeLabels,
+  textTypeIds,
+  type SystemStyles,
+  type TextType,
+} from './textTypes.ts'
+import { fontCatalog } from './fontCatalog.ts'
+import { migrateTypography } from './migrateTypography.ts'
 export const CANVAS_WIDTH = 1280,
   CANVAS_HEIGHT = 720
 export const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
@@ -43,6 +57,7 @@ export interface Characters {
   font?: string
   size?: number
   color?: string
+  weight?: string
   bold?: boolean
   italic?: boolean
   underline?: boolean
@@ -53,7 +68,18 @@ export interface Characters {
 export interface TextStyle extends Characters {
   align?: 'left' | 'center' | 'right'
   leading?: number
-  padding?: number
+  padding?: Insets | number
+  verticalAlign?: 'top' | 'middle' | 'bottom'
+  paragraphSpacing?: number
+  textShadow?: {
+    color: string
+    opacity: number
+    x: number
+    y: number
+    blur: number
+  }
+  textStroke?: { color: string; opacity: number; width: number }
+  textGlow?: { color: string; intensity: number; radius: number }
   fit?: boolean
   minSize?: number
 }
@@ -80,9 +106,10 @@ export interface Item extends Box {
   type: 'text' | 'image' | 'shape'
   text: string
   src: string
-  size: number
-  color: string
-  align: 'left' | 'center' | 'right'
+  size?: number
+  color?: string
+  align?: 'left' | 'center' | 'right'
+  textType?: TextType
   role?: 'content' | 'decoration'
   rotation?: number
   flipX?: boolean
@@ -134,7 +161,7 @@ export interface NamedStyle {
   values: TextStyle
 }
 export interface Deck {
-  version: 3
+  version: 4
   master: Master
   migrated?: boolean
   header?: string
@@ -142,7 +169,7 @@ export interface Deck {
   id: string
   title: string
   canvas: { width: 1280; height: 720 }
-  theme: { styles: NamedStyle[]; palette: string[] }
+  theme: { systemStyles: SystemStyles; styles: NamedStyle[]; palette: string[] }
   resources: { fonts: FontAsset[] }
   slides: Slide[]
 }
@@ -156,23 +183,6 @@ export function newSlide(): Slide {
   }
 }
 export function newDeck(title: string): Deck {
-  const style = (
-    id: string,
-    label: string,
-    size: number,
-    bold = false
-  ): NamedStyle => ({
-    id,
-    label,
-    values: {
-      font: 'sans',
-      size,
-      bold,
-      color: '#163e49',
-      fit: true,
-      minSize: 18,
-    },
-  })
   return {
     version: FORMAT_VERSION,
     master: defaultMaster(),
@@ -181,14 +191,8 @@ export function newDeck(title: string): Deck {
     canvas: { width: 1280, height: 720 },
     theme: {
       palette: ['#163e49', '#e5f4ef', '#f8bd56'],
-      styles: [
-        style('title', 'Заголовок', 64, true),
-        style('subtitle', 'Подзаголовок', 44),
-        style('body', 'Основной текст', 32),
-        style('caption', 'Подпись', 24),
-        style('accent', 'Акцент', 38, true),
-        style('small', 'Мелкий текст', 18),
-      ],
+      systemStyles: defaultSystemStyles(),
+      styles: [],
     },
     resources: { fonts: [] },
     slides: [newSlide()],
@@ -204,9 +208,6 @@ export function newText(): Item {
     h: 140,
     text: 'Новый текст',
     src: '',
-    size: 48,
-    color: '#18293d',
-    align: 'left',
   }
 }
 export function newShape(shape: Shape = 'rounded'): Item {
@@ -233,20 +234,60 @@ export function newShape(shape: Shape = 'rounded'): Item {
       : {}),
   }
 }
-export function typography(item: Item, deck?: Deck) {
+export function itemTextType(item: Item, cell?: Cell): TextType {
+  return isTextType(cell?.type) ? cell.type : (item.textType ?? 'text')
+}
+
+export function typography(item: Item, deck?: Deck, cell?: Cell) {
+  const type = itemTextType(item, cell)
+  const defaults = defaultSystemStyles()
+  const system = deck?.theme.systemStyles[type] ?? defaults[type]
+  const id = cell?.textStyle ?? item.style
   return {
     font: 'sans',
+    color: '#183e45',
+    align: 'left' as NonNullable<TextStyle['align']>,
+    size: 32,
     leading: 1.18,
     fit: true,
     minSize: 16,
     padding: 0,
-    size: item.size,
-    color: item.color,
-    align: item.align,
-    ...deck?.theme.styles.find((s) => s.id === item.style)?.values,
-    ...item.overrides,
+    ...system,
+    ...(type === 'text'
+      ? {
+          ...deck?.theme.styles.find((s) => s.id === id)?.values,
+          ...item.overrides,
+        }
+      : {}),
   }
 }
+
+export function sourceText(cell: Cell): string {
+  return cell.value ?? (isTextType(cell.type) ? textTypeLabels[cell.type] : '')
+}
+export function replaceStyle(deck: Deck, id: string, next?: string): Deck {
+  const copy = structuredClone(deck)
+  copy.theme.styles = copy.theme.styles.filter((s) => s.id !== id)
+  const slides = mediaSlides(copy)
+  const grids = [
+    ...Object.values(copy.master.schemes),
+    ...slides.flatMap((s) => (s.structure ? [s.structure] : [])),
+  ]
+  for (const grid of grids)
+    for (const cell of grid.cells) {
+      if (cell.textStyle !== id) continue
+      if (next) cell.textStyle = next
+      else delete cell.textStyle
+    }
+  for (const slide of slides)
+    for (const item of slide.items) {
+      if (item.style !== id) continue
+      if (next) item.style = next
+      else delete item.style
+    }
+  return copy
+}
+
 export function paragraphs(item: Item): Paragraph[] {
   return (
     item.paragraphs ??
@@ -344,13 +385,16 @@ export function readJSON(raw: string): unknown {
     throw new Error('Не удалось прочитать JSON. Проверьте синтаксис.')
   }
 }
-export function validateDeck(input: unknown): Deck {
+export function validateDeck(
+  input: unknown,
+  recoveryFonts: FontAsset[] = []
+): Deck {
   const raw = typeof input === 'string' ? readJSON(input) : input
   requireValue(
     raw &&
       typeof raw === 'object' &&
       'version' in raw &&
-      [1, 2, 3].includes(Number(raw.version)),
+      [1, 2, 3, FORMAT_VERSION].includes(Number(raw.version)),
     'Неизвестная версия презентации.'
   )
   const legacy = raw.version === 1
@@ -390,20 +434,30 @@ export function validateDeck(input: unknown): Deck {
     raw.version === 2
       ? { ...raw, version: 3, master: defaultMaster(), migrated: true }
       : raw
+  const current = raw.version === FORMAT_VERSION
+  const rules = current ? definitions : legacyDefinitions
   check(
-    definitions[legacy ? 'Legacy' : 'Presentation'],
+    rules[legacy ? 'Legacy' : 'Presentation'],
     normalized,
-    'Презентация'
+    'Презентация',
+    rules
   )
   const source = structuredClone(normalized) as Deck
-  const d: Deck = legacy
-    ? {
-        ...newDeck(source.title),
-        migrated: true,
-        id: source.id,
-        slides: source.slides,
-      }
-    : source
+  const d = current
+    ? source
+    : migrateTypography(
+        legacy
+          ? {
+              ...newDeck(source.title),
+              migrated: true,
+              id: source.id,
+              slides: source.slides,
+            }
+          : source,
+        legacy,
+        recoveryFonts
+      )
+  if (!current) check(definitions.Presentation, d, 'Презентация')
   for (const g of Object.values(d.master.schemes)) validateGrid(g, false)
   requireValue(d.title.trim(), 'Введите название.')
   const ids = new Set<string>()
@@ -418,7 +472,52 @@ export function validateDeck(input: unknown): Deck {
     unique(f.id, fonts, 'Шрифт')
     verifyFont(f)
   }
-  for (const s of d.theme.styles) unique(s.id, styles, 'Стиль')
+  for (const s of d.theme.styles) {
+    requireValue(
+      !isTextType(s.id) && s.label.trim(),
+      'Некорректное имя пользовательского стиля.'
+    )
+    unique(s.id, styles, 'Стиль')
+  }
+  const grids = [
+    ...Object.values(d.master.schemes),
+    ...d.slides.flatMap((s) => (s.structure ? [s.structure] : [])),
+  ]
+  for (const g of grids)
+    for (const c of g.cells) {
+      requireValue(
+        isTextType(c.type) === (typeof c.value === 'string'),
+        'Исходный текст обязателен для текстовой ячейки ' + c.id + '.'
+      )
+      requireValue(
+        !c.textStyle || (c.type === 'text' && styles.has(c.textStyle)),
+        'Не определён стиль ячейки ' + c.id
+      )
+      requireValue(
+        !c.bindingType || c.type === 'text',
+        'Некорректный тип привязки ячейки ' + c.id
+      )
+    }
+  const checkFont = (style: Characters) => {
+    requireValue(
+      !style.font ||
+        Object.hasOwn(builtinFonts, style.font) ||
+        fonts.has(style.font),
+      'Не определён шрифт ' + style.font + '. Добавьте файл шрифта в документ.'
+    )
+    if (!style.font || !Object.hasOwn(fontCatalog, style.font)) return
+    const font = fontCatalog[style.font]
+    requireValue(
+      !style.italic || font.italic,
+      'У гарнитуры ' + font.label + ' нет курсива.'
+    )
+    requireValue(
+      !style.weight || font.weights.includes(Number(style.weight)),
+      'У гарнитуры ' + font.label + ' нет этой насыщенности.'
+    )
+  }
+  for (const type of textTypeIds) checkFont(d.theme.systemStyles[type])
+  for (const s of d.theme.styles) checkFont(s.values)
   for (const [kind, layer] of Object.entries(d.master.art ?? {})) {
     requireValue(
       layer.kind === kind &&
@@ -444,13 +543,20 @@ export function validateDeck(input: unknown): Deck {
         throw new Error(path + ' — ' + (e as Error).message)
       }
     }
+    const locations = new Map(slots(d.master, s).map((v) => [v.id, v.cell]))
     for (const [j, it] of s.items.entries()) {
       const where = path + ', объект ' + (j + 1)
       try {
         unique(it.id.toLowerCase(), ids, where)
         if (it.type === 'image') imageSource(it.src)
-        if (legacy && it.type === 'text')
-          it.overrides = { font: 'legacy', fit: false }
+        const host = it.fixed ? undefined : locations.get(it.slot ?? 'free')
+        if (itemTextType(it, host) !== 'text')
+          requireValue(
+            !it.style && !it.overrides && !it.paragraphs,
+            'Системный тип допускает только простой текст.'
+          )
+        if (it.overrides) checkFont(it.overrides)
+        it.paragraphs?.forEach((p) => p.runs.forEach(checkFont))
         if (it.style)
           requireValue(styles.has(it.style), 'Не определён стиль ' + it.style)
         if (it.paragraphs)

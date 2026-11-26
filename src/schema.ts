@@ -1,3 +1,5 @@
+import { textTypeIds } from './textTypes.ts'
+import { fontCatalog } from './fontCatalog.ts'
 import { cellTypes } from './grid.ts'
 // Named definitions are used both by the importer and the downloadable specification.
 type Rule = {
@@ -56,7 +58,18 @@ const meanings: Record<string, string> = {
   height: 'Высота холста.',
   theme: 'Самодостаточная тема документа.',
   resources: 'Встроенные файлы документа.',
-  styles: 'Определения именованных стилей.',
+  styles: 'Определения пользовательских стилей.',
+  systemStyles:
+    'Обязательные стили title, subtitle, description, text, header, footer, caption.',
+  textStyle: 'ID пользовательского стиля ячейки типа text.',
+  textType:
+    'Системный тип свободного текста или подписи фигуры. В ячейке применяется тип ячейки.',
+  value: 'Исходный текст текстовой ячейки. Пустая строка допустима.',
+  bindingType:
+    'Тип привязки, сохранённый при миграции v3. Не генерировать для новых ячеек.',
+  weight: 'Доступная насыщенность гарнитуры от 100 до 900, строкой.',
+  verticalAlign: 'Вертикальное выравнивание.',
+  paragraphSpacing: 'Интервал после абзаца в px.',
   palette: 'Цвета темы в формате #RRGGBB.',
   fonts: 'Пользовательские гарнитуры.',
   slides: 'Слайды в порядке показа.',
@@ -110,7 +123,7 @@ const meanings: Record<string, string> = {
   highlight: 'Цвет фона символов.',
   tracking: 'Расстояние между буквами в px.',
   leading: 'Высота строки как множитель кегля.',
-  padding: 'Внутренний отступ со всех сторон в px.',
+  padding: 'Отступы в px [верх, право, низ, лево].',
   fit: 'Уменьшение текста при переполнении.',
   minSize: 'Нижняя граница подгонки кегля блока.',
   values: 'Параметры именованного стиля.',
@@ -146,12 +159,9 @@ export const shapes = {
   curve: 'Кривая',
   path: 'Свой контур',
 } as const
-export const builtinFonts = {
-  sans: 'DejaVu Sans',
-  serif: 'DejaVu Serif',
-  mono: 'DejaVu Sans Mono',
-  legacy: 'Arial (системный)',
-} as const
+export const builtinFonts = Object.fromEntries(
+  Object.entries(fontCatalog).map(([id, font]) => [id, font.label])
+)
 const uuid = str(36, '^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$')
 const name = str(80, '^[a-zA-Z][a-zA-Z0-9_-]{0,79}$')
 const color = str(7, '^#[a-fA-F0-9]{6}$')
@@ -227,8 +237,8 @@ const v1base = obj({
 })
 const source: Rule = { anyOf: [{ const: null }, common.src] }
 const slide = { id: uuid, color, background: source, notes: str(200000) }
-export const FORMAT_VERSION = 3
-export const definitions: Record<string, Rule> = {
+export const FORMAT_VERSION = 4
+export const legacyDefinitions: Record<string, Rule> = {
   Template: obj({
     format: { const: 3 },
     kind: values('presentation', 'layout'),
@@ -237,7 +247,7 @@ export const definitions: Record<string, Rule> = {
   }),
   Presentation: obj(
     {
-      version: { const: FORMAT_VERSION },
+      version: { const: 3 },
       master: ref('Master'),
       id: uuid,
       title: str(1024),
@@ -390,19 +400,137 @@ export const definitions: Record<string, Rule> = {
     slides: list(obj({ ...slide, items: list(v1base, 0, 500) }), 1, 1000),
   }),
 }
+const { bold: _bold, ...character } = char
+const modernChar = {
+  ...character,
+  weight: values('100', '200', '300', '400', '500', '600', '700', '800', '900'),
+}
+const opacity = num(0, 1)
+const modernStyle = {
+  ...modernChar,
+  align: text.align,
+  verticalAlign: values('top', 'middle', 'bottom'),
+  leading: text.leading,
+  paragraphSpacing: num(0, 256),
+  padding: list(num(0, 512), 4, 4),
+  fit: bool,
+  minSize: size,
+  textShadow: obj({
+    color,
+    opacity,
+    x: num(-200, 200),
+    y: num(-200, 200),
+    blur: num(0, 100),
+  }),
+  textStroke: obj({ color, opacity, width: num(0, 32) }),
+  textGlow: obj({ color, intensity: opacity, radius: num(0, 100) }),
+}
+const { size: _size, color: _color, align: _align, ...itemBase } = common
+const textProperties = { ...rich, textType: values(...textTypeIds) }
+const {
+  header: _header,
+  footer: _footer,
+  ...slideProperties
+} = legacyDefinitions.Slide.properties!
+const { style: _style, ...cellProperties } = legacyDefinitions.Cell.properties!
+function options(properties: Record<string, Rule>, required: string[]) {
+  return Object.fromEntries(
+    Object.entries(properties).filter(([key]) => !required.includes(key))
+  )
+}
+export const definitions: Record<string, Rule> = {
+  ...legacyDefinitions,
+  Template: obj({
+    format: { const: FORMAT_VERSION },
+    kind: values('presentation', 'layout'),
+    description: str(2000),
+    deck: ref('Presentation'),
+  }),
+  Presentation: obj(
+    {
+      ...Object.fromEntries(
+        legacyDefinitions.Presentation.required!.map((id) => [
+          id,
+          legacyDefinitions.Presentation.properties![id],
+        ])
+      ),
+      version: { const: FORMAT_VERSION },
+      theme: obj({
+        systemStyles: ref('SystemStyles'),
+        styles: list(ref('NamedStyle'), 0, 128),
+        palette: list(color, 1, 32),
+      }),
+    },
+    { migrated: bool }
+  ),
+  SystemStyles: obj(
+    Object.fromEntries(textTypeIds.map((id) => [id, ref('TextStyle')]))
+  ),
+  Cell: obj(
+    Object.fromEntries(
+      legacyDefinitions.Cell.required!.map((id) => [id, cellProperties[id]])
+    ),
+    {
+      ...options(cellProperties, legacyDefinitions.Cell.required!),
+      textStyle: name,
+      bindingType: values(...textTypeIds.filter((id) => id !== 'text')),
+    }
+  ),
+  Slide: obj(
+    { ...slide, items: list(ref('Item'), 0, 500) },
+    options(slideProperties, legacyDefinitions.Slide.required!)
+  ),
+  Text: obj(
+    { ...itemBase, type: { const: 'text' }, src: { const: '' } },
+    { ...transform, ...textProperties }
+  ),
+  Image: obj(
+    { ...itemBase, type: { const: 'image' }, text: { const: '' } },
+    {
+      ...transform,
+      imageFit: values('contain', 'cover'),
+      focusX: num(0, 100),
+      focusY: num(0, 100),
+    }
+  ),
+  Shape: obj(
+    {
+      ...itemBase,
+      type: { const: 'shape' },
+      src: { const: '' },
+      shape: shape.shape,
+    },
+    {
+      ...options(
+        legacyDefinitions.Shape.properties!,
+        legacyDefinitions.Shape.required!
+      ),
+      ...textProperties,
+    }
+  ),
+  TextStyle: obj({}, modernStyle),
+  Run: obj({ text: str(200000) }, modernChar),
+}
+delete definitions.Legacy
+
 export const schema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $ref: '#/$defs/Presentation',
   $defs: definitions,
 }
-export function check(rule: Rule, value: unknown, path: string): void {
+export function check(
+  rule: Rule,
+  value: unknown,
+  path: string,
+  rules = definitions
+): void {
   const fail = (reason: string): never => {
     throw new Error(path + ' — ' + reason)
   }
-  if (rule.$ref) return check(definitions[rule.$ref.slice(8)], value, path)
+  if (rule.$ref) return check(rules[rule.$ref.slice(8)], value, path, rules)
   if (rule.anyOf) {
     if (
-      rule === definitions.Item &&
+      rule === rules.Item &&
       value &&
       typeof value === 'object' &&
       'type' in value
@@ -412,11 +540,11 @@ export function check(rule: Rule, value: unknown, path: string): void {
       ]
       if (!['text', 'shape', 'image'].includes(String(value.type)))
         fail('неизвестный тип объекта')
-      return check(definitions[key], value, path)
+      return check(rules[key], value, path, rules)
     }
     for (const choice of rule.anyOf) {
       try {
-        check(choice, value, path)
+        check(choice, value, path, rules)
         return
       } catch {
         /* try the next documented variant */
@@ -442,7 +570,7 @@ export function check(rule: Rule, value: unknown, path: string): void {
           rule.maxItems
       )
     ;(value as unknown[]).forEach((entry, i) =>
-      check(rule.items!, entry, path + '[' + i + ']')
+      check(rule.items!, entry, path + '[' + i + ']', rules)
     )
   } else if (rule.type === 'object') {
     if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -453,7 +581,7 @@ export function check(rule: Rule, value: unknown, path: string): void {
     for (const [field, entry] of Object.entries(record)) {
       if (!Object.hasOwn(rule.properties!, field))
         fail('неизвестное поле ' + field)
-      check(rule.properties![field], entry, path + '.' + field)
+      check(rule.properties![field], entry, path + '.' + field, rules)
     }
   } else {
     if (typeof value !== rule.type) fail('ожидается ' + rule.type)

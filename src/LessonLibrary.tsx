@@ -4,6 +4,7 @@ import { IconButton } from './IconButton'
 import {
   LibraryCard,
   LibraryHeader,
+  MigrationFailures,
   LibraryItems,
   LibraryState,
   LibraryToolbar,
@@ -11,7 +12,9 @@ import {
   type LibrarySettings,
 } from './Library'
 import type { Deck } from './model'
-import type { Entry } from './storage'
+import { originalDocument, originalIds, type Entry } from './storage'
+import { download } from './instructions'
+import { useEffect, useState } from 'react'
 import type { MenuItem } from './ActionMenu'
 
 const formatDate = new Intl.DateTimeFormat('ru-RU', {
@@ -65,6 +68,19 @@ export function LessonLibrary({
   retry: () => void
   notice: (message: string) => void
 }) {
+  const [originals, setOriginals] = useState(new Set<string>())
+  useEffect(() => {
+    let active = true
+    if (allowed)
+      void originalIds('lesson')
+        .then((ids) => {
+          if (active) setOriginals(ids)
+        })
+        .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [allowed, rows])
   const visible = selectLibraryRows(rows, settings)
   return (
     <section className="lib-page">
@@ -98,6 +114,7 @@ export function LessonLibrary({
           }
         />
       ) : null}
+      {allowed && <MigrationFailures kind="lesson" />}
       {!allowed ? (
         <LibraryState
           title="Библиотека преподавателя"
@@ -162,6 +179,25 @@ export function LessonLibrary({
                   icon: Download,
                   run: () => exportJSON(entry.deck),
                 },
+                ...(originals.has(entry.deck.id)
+                  ? [
+                      {
+                        label: 'Скачать исходный JSON до миграции',
+                        icon: Download,
+                        run: async () => {
+                          const raw = await originalDocument(
+                            'lesson',
+                            entry.deck.id
+                          )
+                          if (raw)
+                            download(
+                              'atlas-original-' + entry.deck.id + '.json',
+                              JSON.stringify(raw, null, 2)
+                            )
+                        },
+                      },
+                    ]
+                  : []),
                 'separator',
                 {
                   label: 'Удалить с устройства',

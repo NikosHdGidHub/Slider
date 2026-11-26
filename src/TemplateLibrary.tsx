@@ -1,5 +1,5 @@
 import { desktopEditingMessage } from './libraryNavigation'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowLeft,
@@ -26,6 +26,7 @@ import { IconButton } from './IconButton'
 import {
   LibraryCard,
   LibraryHeader,
+  MigrationFailures,
   LibraryItems,
   LibraryState,
   LibraryToolbar,
@@ -41,6 +42,7 @@ import {
   type Template,
 } from './catalog'
 import { MAX_DOCUMENT_BYTES, readJSON, type Deck } from './model'
+import { originalDocument, originalIds, saveOriginal } from './storage'
 import {
   deleteTemplate,
   saveLocal,
@@ -93,7 +95,20 @@ export function TemplateLibrary({
   const [preview, setPreview] = useState<{
     template: Template
     importing: boolean
+    source?: unknown
   } | null>(null)
+  const [originals, setOriginals] = useState(new Set<string>())
+  useEffect(() => {
+    let active = true
+    void originalIds('template')
+      .then((ids) => {
+        if (active) setOriginals(ids)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [rows])
   const forKind = rows
     .filter((row) => row.template.kind === kind)
     .map((row) => ({ deck: row.template.deck, row }))
@@ -225,6 +240,19 @@ export function TemplateLibrary({
           JSON.stringify(validateTemplate(template), null, 2)
         ),
     })
+    if (originals.has(deck.id))
+      menu.push({
+        label: 'Скачать исходный JSON до миграции',
+        icon: Download,
+        run: async () => {
+          const raw = await originalDocument('template', deck.id)
+          if (raw)
+            download(
+              'atlas-original-' + deck.id + '.atlas.json',
+              JSON.stringify(raw, null, 2)
+            )
+        },
+      })
     if (!builtin && entry)
       menu.push('separator', {
         label: 'Удалить шаблон',
@@ -394,6 +422,7 @@ export function TemplateLibrary({
           </LibraryItems>
         </>
       )}
+      {editable && <MigrationFailures kind="template" />}
       {preview && (
         <TemplatePreview
           template={preview.template}
@@ -410,10 +439,9 @@ export function TemplateLibrary({
                   run(
                     async () => {
                       setPreviewError('')
-                      await saveLocal({
-                        ...preview.template,
-                        deck: copyDeck(preview.template.deck),
-                      })
+                      const deck = copyDeck(preview.template.deck)
+                      await saveOriginal('template', deck.id, preview.source)
+                      await saveLocal({ ...preview.template, deck })
                       setKind(preview.template.kind)
                       setPreview(null)
                     },
@@ -437,9 +465,11 @@ export function TemplateLibrary({
             void run(async () => {
               if (selected.size > MAX_DOCUMENT_BYTES)
                 throw new Error('Шаблон превышает 64 МиБ.')
+              const source = readJSON(await selected.text())
               setPreview({
-                template: validateTemplate(readJSON(await selected.text())),
+                template: validateTemplate(source),
                 importing: true,
+                source,
               })
             })
           }}
