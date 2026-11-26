@@ -165,13 +165,14 @@ export function CanvasViewport({
   }, [editable])
 
   function start(e: ReactPointerEvent<HTMLDivElement>) {
+    if ((e.target as Element).closest('[data-text-controls]')) return
     const withSpace = spacePressed.current && e.button === 0
     suppressClick.current = withSpace || e.button === 1
     if (!suppressClick.current) {
       if (
         e.button === 0 &&
         !(e.target as Element).closest(
-          'button,input,textarea,[contenteditable]'
+          'button,input,textarea,[contenteditable],[data-text-editing]'
         )
       )
         e.currentTarget.focus({ preventScroll: true })
@@ -237,7 +238,12 @@ export function CanvasViewport({
         onClickCapture={
           editable
             ? (e) => {
-                if (!suppressClick.current || e.detail === 0) return
+                if (
+                  (e.target as Element).closest('[data-text-controls]') ||
+                  !suppressClick.current ||
+                  e.detail === 0
+                )
+                  return
                 suppressClick.current = false
                 e.preventDefault()
                 e.stopPropagation()

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type CSSProperties } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import {
   Fragment,
   Schema,
@@ -16,8 +16,11 @@ import {
   type Characters,
   type Item,
   type Paragraph,
+  type Deck,
+  type TextStyle,
 } from './model'
 import { fontCatalog } from './fontCatalog'
+import { TextEditToolbar } from './TextEditToolbar'
 import './visualText.css'
 
 const schema = new Schema({
@@ -107,11 +110,12 @@ export interface TextEditStart {
 
 export interface TextSelectionControls {
   values?: Characters
-  appearance: (fields: Characters | null) => void
+  appearance: (fields: Characters | null, returnFocus?: boolean) => void
   list: (kind: NonNullable<Paragraph['list']>) => void
   indent: (delta: number) => void
   spacing: (after: number) => void
   paragraphAfter?: number
+  listKind?: Paragraph['list']
 }
 
 export function VisualText({
@@ -120,7 +124,10 @@ export function VisualText({
   flexible,
   onText,
   finish,
-  register,
+  deck,
+  style,
+  systemLabel,
+  changeSystem,
   runStyle,
   undo,
 }: {
@@ -129,18 +136,26 @@ export function VisualText({
   flexible: boolean
   onText: (fields: Partial<Item>) => void
   finish: () => void
-  register?: (controls: TextSelectionControls | null) => void
+  deck?: Deck
+  style: TextStyle
+  systemLabel?: string
+  changeSystem?: (fields: Characters) => void
   runStyle: (values: Characters) => CSSProperties
   undo?: (redo: boolean) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const initial = useRef(start)
   const view = useRef<EditorView>(null)
-  const current = useRef({ item, onText, finish, register, runStyle, undo })
-  current.current = { item, onText, finish, register, runStyle, undo }
+  const toolbar = useRef<HTMLDivElement>(null)
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const [controls, setControls] = useState<TextSelectionControls | null>(null)
+  const current = useRef({ item, onText, finish, runStyle, undo })
+  current.current = { item, onText, finish, runStyle, undo }
 
   useLayoutEffect(() => {
     const element = host.current!
+    const block = element.closest<HTMLElement>('.atlas-slide-text')!
+    setAnchor(block)
     const appearance = schema.marks.appearance
     const markViews = {
       appearance(mark: Mark) {
@@ -179,6 +194,14 @@ export function VisualText({
         return true
       },
       handleKeyDown(_, event) {
+        if (event.key === 'Tab' && !event.shiftKey) {
+          const first = toolbar.current?.querySelector('select')
+          if (first) {
+            event.preventDefault()
+            first.focus()
+            return true
+          }
+        }
         if (
           (event.ctrlKey || event.metaKey) &&
           ['KeyZ', 'KeyY'].includes(event.code) &&
@@ -210,7 +233,10 @@ export function VisualText({
     })
     view.current = editor
 
-    function paragraphsInSelection(update: (node: Node) => object) {
+    function paragraphsInSelection(
+      update: (node: Node) => object,
+      returnFocus = true
+    ) {
       const { doc, selection, tr } = editor.state
       doc.forEach((node, position) => {
         if (
@@ -220,7 +246,7 @@ export function VisualText({
           tr.setNodeMarkup(position, undefined, update(node))
       })
       if (tr.docChanged) editor.dispatch(tr)
-      editor.focus()
+      if (returnFocus) editor.focus()
     }
     function extend(values: Characters | undefined, fields: Characters) {
       const next = { ...values, ...fields }
@@ -233,7 +259,7 @@ export function VisualText({
       return next
     }
     const controls: TextSelectionControls = {
-      appearance(fields) {
+      appearance(fields, returnFocus = true) {
         const {
           doc,
           selection: { from, to, empty },
@@ -267,7 +293,7 @@ export function VisualText({
           })
           if (tr.docChanged) editor.dispatch(tr)
         }
-        editor.focus()
+        if (returnFocus) editor.focus()
       },
       list(kind) {
         const old = editor.state.selection.$from.parent.attrs.list
@@ -283,7 +309,7 @@ export function VisualText({
         }))
       },
       spacing(after) {
-        paragraphsInSelection((node) => ({ ...node.attrs, after }))
+        paragraphsInSelection((node) => ({ ...node.attrs, after }), false)
       },
     }
     function announce() {
@@ -298,25 +324,45 @@ export function VisualText({
           }
         })
       }
-      current.current.register?.({
+      setControls({
         ...controls,
         paragraphAfter: selection.$from.parent.attrs.after ?? undefined,
+        listKind: selection.$from.parent.attrs.list ?? undefined,
         values: marks.find((mark) => mark.type === appearance)?.attrs.values,
       })
     }
     if (flexible) announce()
 
-    const outside = (event: PointerEvent) => {
-      const target = event.target as Element | null
+    const outside = (event: Event) => {
+      const target = event.target
       if (
-        !target ||
-        element.contains(target) ||
-        target.closest('[data-text-controls]')
+        !(target instanceof window.Node) ||
+        block.contains(target) ||
+        toolbar.current?.contains(target)
       )
         return
       current.current.finish()
     }
+    const checkBlur = (event: FocusEvent) => {
+      if (
+        event.relatedTarget ||
+        !(event.target instanceof window.Node) ||
+        !block.contains(event.target)
+      )
+        return
+      queueMicrotask(() => {
+        const focused = element.ownerDocument.activeElement
+        if (
+          element.isConnected &&
+          !block.contains(focused) &&
+          !toolbar.current?.contains(focused)
+        )
+          current.current.finish()
+      })
+    }
     element.ownerDocument.addEventListener('pointerdown', outside, true)
+    element.ownerDocument.addEventListener('focusin', outside)
+    element.ownerDocument.addEventListener('focusout', checkBlur)
     const { point, selectAll } = initial.current
     const doc = editor.state.doc
     const position = point ? editor.posAtCoords(point)?.pos : undefined
@@ -330,9 +376,10 @@ export function VisualText({
     editor.focus()
     return () => {
       element.ownerDocument.removeEventListener('pointerdown', outside, true)
+      element.ownerDocument.removeEventListener('focusin', outside)
+      element.ownerDocument.removeEventListener('focusout', checkBlur)
       view.current = null
       editor.destroy()
-      if (flexible) current.current.register?.(null)
     }
   }, [flexible])
 
@@ -352,11 +399,33 @@ export function VisualText({
     )
     editor.updateState(state.apply(tr))
   }, [item.text, item.paragraphs, flexible])
+  const focusText = () => view.current?.focus()
   return (
-    <div
-      ref={host}
-      className="atlas-visual-text"
-      onPointerDown={(event) => event.stopPropagation()}
-    />
+    <>
+      <div
+        ref={host}
+        className="atlas-visual-text"
+        onPointerDown={(event) => event.stopPropagation()}
+      />
+      {anchor && deck && (flexible || changeSystem) && (
+        <TextEditToolbar
+          anchor={anchor}
+          toolbar={toolbar}
+          deck={deck}
+          style={style}
+          controls={flexible ? controls : null}
+          systemLabel={systemLabel}
+          change={(fields, returnFocus = true) => {
+            if (flexible) controls?.appearance(fields, returnFocus)
+            else {
+              changeSystem?.(fields)
+              if (returnFocus) focusText()
+            }
+          }}
+          finish={finish}
+          focusText={focusText}
+        />
+      )}
+    </>
   )
 }

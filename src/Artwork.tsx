@@ -17,11 +17,8 @@ import {
 } from './model'
 import { fontCatalog, fontPath } from './fontCatalog'
 import type { Cell } from './grid'
-import {
-  VisualText,
-  type TextSelectionControls,
-  type TextEditStart,
-} from './VisualText'
+import { textTypes, type TextType } from './textTypes'
+import { VisualText, type TextEditStart } from './VisualText'
 
 const builtinDocuments = new WeakSet<Document>()
 function installBuiltins(doc: Document) {
@@ -149,7 +146,7 @@ export function TextBlock({
   edit,
   finishEdit,
   onText,
-  registerText,
+  onSystemStyle,
   undo,
 }: {
   item: Item
@@ -160,11 +157,12 @@ export function TextBlock({
   finishEdit?: () => void
   undo?: (redo: boolean) => void
   onText?: (fields: Partial<Item>) => void
-  registerText?: (controls: TextSelectionControls | null) => void
+  onSystemStyle?: (type: TextType, fields: Characters) => void
 }) {
   const box = useRef<HTMLDivElement>(null)
   const style = typography(item, deck, cell)
-  const flexible = itemTextType(item, cell) === 'text'
+  const type = itemTextType(item, cell)
+  const flexible = type === 'text'
   const active = !!edit && !!onText
   const [overflow, setOverflow] = useState(false)
   const padding = Array.isArray(style.padding)
@@ -223,6 +221,7 @@ export function TextBlock({
         className="atlas-slide-text"
         data-overflow={overflow || undefined}
         data-editable-text={onText ? '' : undefined}
+        data-text-editing={active ? '' : undefined}
         style={{
           padding: padding.map((n) => n + 'px').join(' '),
           boxSizing: 'border-box',
@@ -267,7 +266,14 @@ export function TextBlock({
               onText={onText}
               start={edit}
               finish={finishEdit}
-              register={registerText}
+              deck={deck}
+              style={style}
+              systemLabel={flexible ? undefined : textTypes[type]}
+              changeSystem={
+                onSystemStyle
+                  ? (fields) => onSystemStyle(type, fields)
+                  : undefined
+              }
               undo={undo}
               runStyle={runStyle}
             />

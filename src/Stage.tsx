@@ -1,9 +1,15 @@
 import { defaultMaster, slots, pose, target } from './grid'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { sourceText, type Item, type Slide, type Deck } from './model'
-import { isTextType } from './textTypes'
-import type { TextSelectionControls, TextEditStart } from './VisualText'
+import {
+  sourceText,
+  type Item,
+  type Slide,
+  type Deck,
+  type Characters,
+} from './model'
+import { isTextType, type TextType } from './textTypes'
+import type { TextEditStart } from './VisualText'
 import './viewer.css'
 import { PathHandles } from './PathHandles'
 import { TextBlock, VectorShape, useFonts } from './Artwork'
@@ -20,7 +26,7 @@ interface StageProps {
   onSlot?: (id: string) => void
   onSlotEdit?: (id: string, start: TextEditStart) => void
   textEdit?: TextEditStart & { id: string }
-  registerText?: (controls: TextSelectionControls | null) => void
+  onSystemStyle?: (type: TextType, fields: Characters) => void
   undo?: (redo: boolean) => void
   showSource?: boolean
   selected?: string
@@ -86,7 +92,7 @@ export function Stage({
   onSlot,
   onSlotEdit,
   textEdit,
-  registerText,
+  onSystemStyle,
   undo,
   showSource,
   onNodes,
@@ -163,9 +169,11 @@ export function Stage({
   function move(e: ReactPointerEvent) {
     const run = drag.current
     if (!run || run.pointer !== e.pointerId) return
-    if (!run.moved && Math.hypot(e.clientX - run.x, e.clientY - run.y) < 4)
-      return
-    run.moved = true
+    if (!run.moved) {
+      if (Math.hypot(e.clientX - run.x, e.clientY - run.y) < 4) return
+      if (!run.locked && run.item.id === textEdit?.id) finishTextEdit?.()
+      run.moved = true
+    }
     if (run.locked) return
     const dx = (e.clientX - run.x) / run.scale
     const dy = (e.clientY - run.y) / run.scale
@@ -276,6 +284,7 @@ export function Stage({
             <div
               key={v.id}
               data-slot={v.id}
+              data-text-slot={show && onSlotEdit ? '' : undefined}
               onPointerDown={(e) => {
                 if (!onSlot || ['area', 'empty'].includes(c.type)) return
                 e.stopPropagation()
@@ -444,7 +453,7 @@ export function Stage({
                           cell={hostSlot?.cell}
                           edit={textEdit?.id === item.id ? textEdit : undefined}
                           finishEdit={finishTextEdit}
-                          registerText={registerText}
+                          onSystemStyle={onSystemStyle}
                           undo={undo}
                           deck={deck}
                           editing={!!onSelect || !!diagnostics}

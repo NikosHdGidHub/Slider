@@ -51,8 +51,9 @@ import {
 import { applyLayout, type Template } from './catalog'
 import { importSVG } from './vectorImport'
 import { Stage } from './Stage'
-import { isTextType } from './textTypes'
-import type { TextSelectionControls, TextEditStart } from './VisualText'
+import { isTextType, type TextType } from './textTypes'
+import { fontCatalog } from './fontCatalog'
+import type { TextEditStart } from './VisualText'
 import {
   newSlide,
   sourceText,
@@ -62,6 +63,7 @@ import {
   type Deck,
   type Item,
   type Slide,
+  type Characters,
 } from './model'
 import { Files } from './Files'
 import { optimize, checkImageBudget } from './media'
@@ -117,13 +119,10 @@ export function Editor({
   const clipboard = useRef<Item[]>([])
   const [sid, choose] = useState(initialSlideId ?? deck.slides[0].id),
     [sel, select] = useState('')
-  const [inspectorRequest, requestInspector] = useState(0)
   const [selectedSlot, setSelectedSlot] = useState('')
   const [edit, setEdit] = useState<
     (TextEditStart & { id: string; slideId: string; source?: Item }) | null
   >(null)
-  const [textControls, setTextControls] =
-    useState<TextSelectionControls | null>(null)
   const thumbnailList = useRef<HTMLDivElement>(null)
   const slide = deck.slides.find((s) => s.id === sid) || deck.slides[0],
     idx = deck.slides.indexOf(slide),
@@ -165,6 +164,26 @@ export function Editor({
     select(source.id)
     setEdit({ ...start, id: source.id, slideId: slide.id, source })
   }
+  function updateSystemStyle(type: TextType, fields: Characters) {
+    change((d) => {
+      const style = { ...d.theme.systemStyles[type], ...fields }
+      if (fields.font) {
+        const face = Object.hasOwn(fontCatalog, fields.font)
+          ? fontCatalog[fields.font]
+          : undefined
+        if (!face?.weights.includes(Number(style.weight ?? 400)))
+          style.weight = '400'
+        if (!face?.italic && style.italic) style.italic = false
+      }
+      return {
+        ...d,
+        theme: {
+          ...d.theme,
+          systemStyles: { ...d.theme.systemStyles, [type]: style },
+        },
+      }
+    })
+  }
   function additions(s: Slide, added: Item[]) {
     const available = slots(deck.master, s),
       used = new Set(s.items.map(target))
@@ -188,18 +207,21 @@ export function Editor({
     })
   }
   function patch(id: string, fields: Partial<Item>) {
-    modify((s) => ({
-      ...s,
-      items: (draft?.id === id ? [...s.items, draft] : s.items).map((it) =>
-        it.id === id
-          ? (Object.fromEntries(
-              Object.entries({ ...it, ...fields }).filter(
-                ([, value]) => value !== undefined
-              )
-            ) as unknown as Item)
-          : it
-      ),
-    }))
+    modify((s) => {
+      const addDraft = draft?.id === id && !s.items.some((it) => it.id === id)
+      return {
+        ...s,
+        items: (addDraft ? [...s.items, draft] : s.items).map((it) =>
+          it.id === id
+            ? (Object.fromEntries(
+                Object.entries({ ...it, ...fields }).filter(
+                  ([, value]) => value !== undefined
+                )
+              ) as unknown as Item)
+            : it
+        ),
+      }
+    })
   }
   function removeItem() {
     if (item)
@@ -210,7 +232,7 @@ export function Editor({
     function key(e: KeyboardEvent) {
       if (
         (e.target as HTMLElement).closest(
-          'input,textarea,select,[contenteditable]'
+          'input,textarea,select,[contenteditable],[data-text-controls]'
         )
       )
         return
@@ -534,7 +556,6 @@ export function Editor({
       )}
       <Workspace
         scope={saveTemplate ? 'template' : 'lesson'}
-        inspectorRequest={inspectorRequest}
         header={
           <>
             <IconButton label={exitLabel} onClick={back}>
@@ -834,7 +855,11 @@ export function Editor({
                     deck={deck}
                     item={item}
                     cell={itemCell}
-                    controls={textControls}
+                    editOnCanvas={
+                      target(item) === 'tray' || item.hidden
+                        ? undefined
+                        : () => editText(item.id)
+                    }
                     reset={
                       isTextType(itemCell?.type)
                         ? () => {
@@ -1138,7 +1163,7 @@ export function Editor({
             finishTextEdit={() =>
               setEdit((current) => (current === textEdit ? null : current))
             }
-            registerText={setTextControls}
+            onSystemStyle={updateSystemStyle}
             undo={(redo) =>
               history.actions
                 .find((a) => a.key === (redo ? 'shift+z' : 'z'))

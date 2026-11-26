@@ -9,7 +9,6 @@ import {
 import { fontCatalog } from './fontCatalog'
 import { textTypeIds, textTypes, isTextType, type TextType } from './textTypes'
 import { type Cell, type Insets } from './grid'
-import type { TextSelectionControls } from './VisualText'
 import { IconButton, PropertySection } from './Workspace'
 import { fontFamily } from './Artwork'
 import { useRef, useState } from 'react'
@@ -19,7 +18,6 @@ import {
   newShape,
   itemTextType,
   replaceStyle,
-  typography,
   verifyFont,
   type Characters,
   type Deck,
@@ -104,13 +102,11 @@ function CharacterFields({
   values,
   onChange,
   deck,
-  selection = false,
   onUpload,
 }: {
   values: Characters
   onChange: (s: Characters) => void
   deck: Deck
-  selection?: boolean
   onUpload?: (file: File) => void
 }) {
   const [search, setSearch] = useState('')
@@ -146,19 +142,17 @@ function CharacterFields({
               return
             }
             const target = fontCatalog[id] ?? { weights: [400], italic: false }
-            if (selection) onChange({ font: id })
-            else
-              onChange({
-                font: id,
-                ...(!target.weights.includes(Number(values.weight ?? 400))
-                  ? {
-                      weight: String(
-                        target.weights.includes(400) ? 400 : target.weights[0]
-                      ),
-                    }
-                  : {}),
-                ...(!target.italic && values.italic ? { italic: false } : {}),
-              })
+            onChange({
+              font: id,
+              ...(!target.weights.includes(Number(values.weight ?? 400))
+                ? {
+                    weight: String(
+                      target.weights.includes(400) ? 400 : target.weights[0]
+                    ),
+                  }
+                : {}),
+              ...(!target.italic && values.italic ? { italic: false } : {}),
+            })
           }}
         >
           {fonts
@@ -783,21 +777,20 @@ export function TextPanel({
   cell,
   deck,
   patch,
-  controls,
+  editOnCanvas,
   reset,
 }: {
   item: Item
   cell?: Cell
   deck: Deck
   patch: (v: Partial<Item>) => void
-  controls?: TextSelectionControls | null
+  editOnCanvas?: () => void
   reset?: () => void
 }) {
   const type = itemTextType(item, cell)
-  const style = typography(item, deck, cell)
   return (
     <PropertySection id="text" title="Содержание текста" initial>
-      <div data-text-controls>
+      <div>
         {!isTextType(cell?.type) && (
           <label>
             Тип текста
@@ -847,66 +840,25 @@ export function TextPanel({
             </select>
           </label>
         )}
-        {(!item.paragraphs || type !== 'text') && (
-          <label>
-            Текст
-            <textarea
-              id="atlas-edit-text"
-              maxLength={200000}
-              value={item.text}
-              onChange={(e) =>
-                patch({ text: e.target.value, paragraphs: undefined })
-              }
-            />
-          </label>
+        {editOnCanvas ? (
+          <button onClick={editOnCanvas}>Редактировать на холсте</button>
+        ) : (
+          (!item.paragraphs || type !== 'text') && (
+            <label>
+              Текст
+              <textarea
+                id="atlas-edit-text"
+                maxLength={200000}
+                value={item.text}
+                onChange={(e) =>
+                  patch({ text: e.target.value, paragraphs: undefined })
+                }
+              />
+            </label>
+          )
         )}
         {reset && (
           <button onClick={reset}>Вернуть исходный текст ячейки</button>
-        )}
-        {type === 'text' && controls ? (
-          <PropertySection
-            id="selection-format"
-            title="Форматирование выделения"
-            initial
-          >
-            <div className="text-selection-tools">
-              <button onClick={() => controls.list('bullet')}>
-                Маркированный список
-              </button>
-              <button onClick={() => controls.list('number')}>
-                Нумерованный список
-              </button>
-              <button onClick={() => controls.indent(24)}>
-                Увеличить отступ
-              </button>
-              <button onClick={() => controls.indent(-24)}>
-                Уменьшить отступ
-              </button>
-              <button onClick={() => controls.appearance(null)}>
-                Сбросить форматирование
-              </button>
-            </div>
-            <CharacterFields
-              selection
-              values={{ ...style, ...controls.values }}
-              deck={deck}
-              onChange={controls.appearance}
-            />
-            <Num
-              label="Интервал после выделенного абзаца"
-              value={controls.paragraphAfter ?? style.paragraphSpacing ?? 0}
-              min={0}
-              max={256}
-              change={controls.spacing}
-            />
-          </PropertySection>
-        ) : (
-          type === 'text' && (
-            <small>
-              Дважды щёлкните текст на холсте, чтобы редактировать и
-              форматировать выделение.
-            </small>
-          )
         )}
       </div>
     </PropertySection>
