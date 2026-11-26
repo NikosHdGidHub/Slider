@@ -695,6 +695,10 @@
   width: 26px;
   height: 26px;
 }
+.course-library .lib-card-open:disabled {
+  opacity: 1;
+  cursor: default;
+}
 .course-folder .lib-card-title {
   color: var(--lib-ink);
 }
@@ -901,4 +905,16 @@
   min-width: 0;
   max-width: 100%;
   flex-wrap: wrap;
+}
+
+@media (max-width: 620px) {
+  .course-library .lib-heading:has(h1 > svg) {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .course-library .lib-heading h1:has(svg) {
+    flex-basis: 100%;
+    font-size: clamp(25px, 6.7vw, 34px);
+    line-height: 1.13;
+  }
 }

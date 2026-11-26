@@ -365,7 +365,7 @@ export function LessonLibrary(props: Props) {
                 fill={course.color}
                 aria-hidden="true"
               />
-              {course.title}
+              <span>{course.title}</span>
             </>
           ) : (
             'Мои методички'
