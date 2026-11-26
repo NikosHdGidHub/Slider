@@ -90,10 +90,13 @@
   outline-offset: 2px;
 }
 .lib-toolbar {
+  position: relative;
+  z-index: 10;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
+  margin-bottom: 16px;
 }
 .lib-search {
   display: flex;
@@ -209,6 +212,10 @@
   gap: 3px 8px;
 }
 .lib-items[data-view='gallery'] {
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(193px, 100%), 1fr));
   gap: 24px var(--lib-gap);
