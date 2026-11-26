@@ -6,7 +6,10 @@ import {
 } from './libraryNavigation'
 import { useHistory } from './StudioTools'
 import { GridDesigner } from './GridDesigner'
-import { templateFrom } from './catalog'
+import { copyDeck, templateFrom } from './catalog'
+import { useCourses } from './courseSync'
+import { useCoursePreferences } from './coursePreferences'
+import { useCoursePublications } from './coursePublications'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
@@ -144,6 +147,30 @@ function App() {
       stored === 'presentation' || stored === 'layout' ? stored : undefined
   )
   const lessonsSettings = useLibrarySettings('lessons')
+  const courseScope = owner ? adminId : localMode ? 'local' : null
+  const courses = useCourses(courseScope, online)
+  const courseLocation = useCoursePreferences(courseScope, lessonsSettings)
+  const activeCourse = courses.snapshot.courses.find(
+    (c) => c.id === courseLocation.id
+  )
+  const creationCourse = useRef<string | null>(null)
+  const templateCourse = useRef<string | null>(null)
+  const [publicationStamp, publicationChanged] = useState(0)
+  const publications = useCoursePublications(
+    page === 'library',
+    online,
+    owner,
+    publicationStamp,
+    list
+  )
+  const libraryRows = useMemo(
+    () => [...list, ...publications.remote],
+    [list, publications.remote]
+  )
+  useEffect(() => {
+    if (courses.ready && courseLocation.id && !activeCourse)
+      courseLocation.setLocation(null)
+  }, [courses.ready, courseLocation.id, activeCourse])
   const presentationSettings = useLibrarySettings('presentation')
   const layoutSettings = useLibrarySettings('layout')
   const [catalogLoading, setCatalogLoading] = useState(true)
@@ -192,7 +219,11 @@ function App() {
   useLibraryScroll(
     libraryContent,
     homeVisible,
-    page === 'templates' ? page + '/' + catalogKind : page
+    page === 'templates'
+      ? page + '/' + catalogKind
+      : page === 'library'
+        ? page + '/' + courseLocation.key
+        : page
   )
 
   function allowEditing() {
@@ -285,7 +316,8 @@ function App() {
     location.hash = ''
     navigate('published')
   }
-  function navigate(next: string) {
+  function navigate(next: string, destination: string | null = null) {
+    templateCourse.current = next === 'templates' ? destination : null
     const protectedPages = ['templates', 'files']
 
     if (!allowed && protectedPages.includes(next)) {
@@ -708,11 +740,21 @@ function App() {
 
     return saved
   }
-  async function insert(d: Deck) {
+  async function insert(d: Deck, destination: string | null = null) {
     if (!allowEditing()) return
-    await saveEntry(d, 0)
+    if (destination && !courseScope) throw Error('Войдите как преподаватель.')
+    await saveEntry(
+      d,
+      0,
+      false,
+      false,
+      destination && courseScope
+        ? { scope: courseScope, course: destination }
+        : undefined
+    )
     await refresh()
     open(d, 1)
+    if (destination) editorOrigin.current = 'library'
     setModal('')
   }
   function need(name: string) {
@@ -763,7 +805,8 @@ function App() {
         }
         if (hash.startsWith('#transfer/')) setTransferLogin((n) => n + 1)
         setModal('')
-      } else if (modal === 'create') await insert(newDeck(value))
+      } else if (modal === 'create')
+        await insert(newDeck(value), creationCourse.current)
       else if (modal === 'import') await importData(value)
     })
   }
@@ -836,6 +879,7 @@ function App() {
           localStorage.setItem(marker(d.id), hash)
           openedPublication.current = hash
           setBaseline(hash)
+          publicationChanged((stamp) => stamp + 1)
           if (exitAfter && current.current === d) {
             await closeEditor()
             return
@@ -990,16 +1034,56 @@ function App() {
           {page === 'library' ? (
             <ActionMenus>
               <LessonLibrary
-                settings={lessonsSettings}
-                rows={allowed ? list : []}
+                settings={courseLocation.settings}
+                rows={allowed ? libraryRows : []}
+                courses={courses}
+                course={activeCourse}
+                openCourse={courseLocation.setLocation}
+                published={publications.published}
+                publicationsLoading={publications.loading}
+                publicationsError={publications.failure}
                 allowed={allowed}
                 editable={allowed && !phone}
                 loading={!listReady}
                 error={libraryError}
-                create={() => need('create')}
-                importJSON={() => need('import')}
+                create={() => {
+                  creationCourse.current = activeCourse?.id ?? null
+                  need('create')
+                }}
+                fromTemplate={() => {
+                  setCatalogKind('presentation')
+                  navigate('templates', activeCourse?.id ?? null)
+                }}
+                importJSON={() => {
+                  creationCourse.current = activeCourse?.id ?? null
+                  need('import')
+                }}
                 view={setWatch}
-                edit={(entry) => open(entry.deck, entry.revision)}
+                edit={(entry) => {
+                  if (entry.revision) open(entry.deck, entry.revision)
+                  else
+                    void task('Открываем методичку…', async () => {
+                      const saved = await savePublicationLocally(entry.deck.id)
+                      open(saved.deck, saved.revision)
+                    })
+                }}
+                duplicate={(entry, course) =>
+                  task('Создаём копию…', () =>
+                    insert(
+                      copyDeck(
+                        entry.deck,
+                        entry.deck.title.slice(0, 990) + ' — копия'
+                      ),
+                      course
+                    )
+                  )
+                }
+                saveLocally={(entry) =>
+                  task('Сохраняем методичку…', async () => {
+                    await savePublicationLocally(entry.deck.id)
+                    notice('Методичка сохранена на устройстве.')
+                  })
+                }
                 remove={remove}
                 exportJSON={(deck) =>
                   task('Подготовка JSON…', async () => exportDeck(deck))
@@ -1027,7 +1111,7 @@ function App() {
                 loading={catalogLoading}
                 error={catalogError}
                 connection={catalogConnection}
-                create={insert}
+                create={(deck) => insert(deck, templateCourse.current)}
                 edit={(t, row) => {
                   if (allowEditing()) {
                     setEditingTemplate({
@@ -1049,7 +1133,14 @@ function App() {
               openLesson={(entry) =>
                 phone ? setWatch(entry.deck) : open(entry.deck, entry.revision)
               }
-              openJSON={phone ? undefined : importData}
+              openJSON={
+                phone
+                  ? undefined
+                  : (raw) => {
+                      creationCourse.current = null
+                      return importData(raw)
+                    }
+              }
               online={online}
               owner={owner}
               allowed={allowed}
@@ -1205,6 +1296,7 @@ function App() {
                           if (confirm('Снять методичку с публикации?'))
                             task('Снимаем с публикации…', async () => {
                               await unpublish(id)
+                              publicationChanged((stamp) => stamp + 1)
                               localStorage.removeItem(marker(id))
                               setPubs(await listPublished())
                             })
@@ -1586,7 +1678,7 @@ function App() {
                   task('Импорт…', async () => {
                     const deck = { ...preview, id: crypto.randomUUID() }
                     await saveOriginal('lesson', deck.id, readJSON(value))
-                    await insert(deck)
+                    await insert(deck, creationCourse.current)
                     setPreview(null)
                   })
                 }

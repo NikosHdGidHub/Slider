@@ -27,7 +27,17 @@ export function useLibraryScroll(
     if (!visible || !content.current) return
     const element = content.current
     const root = document.scrollingElement!
-    const desired = positions.current[key] ?? 0
+    const persisted = key.startsWith('library/')
+    const storageKey = 'atlas.scroll.v1.' + key
+    let previous = 0
+    if (persisted) {
+      try {
+        previous = Number(sessionStorage.getItem(storageKey)) || 0
+      } catch {
+        /* Preferences are optional. */
+      }
+    }
+    const desired = positions.current[key] ?? previous
     let restoring = true
     const observer = new ResizeObserver(restore)
     function restore() {
@@ -40,7 +50,16 @@ export function useLibraryScroll(
       }
     }
     function remember() {
-      if (!restoring) positions.current[key] = window.scrollY
+      if (!restoring) {
+        positions.current[key] = window.scrollY
+        if (persisted) {
+          try {
+            sessionStorage.setItem(storageKey, String(window.scrollY))
+          } catch {
+            /* Preferences are optional. */
+          }
+        }
+      }
     }
     function userScroll() {
       if (!restoring) return

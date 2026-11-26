@@ -21,6 +21,8 @@ create table if not exists public.atlas_courses (
   primary key (owner_id, id),
   unique (owner_id, position) deferrable initially deferred
 );
+create unique index if not exists atlas_courses_unique_id on public.atlas_courses(id);
+
 create table if not exists public.atlas_course_lessons (
   owner_id uuid not null,
   lesson_id uuid not null,

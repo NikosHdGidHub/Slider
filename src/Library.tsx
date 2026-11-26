@@ -1,6 +1,6 @@
 import { download } from './instructions'
 import { unreadableDocuments } from './storage'
-import { useState, type ReactNode } from 'react'
+import { useState, type ReactNode, type HTMLAttributes } from 'react'
 import { ArrowDownUp, LayoutGrid, List, Search, X } from 'lucide-react'
 import { ActionMenu, type MenuItem } from './ActionMenu'
 import { IconButton } from './IconButton'
@@ -11,15 +11,22 @@ import './library.css'
 
 const titles = new Intl.Collator('ru', { sensitivity: 'base', numeric: true })
 const sortOptions = {
+  manual: 'Вручную',
   recent: 'Сначала новые',
   old: 'Сначала старые',
   name: 'Название от А до Я',
   reverse: 'Название от Я до А',
   slides: 'Сначала больше слайдов',
 } as const
-type Sort = keyof typeof sortOptions
-const lessonSorts: Sort[] = ['recent', 'old', 'name', 'reverse', 'slides']
-const templateSorts: Sort[] = ['name', 'reverse']
+export type LibrarySort = keyof typeof sortOptions
+const lessonSorts: LibrarySort[] = [
+  'recent',
+  'old',
+  'name',
+  'reverse',
+  'slides',
+]
+const templateSorts: LibrarySort[] = ['name', 'reverse']
 
 export function useLibrarySettings(
   scope: 'lessons' | 'presentation' | 'layout'
@@ -32,7 +39,7 @@ export function useLibrarySettings(
     'gallery',
     (saved) => (saved === 'gallery' || saved === 'list' ? saved : undefined)
   )
-  const [sort, setSort] = useStoredPreference<Sort>(
+  const [sort, setSort] = useStoredPreference<LibrarySort>(
     key + '.sort',
     sorts[0],
     (saved) => sorts.find((option) => option === saved)
@@ -42,16 +49,19 @@ export function useLibrarySettings(
 
 export type LibrarySettings = ReturnType<typeof useLibrarySettings>
 
+export function normalizeLibraryQuery(text: string) {
+  return text.normalize('NFC').toLocaleLowerCase('ru')
+}
+
 export function selectLibraryRows<T extends { deck: Deck; updated?: number }>(
   rows: T[],
   { query, sort }: LibrarySettings
 ) {
-  const normalize = (text: string) =>
-    text.normalize('NFC').toLocaleLowerCase('ru')
-  const search = normalize(query.trim())
+  const search = normalizeLibraryQuery(query.trim())
   return rows
-    .filter(({ deck }) => normalize(deck.title).includes(search))
+    .filter(({ deck }) => normalizeLibraryQuery(deck.title).includes(search))
     .sort((a, b) => {
+      if (sort === 'manual') return 0
       const name = titles.compare(a.deck.title, b.deck.title)
       if (sort === 'name') return name
       if (sort === 'reverse') return -name
@@ -66,7 +76,7 @@ export function LibraryHeader({
   title,
   action,
 }: {
-  title: string
+  title: ReactNode
   action?: ReactNode
 }) {
   return (
@@ -172,7 +182,7 @@ export function LibraryItems({
   children,
   templates = false,
 }: {
-  settings: LibrarySettings
+  settings: Pick<LibrarySettings, 'view'>
   columns: readonly [string, string]
   children: ReactNode
   templates?: boolean
@@ -198,6 +208,8 @@ export function LibraryItems({
 
 export function LibraryCard({
   deck,
+  name,
+  thumbnail,
   first,
   second,
   description,
@@ -206,8 +218,15 @@ export function LibraryCard({
   disabled,
   notice,
   preflight,
+  card,
+  controls,
+  number,
+  selected,
+  blockOpen,
 }: {
-  deck: Deck
+  deck?: Deck
+  name?: string
+  thumbnail?: ReactNode
   first: ReactNode
   second?: ReactNode
   description?: string
@@ -216,20 +235,39 @@ export function LibraryCard({
   disabled?: boolean
   notice: (message: string) => void
   preflight?: boolean
+  card?: HTMLAttributes<HTMLElement>
+  controls?: ReactNode
+  number?: number
+  selected?: boolean
+  blockOpen?: boolean
 }) {
+  const title = deck?.title ?? name ?? ''
   return (
-    <article className="lib-card">
+    <article
+      {...card}
+      className={['lib-card', card?.className].filter(Boolean).join(' ')}
+    >
       <button
         className="lib-card-open"
         type="button"
         onClick={open}
-        aria-label={(preflight ? 'Предпросмотр ' : 'Открыть ') + deck.title}
+        disabled={blockOpen}
+        aria-pressed={selected}
+        aria-label={(preflight ? 'Предпросмотр ' : 'Открыть ') + title}
       >
         <span className="lib-thumbnail" aria-hidden="true">
-          <Stage deck={deck} slide={deck.slides[0]} />
+          {thumbnail ?? (deck && <Stage deck={deck} slide={deck.slides[0]} />)}
         </span>
-        <span className="lib-card-title" title={deck.title}>
-          {deck.title}
+        <span className="lib-card-title" title={title}>
+          {number !== undefined && (
+            <span
+              className="lib-lesson-number"
+              aria-label={'Занятие ' + number}
+            >
+              {number}.
+            </span>
+          )}
+          {title}
         </span>
       </button>
       <div className="lib-card-meta">
@@ -244,12 +282,14 @@ export function LibraryCard({
         )}
       </div>
       <div className="lib-card-menu">
-        <ActionMenu
-          label={'Действия: ' + deck.title}
-          items={actions}
-          disabled={disabled}
-          onError={notice}
-        />
+        {controls ?? (
+          <ActionMenu
+            label={'Действия: ' + title}
+            items={actions}
+            disabled={disabled}
+            onError={notice}
+          />
+        )}
       </div>
       {description && <p className="lib-card-description">{description}</p>}
     </article>

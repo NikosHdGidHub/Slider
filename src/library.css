@@ -635,3 +635,270 @@
 .lib-migration-failures summary {
   cursor: pointer;
 }
+
+.course-crumb,
+.course-subhead,
+.course-sync,
+.course-bulk {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.course-crumb {
+  margin-bottom: 7px;
+  font-size: 13px;
+  color: var(--lib-muted);
+}
+.course-crumb > span {
+  overflow-wrap: anywhere;
+}
+.course-crumb .lib-button {
+  min-height: 36px;
+}
+.course-subhead {
+  justify-content: space-between;
+  margin: -5px 0 15px;
+  color: var(--lib-muted);
+}
+.lib-heading h1:has(svg) {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lib-heading h1 > svg {
+  flex: 0 0 auto;
+  align-self: start;
+  margin-top: 5px;
+}
+.course-section-title {
+  font-size: 18px;
+  font-weight: 650;
+  color: var(--lib-ink);
+  margin: 25px 0 12px;
+}
+.course-folder .lib-thumbnail {
+  display: grid;
+  place-items: center;
+  background: #eff3ee;
+}
+.lib-items[data-view='gallery'] .course-folder .lib-thumbnail {
+  aspect-ratio: 2.6;
+}
+.lib-items[data-view='gallery'] .course-folder .lib-card-menu {
+  top: calc(38.46cqw + 4px);
+}
+.lib-items[data-view='list'] .course-folder .lib-thumbnail svg {
+  width: 26px;
+  height: 26px;
+}
+.course-folder .lib-card-title {
+  color: var(--lib-ink);
+}
+.course-folder:hover .lib-thumbnail {
+  background: #e7eee6;
+}
+.lib-lesson-number {
+  color: var(--lib-muted);
+  margin-inline-end: 6px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+.course-location {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.course-location > span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.course-location svg {
+  flex: 0 0 auto;
+}
+.course-publication {
+  vertical-align: text-bottom;
+  margin-inline-start: 4px;
+  color: var(--lib-ink);
+}
+.course-bulk,
+.course-sync {
+  margin: 12px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--lib-line);
+  border-radius: var(--lib-radius);
+  background: #f0f4ef;
+  color: var(--lib-ink);
+  font-size: 13px;
+}
+.course-sync > span {
+  flex: 1 1 230px;
+}
+.course-sync[role='alert'] {
+  background: #fff6e8;
+}
+.course-bulk > span {
+  margin-inline-end: auto;
+}
+.course-selection {
+  appearance: auto;
+  width: 20px;
+  height: 20px;
+  margin: 4px;
+  accent-color: #407f69;
+  cursor: pointer;
+}
+.lib-card-open[aria-pressed='true'] {
+  outline: 2px solid #407f69;
+  outline-offset: 2px;
+  background: #e7f1e9;
+}
+.course-order-controls {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 2px;
+  color: var(--lib-ink);
+}
+.course-order-controls .icon-button {
+  min-width: 31px;
+  min-height: 32px;
+  padding: 3px;
+}
+.course-order-controls svg {
+  width: 15px;
+  height: 15px;
+}
+.course-grip {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  min-height: 35px;
+  cursor: grab;
+}
+.course-grip:active {
+  cursor: grabbing;
+}
+.lib-card[data-dragging] {
+  opacity: 0.52;
+}
+.lib-card[data-drop='before'] {
+  box-shadow: -3px 0 #407f69;
+}
+.lib-card[data-drop='after'] {
+  box-shadow: 3px 0 #407f69;
+}
+.lib-items[data-view='list'] .lib-card[data-drop='before'] {
+  box-shadow: 0 -3px #407f69;
+}
+.lib-items[data-view='list'] .lib-card[data-drop='after'] {
+  box-shadow: 0 3px #407f69;
+}
+.lib-items[data-view='gallery']
+  .lib-card:has(.course-order-controls)
+  .lib-card-menu {
+  position: static;
+}
+.lib-items[data-view='gallery']
+  .lib-card:has(.course-order-controls)
+  .lib-card-title,
+.lib-items[data-view='gallery']
+  .lib-card:has(.course-order-controls)
+  .lib-card-meta {
+  margin-inline-end: 0;
+  padding-inline-end: 3px;
+}
+.lib-items[data-view='list']:has(.course-order-controls) {
+  --lib-control: 92px;
+}
+.course-dialog {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 24px));
+  margin: auto;
+  color: #233b30;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.course-dialog::backdrop {
+  background: #19292488;
+}
+.course-dialog-actions {
+  display: flex;
+  justify-content: end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.course-dialog-error {
+  color: #8b2d1e;
+}
+.course-palette {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 0 3px;
+  border: 0;
+}
+.course-palette label {
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: 43px;
+  height: 43px;
+  border: 1px solid #d6ddd6;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.course-palette label:has(input:checked) {
+  border: 2px solid currentColor;
+  background: #f0f4ef;
+}
+.course-palette label:has(input:focus-visible) {
+  outline: 2px solid #233b30;
+  outline-offset: 2px;
+}
+.course-palette input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+@media (max-width: 620px) {
+  .course-order-controls .icon-button {
+    min-width: 37px;
+    min-height: 41px;
+  }
+  .course-grip {
+    display: none;
+  }
+  .lib-items[data-view='list']:has(.course-order-controls) {
+    --lib-control: 80px;
+  }
+  .lib-items[data-view='list']
+    .lib-card:has(.course-order-controls)
+    .lib-card-meta {
+    display: none;
+  }
+  .lib-items[data-view='list']:has(.course-order-controls)
+    .lib-column-head
+    > :nth-child(2),
+  .lib-items[data-view='list']:has(.course-order-controls)
+    .lib-column-head
+    > :nth-child(3) {
+    visibility: hidden;
+  }
+}
+.course-library .lib-toolbar-actions {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}

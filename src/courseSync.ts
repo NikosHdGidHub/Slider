@@ -1,27 +1,52 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { client } from './cloud'
 import {
-  acknowledgeCourseSync, appendCourseCommands, emptyCourseRecord, readCourseSnapshot,
-  resolveCourseConflict, stageCourseSync, visibleCourses,
-  type CourseAttempt, type CourseCommand, type CourseRecord, type CourseSnapshot,
+  acknowledgeCourseSync,
+  appendCourseCommands,
+  emptyCourseRecord,
+  readCourseSnapshot,
+  resolveCourseConflict,
+  stageCourseSync,
+  visibleCourses,
+  type CourseAttempt,
+  type CourseCommand,
+  type CourseRecord,
+  type CourseSnapshot,
 } from './courseModel'
-import { listenCourseChanges, readCourseRecord, updateCourseRecord } from './storage'
+import {
+  listenCourseChanges,
+  readCourseRecord,
+  updateCourseRecord,
+} from './storage'
 
 async function cloudRead(owner: string) {
-  const { data, error } = await client!.rpc('atlas_get_courses', { expected_owner: owner })
+  const { data, error } = await client!
+    .rpc('atlas_get_courses', {
+      expected_owner: owner,
+    })
+    .retry(false)
   if (error) throw error
   return readCourseSnapshot(data)
 }
 
 async function cloudWrite(owner: string, attempt: CourseAttempt) {
   const { snapshot } = attempt
-  const { data, error } = await client!.rpc('atlas_save_courses', {
-    expected_owner: owner, expected_revision: snapshot.revision, request_id: attempt.id,
-    courses: snapshot.courses, lessons: snapshot.lessons,
-  })
+  const { data, error } = await client!
+    .rpc('atlas_save_courses', {
+      expected_owner: owner,
+      expected_revision: snapshot.revision,
+      request_id: attempt.id,
+      courses: snapshot.courses,
+      lessons: snapshot.lessons,
+    })
+    .retry(false)
   if (error) throw error
-  if (typeof data?.accepted !== 'boolean') throw Error('Некорректный ответ синхронизации курсов.')
-  return { accepted: data.accepted as boolean, snapshot: readCourseSnapshot(data.snapshot) }
+  if (typeof data?.accepted !== 'boolean')
+    throw Error('Некорректный ответ синхронизации курсов.')
+  return {
+    accepted: data.accepted as boolean,
+    snapshot: readCourseSnapshot(data.snapshot),
+  }
 }
 
 async function syncCourses(owner: string, active: () => boolean) {
@@ -34,8 +59,13 @@ async function syncCourses(owner: string, active: () => boolean) {
       if (!active()) return
       const id = crypto.randomUUID()
       await updateCourseRecord(owner, (current) => {
-        if (current.attempt || (!current.pending.length && remote.revision === current.base.revision) ||
-            (current.conflict && current.conflict.revision === remote.revision) || remote.revision < current.base.revision)
+        if (
+          current.attempt ||
+          (!current.pending.length &&
+            remote.revision === current.base.revision) ||
+          (current.conflict && current.conflict.revision === remote.revision) ||
+          remote.revision < current.base.revision
+        )
           return current
         return stageCourseSync(current, remote, id)
       })
@@ -49,7 +79,11 @@ async function syncCourses(owner: string, active: () => boolean) {
       if (current.attempt?.id !== attempt.id) return current
       return response.accepted
         ? acknowledgeCourseSync(current, attempt, response.snapshot)
-        : stageCourseSync({ base: current.base, pending: current.pending }, response.snapshot, crypto.randomUUID())
+        : stageCourseSync(
+            { base: current.base, pending: current.pending },
+            response.snapshot,
+            crypto.randomUUID()
+          )
     })
     const next = await readCourseRecord(owner)
     if (next.conflict || !next.pending.length) return
@@ -67,7 +101,10 @@ function syncMessage(error: unknown) {
 
 const initial = emptyCourseRecord()
 export function useCourses(scope: string | null, online: boolean) {
-  const [loaded, setLoaded] = useState<{ scope: string; record: CourseRecord }>()
+  const [loaded, setLoaded] = useState<{
+    scope: string
+    record: CourseRecord
+  }>()
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
   const retry = useRef<() => void>(() => {})
@@ -86,19 +123,25 @@ export function useCourses(scope: string | null, online: boolean) {
     let timer: number | undefined
     function refresh() {
       const request = ++reread
-      void readCourseRecord(owner).then((record) => {
-        if (live && request === reread) setLoaded({ scope: owner, record })
-      }).catch(() => {
-        if (live) setError('Хранилище курсов на устройстве недоступно.')
-      })
+      void readCourseRecord(owner)
+        .then((record) => {
+          if (live && request === reread) setLoaded({ scope: owner, record })
+        })
+        .catch(() => {
+          if (live) setError('Хранилище курсов на устройстве недоступно.')
+        })
     }
     function run() {
       if (!live || running || !cloud || !online) return
       running = true
       setSyncing(true)
       void syncCourses(owner, () => live && navigator.onLine)
-        .then(() => { if (live) setError('') })
-        .catch((err) => { if (live) setError(syncMessage(err)) })
+        .then(() => {
+          if (live) setError('')
+        })
+        .catch((err) => {
+          if (live) setError(syncMessage(err))
+        })
         .finally(() => {
           running = false
           if (!live) return
@@ -116,7 +159,8 @@ export function useCourses(scope: string | null, online: boolean) {
     retry.current = run
     refresh()
     run()
-    const interval = cloud && online ? window.setInterval(run, 30_000) : undefined
+    const interval =
+      cloud && online ? window.setInterval(run, 30_000) : undefined
     window.addEventListener('focus', run)
     return () => {
       live = false
@@ -128,21 +172,40 @@ export function useCourses(scope: string | null, online: boolean) {
     }
   }, [scope, online, cloud])
 
-  const change = useCallback(async (build: (snapshot: CourseSnapshot) => CourseCommand[]) => {
-    if (!scope) throw Error('Войдите как преподаватель.')
-    await updateCourseRecord(scope, (record) => {
-      const commands = build(visibleCourses(record))
-      return commands.length ? appendCourseCommands(record, commands, cloud) : record
-    })
-  }, [scope, cloud])
-  const resolve = useCallback(async (choice: 'local' | 'remote') => {
-    if (scope) await updateCourseRecord(scope, (record) => resolveCourseConflict(record, choice))
-  }, [scope])
+  const change = useCallback(
+    async (build: (snapshot: CourseSnapshot) => CourseCommand[]) => {
+      if (!scope) throw Error('Войдите как преподаватель.')
+      await updateCourseRecord(scope, (record) => {
+        const commands = build(visibleCourses(record))
+        return commands.length
+          ? appendCourseCommands(record, commands, cloud)
+          : record
+      })
+    },
+    [scope, cloud]
+  )
+  const resolve = useCallback(
+    async (choice: 'local' | 'remote') => {
+      if (scope)
+        await updateCourseRecord(scope, (record) =>
+          resolveCourseConflict(record, choice)
+        )
+    },
+    [scope]
+  )
 
   return {
-    snapshot, ready: loaded?.scope === scope || !!error, syncing, error,
-    dirty: record.pending.length > 0, conflict: !!record.conflict, cloud, online,
-    change, resolve, retry: () => retry.current(),
+    snapshot,
+    ready: loaded?.scope === scope,
+    syncing,
+    error,
+    dirty: record.pending.length > 0,
+    conflict: !!record.conflict,
+    cloud,
+    online,
+    change,
+    resolve,
+    retry: () => retry.current(),
   }
 }
 export type CourseLibrary = ReturnType<typeof useCourses>

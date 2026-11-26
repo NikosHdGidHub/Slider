@@ -156,9 +156,8 @@ export async function readPublic(
   signal?: AbortSignal
 ): Promise<unknown> {
   const address = new URL(
-    storage()
-      .from('presentations')
-      .getPublicUrl(documentPath(id)).data.publicUrl
+    storage().from('presentations').getPublicUrl(documentPath(id)).data
+      .publicUrl
   )
   address.searchParams.set('revision', crypto.randomUUID())
   const response = await fetch(address, { cache: 'no-store', signal })
@@ -210,8 +209,8 @@ export async function unpublish(id: string): Promise<void> {
   })
 }
 
-export async function listPublished(signal?: AbortSignal): Promise<string[]> {
-  const ids: string[] = []
+export async function listPublishedFiles(signal?: AbortSignal) {
+  const files: { id: string; updated: number }[] = []
   const bucket = storage().from('presentations')
   const limit = 100
   for (let offset = 0; ; offset += limit) {
@@ -230,8 +229,16 @@ export async function listPublished(signal?: AbortSignal): Promise<string[]> {
       )
     for (const file of data) {
       const id = file.name.replace(/\.json$/, '')
-      if (file.name.endsWith('.json') && uuidPattern.test(id)) ids.push(id)
+      if (file.name.endsWith('.json') && uuidPattern.test(id))
+        files.push({
+          id,
+          updated: Date.parse(file.updated_at || file.created_at || '') || 0,
+        })
     }
-    if (data.length < limit) return ids
+    if (data.length < limit) return files
   }
+}
+
+export async function listPublished(signal?: AbortSignal) {
+  return (await listPublishedFiles(signal)).map((file) => file.id)
 }

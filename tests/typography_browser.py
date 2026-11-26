@@ -227,7 +227,7 @@ def verify_lesson(page, title):
     button(page, 'В библиотеку').click()
     page.context.set_offline(True)
     page.reload()
-    choose(page, title, 'Открыть')
+    choose(page, title, 'Просмотр')
     expect(page.locator('.atlas-preview-panel').get_by_text('VERTEX / 3D-МОДЕЛИРОВАНИЕ', exact=True)).to_be_visible()
     page.wait_for_function("Array.from(document.fonts).some(font => font.family === 'Atlas-unbounded' && font.status === 'loaded')")
     capture(page, 'typography-offline')

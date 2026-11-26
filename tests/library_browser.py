@@ -154,6 +154,7 @@ def desktop(page, url, catalog, decks):
     expect(page.get_by_role('heading', name='Пример методички')).to_have_count(0)
     capture(page, '05-empty')
     button(page, 'Создать').click()
+    menu(page, 'Новая методичка').click()
     page.get_by_label('Название', exact=True).fill('Проверка автора')
     button(page.get_by_role('dialog'), 'Создать').click()
     button(page, 'Добавить текст').click()
@@ -265,7 +266,7 @@ def desktop(page, url, catalog, decks):
     trigger = button(page, 'Действия: Круговорот воды')
     trigger.focus()
     page.keyboard.press('ArrowDown')
-    expect(menu(page, 'Открыть')).to_be_focused()
+    expect(menu(page, 'Просмотр')).to_be_focused()
     page.keyboard.press('End')
     expect(menu(page, 'Удалить с устройства')).to_be_focused()
     capture(page, '04-lesson-menu')
@@ -446,7 +447,7 @@ def mobile(browser, url, catalog, decks):
             capture(page,'16-mobile-list')
         button(page,'Действия: Круговорот воды').tap()
         expect(menu(page,'Редактировать')).to_have_count(0)
-        menu(page,'Открыть').tap()
+        menu(page,'Просмотр').tap()
         expect(page.locator('.atlas-viewer')).to_be_visible()
         no_overflow(page)
         if w==390:
@@ -548,7 +549,11 @@ def cloud(context, url, catalog, decks):
     assert visible['deck']['id'] in table
     button(page,'Мои методички').click()
     choose(page,decks[0]['title'],'Удалить с устройства')
-    expect(button(page,'Открыть '+decks[0]['title'])).to_have_count(0)
+    expect(button(page,'Открыть '+decks[0]['title'])).to_have_count(1)
+    button(page,'Действия: '+decks[0]['title']).click()
+    expect(menu(page,'Сохранить на устройство')).to_be_visible()
+    expect(menu(page,'Удалить с устройства')).to_have_count(0)
+    page.keyboard.press('Escape')
     button(page,'Опубликованные').click()
     expect(page.locator('.pub').filter(has_text=decks[0]['title'])).to_be_visible()
     assert decks[0]['id'] in publications
