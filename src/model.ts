@@ -237,6 +237,13 @@ export function newShape(shape: Shape = 'rounded'): Item {
 export function itemTextType(item: Item, cell?: Cell): TextType {
   return isTextType(cell?.type) ? cell.type : (item.textType ?? 'text')
 }
+export function activeTextStyleId(item?: Item, cell?: Cell): string {
+  const type = isTextType(cell?.type) ? cell.type : (item?.textType ?? 'text')
+
+  if (type !== 'text') return type
+
+  return cell?.textStyle ?? item?.style ?? 'text'
+}
 
 export function typography(item: Item, deck?: Deck, cell?: Cell) {
   const type = itemTextType(item, cell)

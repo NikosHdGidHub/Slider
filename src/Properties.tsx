@@ -528,13 +528,15 @@ export function StylesPanel({
   change,
   notice,
   library,
+  initialStyleId = 'text',
 }: {
   library?: StyleLibrary
   deck: Deck
   change: Change
   notice: (v: string) => void
+  initialStyleId?: string
 }) {
-  const [id, setID] = useState('text')
+  const [id, setID] = useState(initialStyleId)
   const [replacement, setReplacement] = useState('')
   const selected = deck.theme.styles.find((s) => s.id === id)
   const values = isTextType(id)

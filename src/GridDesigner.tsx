@@ -40,7 +40,7 @@ import {
   type CellType,
 } from './grid'
 import { StylesPanel } from './Properties'
-import { sourceText } from './model'
+import { sourceText, activeTextStyleId } from './model'
 import { isTextType, textTypes } from './textTypes'
 import type { Template } from './catalog'
 
@@ -156,6 +156,7 @@ export function GridDesigner({
       ? (s.structure ?? blankGrid('free'))
       : deck.master.schemes[kind]
   const c = g.cells.find((v) => v.id === selected) ?? g.cells[0]
+  const selectedStyleId = activeTextStyleId(undefined, c)
   const activeSourceEdit = sourceEdit?.slideId === s.id ? sourceEdit : null
   function change(next: Grid) {
     try {
@@ -682,6 +683,8 @@ export function GridDesigner({
               </div>
             </PropertySection>
             <StylesPanel
+              key={`${s.id}:${c.id}:${selectedStyleId}`}
+              initialStyleId={selectedStyleId}
               deck={deck}
               notice={notice}
               change={(update) => set({ ...template, deck: update(deck) })}

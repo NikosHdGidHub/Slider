@@ -60,6 +60,7 @@ import {
   newText,
   newShape,
   validateDeck,
+  activeTextStyleId,
   type Deck,
   type Item,
   type Slide,
@@ -152,6 +153,14 @@ export function Editor({
     textEdit?.source && !slide.items.some((o) => o.id === textEdit.id)
       ? textEdit.source
       : undefined
+  const styleItem = item ?? draft
+  const styleCell = styleItem
+    ? styleItem.fixed
+      ? undefined
+      : locations.find((v) => v.id === styleItem.slot)?.cell
+    : activeSlot?.cell
+
+  const selectedStyleId = activeTextStyleId(styleItem, styleCell)
   function editText(id: string, start: TextEditStart = {}) {
     select(id)
     setEdit({ ...start, id, slideId: slide.id })
@@ -1109,6 +1118,8 @@ export function Editor({
               </>
             )}
             <StylesPanel
+              key={`${slide.id}:${styleItem?.id ?? selectedSlot}:${selectedStyleId}`}
+              initialStyleId={selectedStyleId}
               library={styleLibrary}
               deck={deck}
               change={change}
