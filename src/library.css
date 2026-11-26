@@ -451,7 +451,60 @@
 }
 .lib-dialog footer {
   flex-wrap: wrap;
-  margin-top: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--lib-line);
+  gap: 12px;
+}
+/* Действия в предпросмотре шаблона */
+
+.lib-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.lib-preview-actions .lib-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.lib-preview-actions .lib-button svg {
+  flex-shrink: 0;
+}
+
+.lib-preview-actions .lib-icon {
+  gap: 0;
+}
+@media (max-width: 720px) {
+  .lib-preview-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .lib-preview-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .lib-preview-actions .lib-button:not(.lib-icon) {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .lib-preview-actions .lib-icon {
+    grid-column: 2;
+    justify-self: end;
+  }
 }
 .lib-dialog header div {
   min-width: 0;

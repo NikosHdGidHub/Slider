@@ -165,7 +165,11 @@ export function LessonLibrary({
           <LibraryItems settings={settings} columns={['Слайды', 'Изменено']}>
             {visible.map((entry) => {
               const actions: MenuItem[] = [
-                { label: 'Открыть', icon: Play, run: () => view(entry.deck) },
+                {
+                  label: 'Просмотр',
+                  icon: Play,
+                  run: () => view(entry.deck),
+                },
               ]
               if (editable)
                 actions.push({
@@ -216,7 +220,16 @@ export function LessonLibrary({
                       {formatDate.format(entry.updated)}
                     </time>
                   }
-                  open={() => view(entry.deck)}
+                  //ПРОСТОЕ ОТКРЫТИЕ
+                  //open={() => view(entry.deck)}
+                  //ОТКРЫТИЕ РЕДАКТОРА
+                  open={() => {
+                    if (editable) {
+                      edit(entry)
+                    } else {
+                      view(entry.deck)
+                    }
+                  }}
                   actions={actions}
                   notice={notice}
                 />

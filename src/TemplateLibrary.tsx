@@ -96,6 +96,7 @@ export function TemplateLibrary({
     template: Template
     importing: boolean
     source?: unknown
+    row?: CatalogRow
   } | null>(null)
   const [originals, setOriginals] = useState(new Set<string>())
   useEffect(() => {
@@ -143,7 +144,48 @@ export function TemplateLibrary({
       setBusy(false)
     }
   }
+  function previewActions(row: CatalogRow) {
+    const menu = actions(row)
 
+    function get(label: string) {
+      return menu.find((item) => item !== 'separator' && item.label === label)
+    }
+
+    function handler(label: string, closeAfter = false) {
+      const action = get(label)
+
+      if (!action || action === 'separator' || action.disabled) {
+        return undefined
+      }
+
+      return async () => {
+        if (busy) return
+
+        try {
+          setPreviewError('')
+
+          if (closeAfter) {
+            setPreview(null)
+          }
+
+          await action.run()
+        } catch (error) {
+          notice(
+            error instanceof Error
+              ? error.message
+              : 'Не удалось выполнить действие.'
+          )
+        }
+      }
+    }
+
+    return {
+      edit: handler('Редактировать', true),
+      create: handler('Создать методичку', true),
+      copy: handler('Создать копию'),
+      exportJSON: handler('Экспортировать JSON'),
+    }
+  }
   function actions(row: CatalogRow): MenuItem[] {
     const { template, builtin, entry } = row
     const { deck } = template
@@ -151,7 +193,12 @@ export function TemplateLibrary({
       {
         label: 'Предпросмотр',
         icon: Eye,
-        run: () => setPreview({ template, importing: false }),
+        run: () =>
+          setPreview({
+            template,
+            importing: false,
+            row,
+          }),
       },
     ]
     if (editable) {
@@ -415,7 +462,11 @@ export function TemplateLibrary({
                 disabled={busy}
                 notice={notice}
                 open={() =>
-                  setPreview({ template: row.template, importing: false })
+                  setPreview({
+                    template: row.template,
+                    importing: false,
+                    row,
+                  })
                 }
               />
             ))}
@@ -429,6 +480,11 @@ export function TemplateLibrary({
           importing={preview.importing}
           busy={busy}
           error={previewError}
+          actions={
+            !preview.importing && preview.row
+              ? previewActions(preview.row)
+              : undefined
+          }
           close={() => {
             setPreview(null)
             setPreviewError('')
@@ -518,6 +574,7 @@ function TemplatePreview({
   error,
   close,
   accept,
+  actions,
 }: {
   template: Template
   importing: boolean
@@ -525,6 +582,12 @@ function TemplatePreview({
   error: string
   close: () => void
   accept?: () => void
+  actions?: {
+    edit?: () => void | Promise<void>
+    create?: () => void | Promise<void>
+    copy?: () => void | Promise<void>
+    exportJSON?: () => void | Promise<void>
+  }
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const [index, setIndex] = useState(0)
@@ -610,6 +673,56 @@ function TemplatePreview({
               <ArrowRight />
             </IconButton>
           </nav>
+        )}
+        {actions && (
+          <div className="lib-preview-actions">
+            {actions.edit && (
+              <button
+                type="button"
+                className="lib-button lib-secondary"
+                disabled={busy}
+                onClick={actions.edit}
+              >
+                <Pencil size={16} />
+                <span>Редактировать</span>
+              </button>
+            )}
+
+            {actions.create && (
+              <button
+                type="button"
+                className="lib-button lib-primary"
+                disabled={busy}
+                onClick={actions.create}
+              >
+                <Plus size={16} />
+                <span>Создать методичку</span>
+              </button>
+            )}
+
+            {actions.copy && (
+              <button
+                type="button"
+                className="lib-button lib-secondary"
+                disabled={busy}
+                onClick={actions.copy}
+              >
+                <Copy size={16} />
+                <span>Создать копию</span>
+              </button>
+            )}
+
+            {actions.exportJSON && (
+              <IconButton
+                className="lib-button lib-secondary lib-icon"
+                label="Экспортировать JSON"
+                disabled={busy}
+                onClick={actions.exportJSON}
+              >
+                <Download />
+              </IconButton>
+            )}
+          </div>
         )}
         {accept && (
           <button

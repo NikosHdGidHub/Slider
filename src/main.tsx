@@ -32,6 +32,10 @@ import {
   QrCode,
   LogIn,
   RefreshCw,
+  Save,
+  ArrowLeft,
+  Download,
+  Check,
 } from 'lucide-react'
 import {
   newDeck,
@@ -151,7 +155,12 @@ function App() {
   const [editingTemplate, setEditingTemplate] = useState<{
     t: Template
     row?: CatalogRow
+    baseline: string
   } | null>(null)
+
+  const templateDirty =
+    editingTemplate !== null &&
+    JSON.stringify(editingTemplate.t) !== editingTemplate.baseline
   const templateHistory = useHistory(
     editingTemplate?.t,
     (t) => {
@@ -598,7 +607,40 @@ function App() {
       'Открыта актуальная публикация. Предыдущий черновик сохранён в библиотеке с пометкой «до синхронизации».'
     )
   }
+  function closeTemplateEditor() {
+    setEditingTemplate(null)
+    setModal('')
+  }
 
+  function requestTemplateExit() {
+    if (!editingTemplate) return
+
+    if (!templateDirty) {
+      closeTemplateEditor()
+      return
+    }
+
+    setModal('leave-template')
+  }
+
+  async function saveTemplateAndExit() {
+    if (!editingTemplate) return
+
+    const t = validateTemplate(structuredClone(editingTemplate.t))
+
+    if (t.format === FORMAT_VERSION) {
+      t.deck.master.name = t.deck.title
+    }
+
+    await saveLocal(t, editingTemplate.row)
+    await refreshCatalog()
+
+    closeTemplateEditor()
+    setCatalogKind(t.kind)
+    navigate('templates')
+
+    notice('Шаблон сохранён.')
+  }
   function requestExit(next?: () => Promise<void>) {
     afterExit.current = next ?? null
 
@@ -632,6 +674,39 @@ function App() {
     setModal('')
     navigate(editorOrigin.current)
     await refresh()
+  }
+  async function savePublicationLocally(id: string): Promise<Entry> {
+    if (!allowed) {
+      throw Error('Для сохранения методички необходимо войти.')
+    }
+
+    const existing = (await entries()).find((entry) => entry.deck.id === id)
+
+    if (existing) {
+      return existing
+    }
+
+    const remote = validateDeck(await readPublic(id))
+
+    if (remote.id !== id) {
+      throw Error('Идентификатор публикации не совпадает со ссылкой.')
+    }
+
+    const hash = await fingerprint(remote)
+
+    await saveEntry(remote, 0)
+
+    localStorage.setItem(marker(id), hash)
+
+    await refresh()
+
+    const saved = (await entries()).find((entry) => entry.deck.id === id)
+
+    if (!saved) {
+      throw Error('Не удалось получить сохранённую методичку.')
+    }
+
+    return saved
   }
   async function insert(d: Deck) {
     if (!allowEditing()) return
@@ -954,7 +1029,13 @@ function App() {
                 connection={catalogConnection}
                 create={insert}
                 edit={(t, row) => {
-                  if (allowEditing()) setEditingTemplate({ t, row })
+                  if (allowEditing()) {
+                    setEditingTemplate({
+                      t,
+                      row,
+                      baseline: JSON.stringify(t),
+                    })
+                  }
                 }}
                 refresh={async () => {
                   await refreshCatalog()
@@ -1035,6 +1116,40 @@ function App() {
                         </strong>
                         <a href={link(id)}>{link(id)}</a>
                       </div>
+                      <button
+                        type="button"
+                        className="icon"
+                        disabled={
+                          !!busy ||
+                          !listReady ||
+                          list.some((entry) => entry.deck.id === id)
+                        }
+                        title={
+                          list.some((entry) => entry.deck.id === id)
+                            ? 'Методичка уже сохранена на устройстве'
+                            : 'Сохранить на устройство'
+                        }
+                        aria-label={
+                          list.some((entry) => entry.deck.id === id)
+                            ? 'Методичка уже сохранена на устройстве'
+                            : 'Сохранить на устройство'
+                        }
+                        onClick={() =>
+                          task('Сохраняем методичку…', async () => {
+                            await savePublicationLocally(id)
+
+                            notice(
+                              'Методичка сохранена в разделе «Мои методички».'
+                            )
+                          })
+                        }
+                      >
+                        {list.some((entry) => entry.deck.id === id) ? (
+                          <Check size={16} />
+                        ) : (
+                          <Download size={16} />
+                        )}
+                      </button>
                       {!phone && (
                         <button
                           className="icon"
@@ -1042,27 +1157,39 @@ function App() {
                           onClick={() =>
                             task('Открываем методичку…', async () => {
                               if (!allowEditing()) return
-                              const remote = validateDeck(await readPublic(id))
-                              if (remote.id !== id)
-                                throw Error(
-                                  'Идентификатор публикации не совпадает со ссылкой.'
-                                )
-                              const hash = await fingerprint(remote)
+
                               const local = (await entries()).find(
-                                (e) => e.deck.id === id
+                                (entry) => entry.deck.id === id
                               )
+
                               if (local) {
+                                const remote = validateDeck(
+                                  await readPublic(id)
+                                )
+
+                                if (remote.id !== id) {
+                                  throw Error(
+                                    'Идентификатор публикации не совпадает со ссылкой.'
+                                  )
+                                }
+
+                                const hash = await fingerprint(remote)
+
                                 if (
                                   (await fingerprint(local.deck)) !== hash &&
                                   !confirm(
                                     'На устройстве есть свой черновик. Открыть его с сохранением локальных изменений?'
                                   )
-                                )
+                                ) {
                                   return
+                                }
+
                                 open(local.deck, local.revision)
                               } else {
-                                localStorage.setItem(marker(id), hash)
-                                await insert(remote)
+                                const saved = await savePublicationLocally(id)
+
+                                open(saved.deck, saved.revision)
+
                                 notice(
                                   'Создан черновик из публикации. Нераспределённые элементы исходного черновика доступны только на исходном устройстве.'
                                 )
@@ -1131,7 +1258,8 @@ function App() {
       ) : hash.startsWith('#p/') ? (
         publicDeck ? (
           <Viewer
-            initialMode="slides"
+            key={publicDeck.id}
+            initialMode="teacher"
             deck={publicDeck}
             onPrepare={prepareForOffline}
             onClose={() => (location.hash = '')}
@@ -1157,26 +1285,8 @@ function App() {
           set={templateHistory.set}
           history={templateHistory}
           notice={notice}
-          back={() => {
-            if (
-              confirm(
-                'Закрыть конструктор? Изменения после последнего сохранения будут потеряны.'
-              )
-            )
-              setEditingTemplate(null)
-          }}
-          save={() =>
-            task('Сохраняем шаблон…', async () => {
-              const t = validateTemplate(editingTemplate.t)
-              t.deck.master.name = t.deck.title
-              await saveLocal(t, editingTemplate.row)
-              await refreshCatalog()
-              setEditingTemplate(null)
-              setCatalogKind(t.kind)
-              navigate('templates')
-              notice('Шаблон сохранён.')
-            })
-          }
+          back={requestTemplateExit}
+          save={() => task('Сохраняем шаблон…', saveTemplateAndExit)}
         />
       ) : editingTemplate && allowed && !phone ? (
         <Editor
@@ -1199,21 +1309,8 @@ function App() {
           change={(fn) =>
             templateHistory.update((t) => t && { ...t, deck: fn(t.deck) })
           }
-          back={() => {
-            if (confirm('Закрыть редактор без сохранения шаблона?'))
-              setEditingTemplate(null)
-          }}
-          saveTemplate={() =>
-            task('Сохраняем шаблон…', async () => {
-              const t = validateTemplate(editingTemplate.t)
-              await saveLocal(t, editingTemplate.row)
-              await refreshCatalog()
-              setEditingTemplate(null)
-              setCatalogKind(t.kind)
-              navigate('templates')
-              notice('Шаблон сохранён.')
-            })
-          }
+          back={requestTemplateExit}
+          saveTemplate={() => task('Сохраняем шаблон…', saveTemplateAndExit)}
           view={() => setWatch(editingTemplate.t.deck)}
           exportTemplate={() =>
             download(
@@ -1243,7 +1340,11 @@ function App() {
               current.current = null
               setCatalogKind('presentation')
               navigate('templates')
-              setEditingTemplate({ t, row })
+              setEditingTemplate({
+                t,
+                row,
+                baseline: JSON.stringify(t),
+              })
             })
           }
           styleLibrary={styleLibrary}
@@ -1306,6 +1407,7 @@ function App() {
                 {
                   sync: 'Публикация изменилась',
                   leave: 'Выход из редактора',
+                  'leave-template': 'Выход из редактора шаблона',
                   preview: 'Предпросмотр импорта',
                   create: 'Новая методичка',
                   import: 'Импорт JSON',
@@ -1365,6 +1467,56 @@ function App() {
 
                   <button
                     className="leave-action-cancel"
+                    onClick={() => setModal('')}
+                  >
+                    <Pencil size={16} />
+                    Продолжить редактирование
+                  </button>
+                </div>
+              </>
+            ) : modal === 'leave-template' ? (
+              <>
+                <p className="leave-description">
+                  В шаблоне есть несохранённые изменения. Что сделать перед
+                  выходом?
+                </p>
+
+                <div className="leave-actions">
+                  <button
+                    className="leave-action leave-action-publish"
+                    disabled={!!busy}
+                    onClick={() =>
+                      task('Сохраняем шаблон…', saveTemplateAndExit)
+                    }
+                  >
+                    <Save size={21} />
+
+                    <span className="leave-action-content">
+                      <strong>Сохранить и выйти</strong>
+
+                      <small>Сохранить изменения в библиотеке шаблонов</small>
+                    </span>
+
+                    <ArrowUpRight size={18} />
+                  </button>
+
+                  <button
+                    className="leave-action leave-action-local"
+                    disabled={!!busy}
+                    onClick={closeTemplateEditor}
+                  >
+                    <ArrowLeft size={21} />
+
+                    <span className="leave-action-content">
+                      <strong>Выйти без сохранения</strong>
+
+                      <small>Отменить изменения текущего сеанса</small>
+                    </span>
+                  </button>
+
+                  <button
+                    className="leave-action-cancel"
+                    disabled={!!busy}
                     onClick={() => setModal('')}
                   >
                     <Pencil size={16} />
