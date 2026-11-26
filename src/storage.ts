@@ -1,10 +1,11 @@
 import { validateTemplate, type Template } from './catalog'
 import { validateDeck, type Deck } from './model'
 import { FORMAT_VERSION } from './schema'
+import { appendCourseCommands, emptyCourseRecord, moveCommand, visibleCourses, type CourseRecord } from './courseModel'
 
 export type Entry = { deck: Deck; updated: number; revision: number }
 const opened = new Promise<IDBDatabase>((resolve, reject) => {
-  const request = indexedDB.open('atlas-lessons-v1', 3)
+  const request = indexedDB.open('atlas-lessons-v1', 4)
   request.onupgradeneeded = () => {
     if (!request.result.objectStoreNames.contains('lessons'))
       request.result.createObjectStore('lessons', { keyPath: 'deck.id' })
@@ -14,9 +15,15 @@ const opened = new Promise<IDBDatabase>((resolve, reject) => {
       request.result.createObjectStore('templates', {
         keyPath: 'template.deck.id',
       })
-    request.result.createObjectStore('originalDocuments')
+    if (!request.result.objectStoreNames.contains('originalDocuments'))
+      request.result.createObjectStore('originalDocuments')
+    if (!request.result.objectStoreNames.contains('libraryCourses'))
+      request.result.createObjectStore('libraryCourses')
   }
-  request.onsuccess = () => resolve(request.result)
+  request.onsuccess = () => {
+    request.result.onversionchange = () => request.result.close()
+    resolve(request.result)
+  }
   request.onerror = () => reject(request.error)
 })
 type OriginalKind = 'lesson' | 'template'
@@ -139,12 +146,15 @@ export async function saveEntry(
   deck: Deck,
   revision: number,
   remove = false,
-  backupBeforeSync = false
+  backupBeforeSync = false,
+  placement?: { scope: string; course: string }
 ) {
   if (!remove) validateDeck(deck)
   const db = await opened
   return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(['lessons', 'originalDocuments'], 'readwrite'),
+    const stores = ['lessons', 'originalDocuments']
+    if (placement) stores.push('libraryCourses')
+    const tx = db.transaction(stores, 'readwrite'),
       store = tx.objectStore('lessons')
     const read = store.get(deck.id)
     read.onsuccess = () => {
@@ -179,9 +189,18 @@ export async function saveEntry(
           store.add({ deck: backup, revision: 1, updated: Date.now() })
         }
         store.put({ deck, revision: revision + 1, updated: Date.now() })
+        if (placement) {
+          writeCourseRecord(tx, placement.scope, (record) =>
+            appendCourseCommands(record, [moveCommand(visibleCourses(record), [deck.id.toLowerCase()], placement.course)], placement.scope !== 'local'),
+            reject
+          )
+        }
       }
     }
-    tx.oncomplete = () => resolve()
+    tx.oncomplete = () => {
+      if (placement) reportCourseChange(placement.scope)
+      resolve()
+    }
     tx.onabort = () =>
       reject(tx.error || new Error('Запись в браузер прервана.'))
   })
@@ -248,4 +267,58 @@ export async function rememberImage(hash: string, source: string) {
     'offline:' + hash,
     source.startsWith('data:') ? 'embedded' : source
   )
+}
+
+const courseEvents = new EventTarget()
+const courseChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('atlas-library-courses-v1') : undefined
+if (courseChannel) courseChannel.onmessage = (event) => {
+  if (typeof event.data === 'string') courseEvents.dispatchEvent(new Event(event.data))
+}
+function reportCourseChange(scope: string) {
+  courseEvents.dispatchEvent(new Event(scope))
+  courseChannel?.postMessage(scope)
+}
+export function listenCourseChanges(scope: string, listener: () => void) {
+  courseEvents.addEventListener(scope, listener)
+  return () => courseEvents.removeEventListener(scope, listener)
+}
+function writeCourseRecord(
+  tx: IDBTransaction, scope: string, update: (record: CourseRecord) => CourseRecord, reject: (error: unknown) => void
+) {
+  const store = tx.objectStore('libraryCourses')
+  const request = store.get(scope)
+  let changed = false
+  request.onsuccess = () => {
+    try {
+      const before: CourseRecord = request.result ?? emptyCourseRecord()
+      const after = update(before)
+      if (after === before) return
+      store.put(after, scope)
+      changed = true
+    } catch (error) {
+      reject(error)
+      tx.abort()
+    }
+  }
+  return () => changed
+}
+export async function readCourseRecord(scope: string): Promise<CourseRecord> {
+  const db = await opened
+  return new Promise((resolve, reject) => {
+    const request = db.transaction('libraryCourses').objectStore('libraryCourses').get(scope)
+    request.onsuccess = () => resolve(request.result ?? emptyCourseRecord())
+    request.onerror = () => reject(request.error)
+  })
+}
+export async function updateCourseRecord(scope: string, update: (record: CourseRecord) => CourseRecord) {
+  const db = await opened
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('libraryCourses', 'readwrite')
+    const changed = writeCourseRecord(tx, scope, update, reject)
+    tx.oncomplete = () => {
+      if (changed()) reportCourseChange(scope)
+      resolve()
+    }
+    tx.onabort = () => reject(tx.error ?? Error('Не удалось сохранить структуру курсов на устройстве.'))
+  })
 }
