@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { sourceText, type Item, type Slide, type Deck } from './model'
 import { isTextType } from './textTypes'
-import type { TextSelectionControls } from './VisualText'
+import type { TextSelectionControls, TextEditStart } from './VisualText'
 import './viewer.css'
 import { PathHandles } from './PathHandles'
 import { TextBlock, VectorShape, useFonts } from './Artwork'
@@ -13,12 +13,13 @@ interface StageProps {
   deck?: Deck
   onText?: (id: string, fields: Partial<Item>) => void
   onNodes?: (id: string, nodes: NonNullable<Item['nodes']>) => void
-  onEditText?: (id: string) => void
+  onEditText?: (id: string, start: TextEditStart) => void
+  finishTextEdit?: () => void
   diagnostics?: boolean
   design?: boolean
   onSlot?: (id: string) => void
-  onSlotEdit?: (id: string) => void
-  editItem?: string
+  onSlotEdit?: (id: string, start: TextEditStart) => void
+  textEdit?: TextEditStart & { id: string }
   registerText?: (controls: TextSelectionControls | null) => void
   undo?: (redo: boolean) => void
   showSource?: boolean
@@ -79,11 +80,12 @@ export function Stage({
   slide,
   deck,
   onEditText,
+  finishTextEdit,
   diagnostics,
   design,
   onSlot,
   onSlotEdit,
-  editItem,
+  textEdit,
   registerText,
   undo,
   showSource,
@@ -106,6 +108,9 @@ export function Stage({
     pointer: number
     bounds: { w: number; h: number }
     resize: boolean
+    moved: boolean
+    locked: boolean
+    editText: boolean
   } | null>(null)
   useLayoutEffect(() => {
     const el = host.current
@@ -128,7 +133,12 @@ export function Stage({
     e.stopPropagation()
     e.preventDefault()
     onSelect(item.id)
-    if (locked) return
+    const editText =
+      !resize &&
+      !!onEditText &&
+      textEdit?.id !== item.id &&
+      (e.target as Element).closest('[data-editable-text]') !== null
+    if (locked && !editText) return
     ;(e.target as Element).setPointerCapture(e.pointerId)
     drag.current = {
       item,
@@ -145,11 +155,18 @@ export function Stage({
       },
       pointer: e.pointerId,
       resize,
+      moved: false,
+      locked,
+      editText,
     }
   }
   function move(e: ReactPointerEvent) {
     const run = drag.current
     if (!run || run.pointer !== e.pointerId) return
+    if (!run.moved && Math.hypot(e.clientX - run.x, e.clientY - run.y) < 4)
+      return
+    run.moved = true
+    if (run.locked) return
     const dx = (e.clientX - run.x) / run.scale
     const dy = (e.clientY - run.y) / run.scale
     const item = run.item
@@ -190,7 +207,11 @@ export function Stage({
     }
   }
   function end(e: ReactPointerEvent) {
-    if (drag.current?.pointer === e.pointerId) drag.current = null
+    const run = drag.current
+    if (run?.pointer !== e.pointerId) return
+    drag.current = null
+    if (e.type === 'pointerup' && !run.moved && run.editText)
+      onEditText?.(run.item.id, { point: { left: e.clientX, top: e.clientY } })
   }
   return (
     <div
@@ -260,10 +281,12 @@ export function Stage({
                 e.stopPropagation()
                 onSlot(v.id)
               }}
-              onDoubleClick={(event) => {
+              onClick={(event) => {
                 if (!show || !onSlotEdit) return
                 event.stopPropagation()
-                onSlotEdit(v.id)
+                onSlotEdit(v.id, {
+                  point: { left: event.clientX, top: event.clientY },
+                })
               }}
               style={{
                 position: 'absolute',
@@ -390,12 +413,6 @@ export function Stage({
                       ? `drop-shadow(${item.shadow.x}px ${item.shadow.y}px ${item.shadow.blur}px ${item.shadow.color})`
                       : undefined,
                   }}
-                  onDoubleClick={() =>
-                    !original.locked &&
-                    (!original.fixed || design) &&
-                    item.type !== 'image' &&
-                    onEditText?.(item.id)
-                  }
                   onPointerDown={(e) =>
                     start(
                       e,
@@ -413,7 +430,8 @@ export function Stage({
                       {item.type === 'shape' && <VectorShape item={item} />}
                       {(item.type === 'text' ||
                         item.text ||
-                        item.paragraphs) && (
+                        item.paragraphs ||
+                        textEdit?.id === item.id) && (
                         <TextBlock
                           onText={
                             onText &&
@@ -424,10 +442,10 @@ export function Stage({
                           }
                           item={item}
                           cell={hostSlot?.cell}
-                          autoEdit={editItem === item.id}
+                          edit={textEdit?.id === item.id ? textEdit : undefined}
+                          finishEdit={finishTextEdit}
                           registerText={registerText}
                           undo={undo}
-                          onEdit={() => onEditText?.(item.id)}
                           deck={deck}
                           editing={!!onSelect || !!diagnostics}
                         />

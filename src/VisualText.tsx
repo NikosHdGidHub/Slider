@@ -100,6 +100,11 @@ function fieldsFor(doc: Node, flexible: boolean): Partial<Item> {
   }
 }
 
+export interface TextEditStart {
+  point?: { left: number; top: number }
+  selectAll?: boolean
+}
+
 export interface TextSelectionControls {
   values?: Characters
   appearance: (fields: Characters | null) => void
@@ -111,6 +116,7 @@ export interface TextSelectionControls {
 
 export function VisualText({
   item,
+  start,
   flexible,
   onText,
   finish,
@@ -119,6 +125,7 @@ export function VisualText({
   undo,
 }: {
   item: Item
+  start: TextEditStart
   flexible: boolean
   onText: (fields: Partial<Item>) => void
   finish: () => void
@@ -127,6 +134,7 @@ export function VisualText({
   undo?: (redo: boolean) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
+  const initial = useRef(start)
   const view = useRef<EditorView>(null)
   const current = useRef({ item, onText, finish, register, runStyle, undo })
   current.current = { item, onText, finish, register, runStyle, undo }
@@ -309,6 +317,16 @@ export function VisualText({
       current.current.finish()
     }
     element.ownerDocument.addEventListener('pointerdown', outside, true)
+    const { point, selectAll } = initial.current
+    const doc = editor.state.doc
+    const position = point ? editor.posAtCoords(point)?.pos : undefined
+    editor.dispatch(
+      editor.state.tr.setSelection(
+        selectAll
+          ? TextSelection.create(doc, 1, doc.content.size - 1)
+          : TextSelection.near(doc.resolve(position ?? doc.content.size - 1))
+      )
+    )
     editor.focus()
     return () => {
       element.ownerDocument.removeEventListener('pointerdown', outside, true)

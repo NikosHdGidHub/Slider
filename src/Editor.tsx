@@ -52,7 +52,7 @@ import { applyLayout, type Template } from './catalog'
 import { importSVG } from './vectorImport'
 import { Stage } from './Stage'
 import { isTextType } from './textTypes'
-import type { TextSelectionControls } from './VisualText'
+import type { TextSelectionControls, TextEditStart } from './VisualText'
 import {
   newSlide,
   sourceText,
@@ -119,7 +119,9 @@ export function Editor({
     [sel, select] = useState('')
   const [inspectorRequest, requestInspector] = useState(0)
   const [selectedSlot, setSelectedSlot] = useState('')
-  const [editItem, setEditItem] = useState('')
+  const [edit, setEdit] = useState<
+    (TextEditStart & { id: string; slideId: string; source?: Item }) | null
+  >(null)
   const [textControls, setTextControls] =
     useState<TextSelectionControls | null>(null)
   const thumbnailList = useRef<HTMLDivElement>(null)
@@ -146,18 +148,22 @@ export function Editor({
   const itemCell = item?.fixed
     ? undefined
     : locations.find((v) => v.id === item?.slot)?.cell
-  function editSource(id: string, text?: string) {
+  const textEdit = edit?.slideId === slide.id ? edit : null
+  const draft =
+    textEdit?.source && !slide.items.some((o) => o.id === textEdit.id)
+      ? textEdit.source
+      : undefined
+  function editText(id: string, start: TextEditStart = {}) {
+    select(id)
+    setEdit({ ...start, id, slideId: slide.id })
+  }
+  function editSource(id: string, start: TextEditStart = {}) {
     const dest = locations.find((v) => v.id === id)
     if (!dest || !isTextType(dest.cell.type)) return
-    const entry = {
-      ...newText(),
-      text: text ?? sourceText(dest.cell),
-      slot: id,
-    }
-    modify((s) => ({ ...s, items: [...s.items, entry] }))
-    select(entry.id)
-    if (text === undefined) setEditItem(entry.id)
-    requestInspector((value) => value + 1)
+    const source = { ...newText(), text: sourceText(dest.cell), slot: id }
+    setSelectedSlot(id)
+    select(source.id)
+    setEdit({ ...start, id: source.id, slideId: slide.id, source })
   }
   function additions(s: Slide, added: Item[]) {
     const available = slots(deck.master, s),
@@ -184,7 +190,7 @@ export function Editor({
   function patch(id: string, fields: Partial<Item>) {
     modify((s) => ({
       ...s,
-      items: s.items.map((it) =>
+      items: (draft?.id === id ? [...s.items, draft] : s.items).map((it) =>
         it.id === id
           ? (Object.fromEntries(
               Object.entries({ ...it, ...fields }).filter(
@@ -663,12 +669,13 @@ export function Editor({
               <IconButton
                 label="Добавить текст"
                 onClick={() => {
-                  const text = newText()
+                  const [text] = additions(slide, [newText()])
                   modify((s) => ({
                     ...s,
-                    items: [...s.items, ...additions(s, [text])],
+                    items: [...s.items, text],
                   }))
-                  select(text.id)
+                  if (target(text) === 'tray') select(text.id)
+                  else editText(text.id, { selectAll: true })
                 }}
               >
                 <Type />
@@ -1116,20 +1123,21 @@ export function Editor({
         >
           <Stage
             deck={deck}
-            slide={slide}
+            slide={draft ? { ...slide, items: [...slide.items, draft] } : slide}
             design={!!saveTemplate}
             selected={sel}
             onSlot={(id) => {
               chosenSlot.current = id
               setSelectedSlot(id)
               select('')
-              const dest = locations.find((v) => v.id === id)
-              if (dest?.cell.type === 'image') pickImage()
-              else if (isTextType(dest?.cell.type))
-                requestInspector((value) => value + 1)
+              if (locations.find((v) => v.id === id)?.cell.type === 'image')
+                pickImage()
             }}
             onSlotEdit={editSource}
-            editItem={editItem}
+            textEdit={textEdit ?? undefined}
+            finishTextEdit={() =>
+              setEdit((current) => (current === textEdit ? null : current))
+            }
             registerText={setTextControls}
             undo={(redo) =>
               history.actions
@@ -1138,12 +1146,8 @@ export function Editor({
             }
             onText={patch}
             onNodes={(id, nodes) => patch(id, { nodes })}
-            onEditText={(id) => {
-              select(id)
-              requestInspector((value) => value + 1)
-            }}
+            onEditText={editText}
             onSelect={(id) => {
-              if (id !== sel) setEditItem('')
               setSelectedSlot('')
               select(id)
             }}

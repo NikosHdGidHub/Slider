@@ -17,7 +17,11 @@ import {
 } from './model'
 import { fontCatalog, fontPath } from './fontCatalog'
 import type { Cell } from './grid'
-import { VisualText, type TextSelectionControls } from './VisualText'
+import {
+  VisualText,
+  type TextSelectionControls,
+  type TextEditStart,
+} from './VisualText'
 
 const builtinDocuments = new WeakSet<Document>()
 function installBuiltins(doc: Document) {
@@ -142,8 +146,8 @@ export function TextBlock({
   deck,
   cell,
   editing,
-  autoEdit,
-  onEdit,
+  edit,
+  finishEdit,
   onText,
   registerText,
   undo,
@@ -152,8 +156,8 @@ export function TextBlock({
   deck?: Deck
   cell?: Cell
   editing: boolean
-  autoEdit?: boolean
-  onEdit?: () => void
+  edit?: TextEditStart
+  finishEdit?: () => void
   undo?: (redo: boolean) => void
   onText?: (fields: Partial<Item>) => void
   registerText?: (controls: TextSelectionControls | null) => void
@@ -161,7 +165,7 @@ export function TextBlock({
   const box = useRef<HTMLDivElement>(null)
   const style = typography(item, deck, cell)
   const flexible = itemTextType(item, cell) === 'text'
-  const [active, setActive] = useState(!!autoEdit)
+  const active = !!edit && !!onText
   const [overflow, setOverflow] = useState(false)
   const padding = Array.isArray(style.padding)
     ? style.padding
@@ -218,13 +222,7 @@ export function TextBlock({
         ref={box}
         className="atlas-slide-text"
         data-overflow={overflow || undefined}
-        onDoubleClick={(event) => {
-          if (!onText) return
-          event.preventDefault()
-          event.stopPropagation()
-          onEdit?.()
-          setActive(true)
-        }}
+        data-editable-text={onText ? '' : undefined}
         style={{
           padding: padding.map((n) => n + 'px').join(' '),
           boxSizing: 'border-box',
@@ -262,12 +260,13 @@ export function TextBlock({
             } as CSSProperties
           }
         >
-          {active && onText ? (
+          {edit && finishEdit && onText ? (
             <VisualText
               item={item}
               flexible={flexible}
               onText={onText}
-              finish={() => setActive(false)}
+              start={edit}
+              finish={finishEdit}
               register={registerText}
               undo={undo}
               runStyle={runStyle}
