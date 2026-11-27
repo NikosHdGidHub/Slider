@@ -34,9 +34,19 @@ export function useCoursePublications(
         return
       }
       const rows = await publicationCatalog(owner, signal)
+
       if (signal.aborted) return
+
       setState({ owner, rows })
-      await savedPublicCatalog(owner, rows)
+
+      try {
+        await savedPublicCatalog(owner, rows)
+      } catch (error) {
+        console.warn(
+          '[Atlas] Не удалось сохранить каталог публикаций в IndexedDB',
+          error
+        )
+      }
     })()
       .catch(() => {
         if (!signal.aborted) setFailure(true)
