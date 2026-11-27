@@ -11,8 +11,10 @@ import {
 } from './courseModel'
 
 import {
-  packWorking,
+  packLocalDocument,
+  unpackLocalDocument,
   workingDeck,
+  type StoredWorkingDocument,
   type WorkingDocument,
   type WorkingKind,
   type WorkingRecord,
@@ -34,6 +36,36 @@ export function currentWorkingOwner() {
 }
 export function assetScope(owner: string | null): string {
   return owner ?? 'local'
+}
+type StoredDocumentRow = {
+  packed?: StoredWorkingDocument
+  deck?: unknown
+  template?: unknown
+  scope?: string
+}
+
+async function restoreStoredDocument(
+  kind: WorkingKind,
+  record: StoredDocumentRow,
+  owner: string | null
+): Promise<WorkingDocument> {
+  if (!belongs(record, owner))
+    throw Error('Документ принадлежит другому аккаунту.')
+  if (!record.packed) {
+    return kind === 'lesson'
+      ? validateDeck(record.deck)
+      : validateTemplate(record.template)
+  }
+
+  const id = workingDeck(record.packed.document).id
+
+  return unpackLocalDocument(kind, id, record.packed, async (sha) => {
+    const asset = await workingAsset(assetScope(record.scope ?? null), sha)
+
+    if (!asset) throw Error('Отсутствует локальный ресурс: ' + sha.slice(0, 12))
+
+    return asset.blob
+  })
 }
 const workingChanges = new EventTarget()
 const workingChannel =
@@ -177,43 +209,65 @@ export function unreadableDocuments(kind: OriginalKind) {
 async function listDocuments<T>(
   kind: OriginalKind,
   store: 'lessons' | 'templates',
-  read: (record: T) => T
+  read: (record: T) => T | Promise<T>
 ) {
   const owner = workingOwner
   const db = await opened
-  return new Promise<T[]>((resolve, reject) => {
+
+  const records = await new Promise<any[]>((resolve, reject) => {
     const query = db.transaction(store).objectStore(store).getAll()
-    query.onsuccess = () => {
-      const failures: UnreadableDocument[] = []
-      const rows: T[] = []
-      for (const record of query.result) {
-        if (!belongs(record, owner)) continue
-        try {
-          rows.push(read(record))
-        } catch (error) {
-          const source = record.template ?? record.deck
-          failures.push({
-            title: source?.title ?? source?.deck?.title ?? 'Документ',
-            message:
-              error instanceof Error
-                ? error.message
-                : 'Ошибка чтения документа.',
-            source,
-          })
-        }
-      }
-      unreadable[kind] = failures
-      resolve(rows)
-    }
+
+    query.onsuccess = () => resolve(query.result)
+
     query.onerror = () => reject(query.error)
   })
+
+  const failures: UnreadableDocument[] = []
+  const rows: T[] = []
+
+  for (const record of records) {
+    if (!belongs(record, owner)) continue
+
+    try {
+      rows.push(await read(record))
+    } catch (error) {
+      const source = record.packed?.document ?? record.template ?? record.deck
+
+      failures.push({
+        title: source?.title ?? source?.deck?.title ?? 'Документ',
+
+        message:
+          error instanceof Error ? error.message : 'Ошибка чтения документа.',
+
+        source,
+      })
+    }
+  }
+
+  unreadable[kind] = failures
+
+  return rows
 }
 
 export async function entries(): Promise<Entry[]> {
-  const rows = await listDocuments<Entry>('lesson', 'lessons', (entry) => ({
-    ...entry,
-    deck: validateDeck(entry.deck),
-  }))
+  const owner = workingOwner
+
+  const rows = await listDocuments<Entry>(
+    'lesson',
+    'lessons',
+
+    async (entry) => {
+      const document = await restoreStoredDocument('lesson', entry, owner)
+
+      if ('deck' in document) throw Error('Ожидалась методичка.')
+
+      return {
+        ...entry,
+        deck: document,
+      }
+    }
+  )
+
   return rows.sort((a, b) => b.updated - a.updated)
 }
 export async function saveEntry(
@@ -225,16 +279,18 @@ export async function saveEntry(
   deleteCloud = false,
   owner = workingOwner
 ) {
+  let packed: StoredWorkingDocument | undefined
+
   const assets = new Map<string, Blob>()
 
   if (!remove) {
     deck = await prepareDocumentImages(deck)
 
-    const packed = await packWorking('lesson', deck)
+    const result = await packLocalDocument('lesson', deck)
 
-    for (const [sha, blob] of packed.assets) {
-      assets.set(sha, blob)
-    }
+    packed = result.stored
+
+    for (const [sha, blob] of result.assets) assets.set(sha, blob)
   }
 
   const db = await opened
@@ -302,7 +358,8 @@ export async function saveEntry(
           })
         }
         store.put({
-          deck,
+          deck: packed ? packed.document : deck,
+          packed,
           revision: revision + 1,
           updated: Date.now(),
           scope: owner ?? undefined,
@@ -358,14 +415,31 @@ export interface TemplateEntry {
   scope?: string
 }
 export function localTemplates() {
-  return listDocuments<TemplateEntry>('template', 'templates', (entry) => ({
-    ...entry,
-    template: validateTemplate(entry.template),
-  }))
+  const owner = workingOwner
+
+  return listDocuments<TemplateEntry>(
+    'template',
+    'templates',
+
+    async (entry) => {
+      const document = await restoreStoredDocument('template', entry, owner)
+
+      if (!('deck' in document)) throw Error('Ожидался шаблон.')
+
+      return {
+        ...entry,
+        template: document,
+      }
+    }
+  )
 }
 export async function writeTemplate(entry: TemplateEntry, remove = false) {
   const owner = workingOwner
+
+  let packed: StoredWorkingDocument | undefined
+
   const assets = new Map<string, Blob>()
+
   if (!remove) {
     entry = {
       ...entry,
@@ -374,6 +448,12 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
         deck: await prepareDocumentImages(entry.template.deck),
       }),
     }
+
+    const result = await packLocalDocument('template', entry.template)
+
+    packed = result.stored
+
+    for (const [sha, blob] of result.assets) assets.set(sha, blob)
   }
 
   const db = await opened
@@ -411,7 +491,13 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
           storeOriginal(tx, 'template', id, q.result.template)
         store.put({
           ...entry,
+
+          template: packed ? packed.document : entry.template,
+
+          packed,
+
           revision: entry.revision + 1,
+
           scope: owner ?? undefined,
         })
       }
@@ -601,8 +687,9 @@ export async function registerWorking(owner: string) {
           const source = kind === 'lesson' ? existing.deck : existing.template
           let document: WorkingDocument
           try {
-            document =
-              kind === 'lesson'
+            document = existing.packed
+              ? existing.packed.document
+              : kind === 'lesson'
                 ? validateDeck(source)
                 : validateTemplate(source)
           } catch {
@@ -613,6 +700,7 @@ export async function registerWorking(owner: string) {
           const read = state.get(key)
           read.onsuccess = () => {
             if (read.result && existing.scope) return
+            if (!existing.scope && existing.packed) return
             if (!existing.scope) collection.put({ ...existing, scope: owner })
             if (read.result?.dirty) return
             const previous: WorkingRecord = {
@@ -684,26 +772,25 @@ export async function localWorkingDocument(
   state: WorkingRecord
 ): Promise<WorkingDocument | undefined> {
   if (state.deleted) return state.previous
+
   const db = await opened
-  return new Promise((resolve, reject) => {
-    const table = state.kind === 'lesson' ? 'lessons' : 'templates'
+
+  const table = state.kind === 'lesson' ? 'lessons' : 'templates'
+
+  const row = await new Promise<any>((resolve, reject) => {
     const read = db
       .transaction(table)
       .objectStore(table)
       .get(state.localId ?? state.id)
-    read.onsuccess = () => {
-      const row = read.result
-      if (!row || !belongs(row, owner)) return resolve(undefined)
-      try {
-        resolve(
-          row.deck ? validateDeck(row.deck) : validateTemplate(row.template)
-        )
-      } catch (error) {
-        reject(error)
-      }
-    }
+
+    read.onsuccess = () => resolve(read.result)
+
     read.onerror = () => reject(read.error)
   })
+
+  if (!row || !belongs(row, owner)) return undefined
+
+  return restoreStoredDocument(state.kind, row, owner)
 }
 export async function updateWorking(
   owner: string,
@@ -727,9 +814,9 @@ export async function updateWorking(
   for (const document of documentsToRetain) {
     const documentKind = 'deck' in document ? 'template' : 'lesson'
 
-    const packed = await packWorking(documentKind, document)
+    const result = await packLocalDocument(documentKind, document)
 
-    for (const [sha, blob] of packed.assets) assets.set(sha, blob)
+    for (const [sha, blob] of result.assets) assets.set(sha, blob)
   }
   const db = await opened
   return new Promise<boolean>((resolve, reject) => {
@@ -868,8 +955,10 @@ function retainAsset(
 
       name:
         existing?.name ??
-        'Изображение-' + sha.slice(0, 12) + '.' + assetExtension(blob.type),
-
+        (blob.type.startsWith('image/') ? 'Изображение-' : 'Ресурс-') +
+          sha.slice(0, 12) +
+          '.' +
+          assetExtension(blob.type),
       createdAt: existing?.createdAt ?? Date.now(),
     }
 
@@ -883,8 +972,6 @@ function retainDocumentAssets(
   assets: Map<string, Blob>
 ) {
   for (const [sha, blob] of assets) {
-    if (!blob.type.startsWith('image/')) continue
-
     retainAsset(tx, assetScope(owner), sha, blob)
   }
 }

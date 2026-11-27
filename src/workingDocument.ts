@@ -179,3 +179,47 @@ export async function unpackWorking(
     throw Error('Идентификатор облачного документа не совпадает.')
   return result
 }
+export type StoredWorkingDocument = {
+  document: WorkingDocument
+  hash: string
+  refs: string[]
+}
+
+export async function packLocalDocument(
+  kind: WorkingKind,
+  document: WorkingDocument
+) {
+  const packed = await packWorking(kind, document)
+
+  return {
+    stored: {
+      document: packed.document,
+      hash: packed.hash,
+      refs: [...packed.assets.keys()],
+    },
+    assets: packed.assets,
+  }
+}
+
+export async function unpackLocalDocument(
+  kind: WorkingKind,
+  id: string,
+  stored: StoredWorkingDocument,
+  resource: (sha: string) => Promise<Blob>
+) {
+  const meta: WorkingMeta = {
+    id: id.toLowerCase(),
+    kind,
+    title: workingDeck(stored.document).title,
+    slides: workingDeck(stored.document).slides.length,
+    templateKind: 'deck' in stored.document ? stored.document.kind : null,
+    templateFormat: null,
+    revision: 0,
+    hash: stored.hash,
+    updated: '',
+    deleted: null,
+    restorable: false,
+  }
+
+  return unpackWorking(meta, stored.document, resource)
+}
