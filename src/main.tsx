@@ -1,3 +1,5 @@
+import { LibraryStatusDetails, useLibraryStatus } from './LibraryStatus'
+import { AlertCircle, AlertTriangle } from 'lucide-react'
 import { FORMAT_VERSION } from './schema'
 import {
   desktopEditingMessage,
@@ -232,7 +234,30 @@ function App() {
     doc ? 'lesson' : editingTemplate ? 'template' : undefined,
     doc?.id ?? editingTemplate?.t.deck.id
   )
-  const sync = syncSummary(working, courses, online, !!signedInOwner, localMode)
+  const baseSync = syncSummary(
+    working,
+    courses,
+    online,
+    !!signedInOwner,
+    localMode
+  )
+  const pageStatuses = useLibraryStatus()
+  const hasPageError = pageStatuses.some((item) => item.level === 'error')
+  const hasPageWarning = pageStatuses.some((item) => item.level === 'warning')
+  const hasPageBusy = pageStatuses.some((item) => item.level === 'busy')
+  const sync =
+    baseSync.label === 'Обнаружен конфликт' ||
+    baseSync.label === 'Ошибка синхронизации'
+      ? baseSync
+      : hasPageError
+        ? { label: 'Ошибка библиотеки', Icon: AlertCircle }
+        : !online
+          ? baseSync
+          : hasPageWarning
+            ? { label: 'Требуется внимание', Icon: AlertTriangle }
+            : hasPageBusy || busy
+              ? { label: 'Обновление…', Icon: RefreshCw }
+              : baseSync
   const libraryRows = useMemo(() => {
     const rows = new Map<string, LessonRow>(
       list.map((entry) => [entry.deck.id.toLowerCase(), entry])
@@ -1812,17 +1837,19 @@ function App() {
             aria-label={'Синхронизация: ' + sync.label}
             title={sync.label}
           >
-            <sync.Icon size={15} /> {sync.label}
+            <sync.Icon size={15} />
+            <span>{sync.label}</span>
           </button>
         </header>
         <main
           className="library"
           ref={libraryContent}
           data-library={
-            ['library', 'templates', 'published'].includes(page) || undefined
+            ['library', 'templates', 'published', 'files'].includes(page) ||
+            undefined
           }
         >
-          {!['library', 'templates', 'published'].includes(page) && (
+          {!['library', 'templates', 'published', 'files'].includes(page) && (
             <div className="title-row">
               <h1>
                 {page === 'guide'
@@ -1963,7 +1990,7 @@ function App() {
             </ActionMenus>
           ) : page === 'files' && allowed ? (
             <FileLibrary
-              onMaintenance={async()=>{
+              onMaintenance={async () => {
                 await refresh()
                 await refreshCatalog()
                 working.retry()
@@ -2316,26 +2343,29 @@ function App() {
             </h2>
 
             {modal === 'working-sync' ? (
-              <WorkingSyncPanel
-                owner={workingOwner}
-                sync={working}
-                courses={courses}
-                online={online}
-                authorized={!!signedInOwner}
-                local={localMode}
-                inEditor={inEditor}
-                retry={retrySync}
-                notice={notice}
-                view={(deck) => {
-                  setModal('')
-                  setWatch(deck)
-                }}
-                openCourses={() => {
-                  setModal('')
-                  navigate('library')
-                }}
-                login={() => dialog('login')}
-              />
+              <>
+                <LibraryStatusDetails />
+                <WorkingSyncPanel
+                  owner={workingOwner}
+                  sync={working}
+                  courses={courses}
+                  online={online}
+                  authorized={!!signedInOwner}
+                  local={localMode}
+                  inEditor={inEditor}
+                  retry={retrySync}
+                  notice={notice}
+                  view={(deck) => {
+                    setModal('')
+                    setWatch(deck)
+                  }}
+                  openCourses={() => {
+                    setModal('')
+                    navigate('library')
+                  }}
+                  login={() => dialog('login')}
+                />
+              </>
             ) : modal === 'publication-qr' ? (
               <QrImage address={value} label="QR-код публикации" />
             ) : modal === 'sync' ? (

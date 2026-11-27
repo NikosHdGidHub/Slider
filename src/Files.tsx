@@ -4,13 +4,19 @@ import {
   FileCode2,
   FileText,
   FolderPlus,
-  ImageOff,
   Laptop,
-  LockKeyhole,
   Presentation,
   RefreshCw,
-  Search,
-  Upload,
+  Plus,
+  Settings,
+  SlidersHorizontal,
+  Download,
+  Pencil,
+  Link2,
+  Info,
+  Trash2,
+  Folder,
+  Eye,
 } from 'lucide-react'
 import { digest } from './digest'
 import { publicationUsage, removeUnusedFile } from './fileUsage'
@@ -24,82 +30,31 @@ import {
   updateFile,
   downloadFile,
   resourceKey,
+  uploadLibraryImage,
   type Resource,
 } from './resources'
-import { currentWorkingOwner, type Entry } from './storage'
-import { ResourceGallery, ResourcePicker } from './ResourceGallery'
+import { currentWorkingOwner, retainLibraryImage, type Entry } from './storage'
+import {
+  ResourceGallery,
+  ResourcePicker,
+  importedBlob,
+} from './ResourceGallery'
 import { ResourceMaintenance } from './ResourceMaintenance'
+import { ActionMenu, ActionMenus, type MenuItem } from './ActionMenu'
+import {
+  LibraryHeader,
+  LibraryToolbar,
+  LibraryItems,
+  LibraryCard,
+  LibraryState,
+  useLibrarySettings,
+  normalizeLibraryQuery,
+} from './Library'
+import { LibraryStatus } from './LibraryStatus'
+import { FileDialog } from './FileDialog'
+import { useStoredPreference } from './workspacePreferences'
 
-const formatOf = (mime: string) =>
-  ({
-    'image/png': 'PNG',
-    'image/jpeg': 'JPEG',
-    'image/webp': 'WebP',
-    'application/pdf': 'PDF',
-    'application/json': 'JSON',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation':
-      'PPTX',
-  })[mime] ?? 'Файл'
-const shortSize = (size: number) =>
-  size < 1024 * 1024
-    ? Math.max(1, Math.round(size / 1024)) + ' КиБ'
-    : new Intl.NumberFormat('ru', { maximumFractionDigits: 1 }).format(
-        size / (1024 * 1024)
-      ) + ' МиБ'
-const messageOf = (error: unknown) =>
-  typeof error === 'object' && error && 'message' in error
-    ? String(error.message)
-    : 'Не удалось выполнить операцию.'
-
-function EmptyFiles({
-  title,
-  children,
-}: {
-  title: string
-  children?: React.ReactNode
-}) {
-  return (
-    <div className="files-empty">
-      <ImageOff size={26} aria-hidden="true" />
-      <strong>{title}</strong>
-      {children}
-    </div>
-  )
-}
-
-function SearchBox({
-  query,
-  onChange,
-  placeholder = 'Поиск по названию',
-}: {
-  query: string
-  onChange: (value: string) => void
-  placeholder?: string
-}) {
-  return (
-    <label className="files-search">
-      <Search size={17} aria-hidden="true" />
-      <input
-        type="search"
-        aria-label={placeholder}
-        placeholder={placeholder}
-        value={query}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </label>
-  )
-}
-
-export function FileLibrary({
-  entries,
-  openLesson,
-  openJSON,
-  owner,
-  online,
-  allowed,
-  login,
-  onMaintenance,
-}: {
+type Props = {
   entries: Entry[]
   openLesson: (entry: Entry) => void
   openJSON?: (text: string) => Promise<void>
@@ -108,555 +63,756 @@ export function FileLibrary({
   allowed: boolean
   login: () => void
   onMaintenance?: () => Promise<void>
-}) {
-  const [tab, setTab] = useState<'local' | 'cloud'>('local')
-  const [maintenanceEpoch, setMaintenanceEpoch] = useState(0)
-  return (
-    <section className="files-library" aria-label="Библиотека файлов">
-      <p className="files-description">
-        Изображения из ваших методичек и материалы в облачном хранилище.
-      </p>
-      <div className="files-tabs" aria-label="Расположение файлов" role="group">
-        <button aria-pressed={tab === 'local'} onClick={() => setTab('local')}>
-          <Laptop size={18} />
-          На устройстве
-        </button>
-        <button aria-pressed={tab === 'cloud'} onClick={() => setTab('cloud')}>
-          <Cloud size={18} />В облаке
-        </button>
-      </div>
-      {allowed && <ResourceMaintenance owner={currentWorkingOwner()} online={online} onComplete={async()=>{
-        setMaintenanceEpoch(n=>n+1)
-        await onMaintenance?.()
-      }}/>}
-      {tab === 'local' ? (
-        allowed ? (
-          <ResourceGallery
-            key={(currentWorkingOwner() ?? "local") + ":" + maintenanceEpoch}
-            mode="local"
-            owner={currentWorkingOwner()}
-            lessonEntries={entries}
-            openLesson={openLesson}
-          />
-        ) : (
-          <EmptyFiles title="Войдите, чтобы открыть файлы своих методичек">
-            <button className="secondary" onClick={login}>
-              Войти
-            </button>
-          </EmptyFiles>
-        )
-      ) : !online ? (
-        <EmptyFiles title="Облачная библиотека недоступна без интернета">
-          <p>
-            Локальные методички и сохранённые в них изображения остаются на
-            устройстве.
-          </p>
-        </EmptyFiles>
-      ) : !owner ? (
-        <EmptyFiles title="Войдите, чтобы открыть облачную библиотеку">
-          <button className="secondary" onClick={login}>
-            Войти
-          </button>
-        </EmptyFiles>
-      ) : (
-        <Files key={maintenanceEpoch} openJSON={openJSON} />
-      )}
-    </section>
-  )
 }
-
-function CloudFiles({
-  pick,
+const errorText = (e: unknown) =>
+  e instanceof Error
+    ? e.message
+    : String((e as { message?: string })?.message ?? e)
+const isImage = (r: Resource) =>
+  r.bucket === 'images' &&
+  ['image/png', 'image/jpeg', 'image/webp'].includes(r.mime)
+const size = (n: number) =>
+  !n
+    ? '—'
+    : n < 1048576
+      ? Math.max(1, Math.round(n / 1024)) + ' КиБ'
+      : (n / 1048576).toLocaleString('ru', { maximumFractionDigits: 1 }) +
+        ' МиБ'
+const format = (r: Resource) =>
+  r.mime === 'application/json'
+    ? 'JSON'
+    : r.mime === 'application/pdf'
+      ? 'PDF'
+      : r.mime.includes('presentation')
+        ? 'PPTX'
+        : r.mime.split('/')[1]?.toUpperCase() || 'Файл'
+const fileDownload = async (r: Resource) => {
+  const url = URL.createObjectURL(await downloadFile(r))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = r.name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
+}
+type Catalog = {
+  rows: Resource[]
+  folders: string[]
+  usage?: Awaited<ReturnType<typeof publicationUsage>>
+  usageError: string
+}
+export function FileLibrary(props: Props) {
+  // Account change must not expose the preceding owner's cached view.
+  return <FileLibraryBody key={currentWorkingOwner() ?? 'local'} {...props} />
+}
+function FileLibraryBody({
+  entries,
+  openLesson,
   openJSON,
-}: {
-  pick?: (image: Awaited<ReturnType<typeof originalImage>>) => void
-  openJSON?: (text: string) => Promise<void>
-}) {
-  const [rows, setRows] = useState<Resource[]>()
-  const [folders, setFolders] = useState<string[]>([])
-  const [usage, setUsage] =
-    useState<Awaited<ReturnType<typeof publicationUsage>>>()
-  const [usageError, setUsageError] = useState('')
-  const [query, search] = useState('')
-  const [kind, filter] = useState('')
+  owner,
+  online,
+  allowed,
+  login,
+  onMaintenance,
+}: Props) {
+  const scope = currentWorkingOwner()
+  const settings = useLibrarySettings('files')
+  const [tab, setTab] = useStoredPreference<'local' | 'cloud'>(
+    'atlas.files.tab',
+    'local',
+    (v) => (v === 'local' || v === 'cloud' ? v : undefined)
+  )
+  const [kind, setKind] = useState('')
+  const [filter, setFilter] = useState('all')
   const [folder, setFolder] = useState('')
-  const [message, status] = useState('')
-  const [busy, working] = useState(false)
-  const [confirmFile, askDelete] = useState<Resource>()
-  const [preview, setPreview] = useState<Resource>()
+  const [catalog, setCatalog] = useState<Catalog>()
+  const [epoch, refresh] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [maintenance, setMaintenance] = useState(false)
+  const [filters, setFilters] = useState(false)
+  const [detail, setDetail] = useState<{
+    key: string
+    kind: 'info' | 'links' | 'move' | 'preview' | 'delete'
+  }>()
   const upload = useRef<HTMLInputElement>(null)
-  const mounted = useRef(false)
-  async function load() {
-    const [files, dirs] = await Promise.all([resources(), listFolders()])
-    setRows(files)
-    setFolders(dirs)
-    if (pick) return
-    setUsage(undefined)
-    setUsageError('')
-    try {
-      setUsage(await publicationUsage())
-    } catch (error) {
-      setUsageError(messageOf(error))
-    }
-  }
-  async function run(fn: () => Promise<void>, refresh = false) {
-    working(true)
-    status('')
-    try {
-      await fn()
-    } catch (error) {
-      status(messageOf(error))
-    } finally {
-      if (refresh) {
-        try {
-          await load()
-        } catch (error) {
-          status(messageOf(error))
-        }
-      }
-      working(false)
-    }
-  }
+  const uploadKind = useRef<'image' | 'document'>('image')
+  const lock = useRef(false)
+  const active = useRef(true)
+  const canCloud = !!scope && owner && online && allowed
   useEffect(() => {
-    mounted.current = true
-    void run(load)
+    active.current = true
     return () => {
-      mounted.current = false
+      active.current = false
     }
   }, [])
-  const visible =
-    rows?.filter(
-      (row) =>
-        !(
-          row.bucket === 'images' &&
-          ['image/png', 'image/jpeg', 'image/webp'].includes(row.mime)
-        ) &&
-        (!folder || row.folder === folder) &&
-        row.mime.startsWith(kind) &&
-        row.name.toLowerCase().includes(query.trim().toLowerCase())
-    ) ?? []
-  const options = [
+  useEffect(() => {
+    if (!owner || !allowed) {
+      setCatalog(undefined)
+      setDetail(undefined)
+    }
+  }, [owner, allowed])
+  useEffect(() => {
+    if (tab !== 'cloud' || !canCloud) {
+      setLoading(false)
+      return
+    }
+    let live = true
+    setLoading(true)
+    setLoadError('')
+    void (async () => {
+      const [rows, dirs] = await Promise.all([resources(), listFolders()])
+      let usage: Catalog['usage'],
+        usageError = ''
+      try {
+        usage = await publicationUsage()
+      } catch (e) {
+        usageError = errorText(e)
+      }
+      if (live && scope === currentWorkingOwner())
+        setCatalog({ rows, folders: dirs, usage, usageError })
+    })()
+      .catch((e) => {
+        if (live) setLoadError(errorText(e))
+      })
+      .finally(() => {
+        if (live) setLoading(false)
+      })
+    return () => {
+      live = false
+    }
+  }, [tab, canCloud, scope, epoch])
+  const reload = async () => {
+    if (tab === 'cloud' && canCloud) setLoading(true)
+    refresh((n) => n + 1)
+  }
+  async function run(fn: () => Promise<void>, reloadAfter = false) {
+    if (lock.current) return
+    lock.current = true
+    setBusy(true)
+    setError('')
+    try {
+      if (scope !== currentWorkingOwner()) throw Error('Изменился аккаунт.')
+      await fn()
+    } catch (e) {
+      if (active.current) setError(errorText(e))
+    } finally {
+      lock.current = false
+      if (active.current) {
+        if (reloadAfter) {
+          if (tab === 'cloud' && canCloud) setLoading(true)
+          refresh((n) => n + 1)
+        }
+        setBusy(false)
+      }
+    }
+  }
+  function pickUpload(type: 'image' | 'document') {
+    if (!allowed || (tab === 'cloud' && !canCloud)) return
+    uploadKind.current = type
+    const input = upload.current
+    if (input) {
+      input.accept =
+        type === 'image' ? '.png,.jpg,.jpeg,.webp,.svg' : '.pdf,.pptx,.json'
+      input.click()
+    }
+  }
+  const folders = [
     ...new Set([
-      ...folders,
-      ...(rows ?? []).map((row) => row.folder).filter(Boolean),
+      ...(catalog?.folders ?? []),
+      ...(catalog?.rows ?? []).map((r) => r.folder).filter(Boolean),
     ]),
   ].sort((a, b) => a.localeCompare(b, 'ru'))
-  const uploadButton = (
-    <button
-      className="primary files-upload"
-      onClick={() => upload.current?.click()}
-    >
-      <Upload size={16} />
-      Загрузить файл
-    </button>
-  )
+  const blocked = busy || loading || !!loadError || !canCloud
+  const rows = (catalog?.rows ?? [])
+    .filter(
+      (r) =>
+        !isImage(r) &&
+        (!folder || r.folder === folder) &&
+        r.mime.startsWith(kind) &&
+        normalizeLibraryQuery(r.name).includes(
+          normalizeLibraryQuery(settings.query)
+        )
+    )
+    .sort(
+      (a, b) =>
+        (settings.sort === 'reverse' ? -1 : 1) *
+        a.name.localeCompare(b.name, 'ru', { numeric: true })
+    )
+  const selected = catalog?.rows.find((r) => resourceKey(r) === detail?.key)
+  const showImages = tab === 'local' || !kind || kind === 'image/'
+  const showDocs = tab === 'cloud' && kind !== 'image/'
+  const addItems: MenuItem[] = [
+    { label: 'Добавить изображение', run: () => pickUpload('image') },
+  ]
+  if (tab === 'cloud')
+    addItems.push(
+      {
+        label: 'Загрузить PDF, PPTX или JSON',
+        run: () => pickUpload('document'),
+      },
+      {
+        label: 'Создать папку',
+        icon: FolderPlus,
+        run: () => {
+          const name = prompt('Название новой папки')?.trim()
+          if (name)
+            return run(async () => {
+              await createFolder(name)
+              setFolder(name)
+            }, true)
+        },
+      }
+    )
+  const refs = (r: Resource) => catalog?.usage?.get(resourceKey(r)) ?? []
+  const requestDelete = (r: Resource) =>
+    run(async () => {
+      if (blocked || !catalog?.usage || r.bucket === 'images')
+        throw Error(
+          'Удаление заблокировано: сначала обновите проверку использования.'
+        )
+      const latest = await publicationUsage()
+      if (latest.has(resourceKey(r)))
+        throw Error('Файл используется в публикациях.')
+      setDetail({ key: resourceKey(r), kind: 'delete' })
+    })
+  function actions(r: Resource): MenuItem[] {
+    const items: MenuItem[] = [
+      {
+        label: 'Просмотр и свойства',
+        icon: Eye,
+        run: () => setDetail({ key: resourceKey(r), kind: 'preview' }),
+      },
+      {
+        label: 'Скачать',
+        icon: Download,
+        run: () => run(() => fileDownload(r)),
+      },
+      {
+        label: 'Связанные публикации',
+        icon: Link2,
+        run: () => setDetail({ key: resourceKey(r), kind: 'links' }),
+      },
+      {
+        label: 'Переименовать',
+        icon: Pencil,
+        run: () => {
+          const name = prompt('Название файла', r.name)?.trim()
+          if (name) return run(() => updateFile(r, { name }), true)
+        },
+      },
+      {
+        label: 'Переместить в папку',
+        icon: Folder,
+        run: () => setDetail({ key: resourceKey(r), kind: 'move' }),
+      },
+    ]
+    if (r.mime === 'application/json' && openJSON)
+      items.push({
+        label: 'Импортировать методичку',
+        icon: FileCode2,
+        run: () =>
+          run(async () => {
+            await openJSON(await (await downloadFile(r)).text())
+          }),
+      })
+    if (catalog?.usage && !refs(r).length && r.bucket !== 'images')
+      items.push('separator', {
+        label: 'Удалить из облака',
+        icon: Trash2,
+        danger: true,
+        disabled: blocked,
+        run: () => requestDelete(r),
+      })
+    return items
+  }
   return (
-    <section
-      aria-label={pick ? 'Облачные изображения' : 'Облачные файлы'}
-      aria-busy={busy}
-    >
-      <fieldset
-        className="files-controls"
-        disabled={busy || !!preview || !!confirmFile}
+    <ActionMenus>
+      <section
+        className="lib-page atlas-files-page"
+        aria-label="Библиотека файлов"
       >
-        <div className="files-bar">
-          <SearchBox query={query} onChange={search} />
-          {!pick && (
-            <select
-              aria-label="Тип файла"
-              value={kind}
-              onChange={(e) => filter(e.target.value)}
-            >
-              <option value="">Все форматы</option>
-              <option value="image/">Изображения</option>
-              <option value="application/pdf">PDF</option>
-              <option value="application/vnd">PPTX</option>
-              <option value="application/json">JSON</option>
-            </select>
-          )}
-          <select
-            aria-label="Папка"
-            value={folder}
-            onChange={(e) => setFolder(e.target.value)}
-          >
-            <option value="">Все папки</option>
-            {options.map((name) => (
-              <option key={name}>{name}</option>
-            ))}
-          </select>
-          {!pick && (
-            <button
-              className="secondary"
-              onClick={() => {
-                const name = prompt('Название новой папки')?.trim()
-                if (name)
-                  void run(async () => {
-                    await createFolder(name)
-                    setFolder(name)
-                  }, true)
-              }}
-            >
-              <FolderPlus size={16} />
-              Создать папку
-            </button>
-          )}
+        <LibraryHeader
+          title="Мои файлы"
+          action={
+            <div className="atlas-file-heading-actions">
+              {allowed && (
+                <button
+                  className="lib-button lib-icon"
+                  aria-label="Обслуживание библиотеки"
+                  title="Обслуживание библиотеки"
+                  disabled={busy}
+                  onClick={() => setMaintenance(true)}
+                >
+                  <Settings size={19} />
+                </button>
+              )}
+              <ActionMenu
+                primary
+                icon={Plus}
+                label="Добавить"
+                items={addItems}
+                disabled={!allowed || busy || (tab === 'cloud' && !canCloud)}
+                onError={setError}
+              >
+                Добавить
+              </ActionMenu>
+            </div>
+          }
+        />
+        <nav className="lib-tabs" aria-label="Расположение файлов">
           <button
-            className="secondary files-refresh"
-            title="Обновить список"
-            aria-label="Обновить список"
-            onClick={() => void run(load)}
+            aria-current={tab === 'local' ? 'page' : undefined}
+            onClick={() => {
+              setTab('local')
+              setDetail(undefined)
+              setError('')
+            }}
           >
-            <RefreshCw size={16} />
+            <Laptop size={17} /> На устройстве
           </button>
-          {!pick && (
+          <button
+            aria-current={tab === 'cloud' ? 'page' : undefined}
+            onClick={() => {
+              setTab('cloud')
+              setDetail(undefined)
+              setError('')
+            }}
+          >
+            <Cloud size={17} /> В облаке
+          </button>
+        </nav>
+        <LibraryToolbar
+          settings={settings}
+          label="Поиск файлов"
+          actions={
             <>
-              <input
-                hidden
-                ref={upload}
-                type="file"
-                multiple
-                accept=".pdf,.pptx,.json"
-                onChange={(e) => {
-                  const files = Array.from(e.target.files ?? [])
-                  e.target.value = ''
-                  if (!files.length) return
-                  void run(async () => {
-                    const errors: string[] = []
-                    for (const file of files) {
-                      try {
-                        if (!/\.(pdf|pptx|json)$/i.test(file.name))
-                          throw Error(
-                            'Изображения загружайте через приватную библиотеку.'
-                          )
-                        await storeFile(file, file.name, folder)
-                      } catch (error) {
-                        errors.push(file.name + ' — ' + messageOf(error))
-                      }
-                    }
-                    if (errors.length) throw Error(errors.join(' · '))
-                  }, true)
-                }}
-              />
-              {rows?.length || !rows ? uploadButton : null}
+              <button
+                className="lib-button lib-icon"
+                aria-label="Фильтры"
+                title="Фильтры"
+                onClick={() => setFilters(true)}
+              >
+                <SlidersHorizontal size={18} />
+              </button>
+              <button
+                className="lib-button lib-icon"
+                aria-label="Обновить файлы"
+                title="Обновить файлы"
+                disabled={busy || loading || (tab === 'cloud' && !canCloud)}
+                onClick={() => void reload()}
+              >
+                <RefreshCw size={17} />
+              </button>
             </>
-          )}
-        </div>
-        {busy && (
-          <p role="status" className="files-note">
-            Работаем с облачным хранилищем…
-          </p>
-        )}
-        {message && (
-          <p role="alert" className="files-error">
-            {message}
-          </p>
-        )}
-        {usageError && (
-          <p className="files-note">
-            Проверка публикаций не завершена. {usageError} Обновите список,
-            чтобы повторить проверку.
-          </p>
-        )}
-        {rows && (!kind || kind === 'image/') && (
-          <ResourceGallery
-            mode="cloud"
-            owner={currentWorkingOwner()}
-            legacyRows={rows}
-            publicationRefs={usage}
-            query={query}
-            folder={folder}
-            onReload={load}
-            folders={options}
-          />
-        )}
-        {rows &&
-          kind !== 'image/' &&
-          (!visible.length ? (
-            <EmptyFiles
-              title={
-                rows.some(
-                  (row) =>
-                    !(
-                      row.bucket === 'images' &&
-                      ['image/png', 'image/jpeg', 'image/webp'].includes(
-                        row.mime
+          }
+        />
+        <input
+          hidden
+          ref={upload}
+          type="file"
+          multiple
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? [])
+            e.target.value = ''
+            const type = uploadKind.current,
+              destination = tab,
+              targetFolder = folder
+            if (!files.length) return
+            void run(async () => {
+              const failures: string[] = []
+              for (const file of files) {
+                try {
+                  if (scope !== currentWorkingOwner())
+                    throw Error('Изменился аккаунт.')
+                  if (type === 'image') {
+                    if (!/\.(png|jpe?g|webp|svg)$/i.test(file.name))
+                      throw Error('Неподдерживаемый формат изображения.')
+                    const blob = await importedBlob(file),
+                      name = file.name.replace(/\.svg$/i, '.webp')
+                    if (destination === 'cloud') {
+                      if (!canCloud || !scope) throw Error('Облако недоступно.')
+                      await uploadLibraryImage(scope, blob, name)
+                    } else
+                      await retainLibraryImage(
+                        scope,
+                        await digest(blob),
+                        blob,
+                        name
                       )
+                  } else {
+                    if (
+                      destination !== 'cloud' ||
+                      !canCloud ||
+                      !/\.(pdf|pptx|json)$/i.test(file.name)
                     )
-                )
-                  ? 'По вашему запросу ничего не найдено'
-                  : pick
-                    ? 'В облаке пока нет изображений'
-                    : 'Нет других файлов (PDF, PPTX, JSON)'
+                      throw Error(
+                        'Неподдерживаемый формат или облако недоступно.'
+                      )
+                    await storeFile(file, file.name, targetFolder)
+                  }
+                } catch (ex) {
+                  failures.push(file.name + ': ' + errorText(ex))
+                }
               }
-            >
-              {!pick && !rows.length && uploadButton}
-            </EmptyFiles>
-          ) : (
-            <div className="file-grid">
-              {visible.map((row) => (
-                <CloudFileCard
-                  key={resourceKey(row)}
-                  row={row}
-                  refs={usage?.get(resourceKey(row)) ?? []}
-                  usageKnown={!!usage}
-                  options={options}
-                  run={run}
-                  openJSON={openJSON}
-                  onPreview={
-                    !pick && row.bucket === 'images'
-                      ? () => setPreview(row)
-                      : undefined
-                  }
-                  pick={
-                    pick
-                      ? () =>
-                          void run(async () => {
-                            const blob = await downloadFile(row)
-                            if (row.sha && (await digest(blob)) !== row.sha)
-                              throw Error(
-                                'Контрольная сумма изображения не совпала.'
-                              )
-                            const image = await originalImage(
-                              new Blob([blob], { type: row.mime })
-                            )
-                            if (mounted.current) pick(image)
-                          })
-                      : undefined
-                  }
-                  onRequestDelete={() =>
-                    void run(async () => {
-                      const latest = await publicationUsage()
-                      setUsage(latest)
-                      if (latest.has(resourceKey(row)))
-                        throw Error('Файл используется в публикациях.')
-                      askDelete(row)
-                    })
-                  }
-                />
-              ))}
-            </div>
-          ))}
-      </fieldset>
-      {preview && (
-        <div className="overlay">
-          <section
-            className="dialog file-preview"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="file-preview-title"
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setPreview(undefined)
-            }}
-          >
-            <h2 id="file-preview-title">{preview.name}</h2>
-            <img src={imageUrl(preview)} alt={preview.name} />
-            <button
-              autoFocus
-              className="secondary"
-              onClick={() => setPreview(undefined)}
-            >
-              Закрыть
+              if (failures.length) throw Error(failures.join(' · '))
+            }, true)
+          }}
+        />
+        {error && (
+          <LibraryStatus level="error" title="Операция с файлами не завершена">
+            <p>{error}</p>
+            <button className="secondary" onClick={() => setError('')}>
+              Закрыть сообщение
             </button>
-          </section>
-        </div>
-      )}
-      {confirmFile && (
-        <div className="overlay">
-          <section
-            className="dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="file-delete-title"
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') askDelete(undefined)
-            }}
-          >
-            <h2 id="file-delete-title">Удалить файл из облака?</h2>
-            <p className="file-delete-name">{confirmFile.name}</p>
-            <div className="files-confirm">
-              <button
-                autoFocus
-                className="secondary"
-                onClick={() => askDelete(undefined)}
-              >
-                Отмена
-              </button>
-              <button
-                className="primary"
-                onClick={() => {
-                  askDelete(undefined)
-                  void run(() => removeUnusedFile(confirmFile), true)
-                }}
-              >
-                Удалить
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-    </section>
-  )
-}
-
-function CloudFileCard({
-  row,
-  refs,
-  usageKnown,
-  options,
-  pick,
-  openJSON,
-  run,
-  onRequestDelete,
-  onPreview,
-}: {
-  row: Resource
-  refs: { id: string; title: string }[]
-  usageKnown: boolean
-  options: string[]
-  pick?: () => void
-  openJSON?: (text: string) => Promise<void>
-  run: (fn: () => Promise<void>, refresh?: boolean) => Promise<void>
-  onRequestDelete: () => void
-  onPreview?: () => void
-}) {
-  const DocIcon =
-    row.mime === 'application/json'
-      ? FileCode2
-      : row.mime.includes('presentation')
-        ? Presentation
-        : FileText
-  return (
-    <article className="file-card">
-      <div className="file-thumb">
-        {row.bucket === 'images' ? (
-          onPreview ? (
-            <button
-              className="file-thumb-preview"
-              aria-label={'Открыть изображение ' + row.name}
-              onClick={onPreview}
-            >
-              <img src={imageUrl(row)} alt="" loading="lazy" />
+          </LibraryStatus>
+        )}
+        {tab === 'cloud' && loadError && (
+          <LibraryStatus level="error" title="Не удалось обновить файлы">
+            <p>{loadError}</p>
+            <button className="secondary" onClick={() => void reload()}>
+              Повторить
             </button>
-          ) : (
-            <img src={imageUrl(row)} alt="" loading="lazy" />
-          )
-        ) : (
-          <span>
-            <DocIcon size={33} aria-hidden="true" />
-            {formatOf(row.mime)}
-          </span>
+          </LibraryStatus>
         )}
-      </div>
-      <div className="file-body">
-        <h2>{row.name}</h2>
-        <p className="file-meta">
-          {formatOf(row.mime)} ·{' '}
-          {row.size ? shortSize(row.size) : 'Размер не указан'}
-          {row.folder && ' · ' + row.folder}
-        </p>
-        {!pick && (
-          <p className="file-meta">
-            {new Date(row.created_at).toLocaleDateString('ru')}
-          </p>
+        {tab === 'cloud' && catalog?.usageError && (
+          <LibraryStatus
+            level="warning"
+            title="Использование файлов проверено не полностью"
+          >
+            <p>{catalog.usageError}. Удаление заблокировано.</p>
+            <button className="secondary" onClick={() => void reload()}>
+              Повторить проверку
+            </button>
+          </LibraryStatus>
         )}
-        {pick ? (
-          <button className="secondary" onClick={pick}>
-            Выбрать
-          </button>
+        {(busy || loading) && (
+          <LibraryStatus level="busy" title="Работаем с файлами…" />
+        )}
+        {!allowed ? (
+          <LibraryState
+            title="Войдите, чтобы открыть файлы"
+            action={
+              <button className="secondary" onClick={login}>
+                Войти
+              </button>
+            }
+          />
+        ) : tab === 'cloud' && !owner ? (
+          <LibraryState
+            title="Войдите, чтобы открыть облачные файлы"
+            action={
+              <button className="secondary" onClick={login}>
+                Войти
+              </button>
+            }
+          />
+        ) : tab === 'cloud' && !catalog ? (
+          <LibraryState
+            title={
+              !online
+                ? 'Облако недоступно без интернета'
+                : loadError
+                  ? 'Каталог файлов недоступен'
+                  : 'Загружаем файлы…'
+            }
+            error={!!loadError}
+          />
         ) : (
           <>
-            {refs.length ? (
-              <details className="file-links">
-                <summary>
-                  <LockKeyhole size={14} aria-hidden="true" /> Используется в{' '}
-                  {refs.length}{' '}
-                  {refs.length === 1 ? 'публикации' : 'публикациях'}
-                </summary>
-                {refs.map((ref) => (
-                  <a className="file-link" key={ref.id} href={'#p/' + ref.id}>
-                    {ref.title}
-                  </a>
-                ))}
-              </details>
-            ) : (
-              <p className="file-usage">
-                {usageKnown
-                  ? 'Не используется в публикациях'
-                  : 'Использование не проверено'}
-              </p>
+            {tab === 'cloud' && !online && (
+              <LibraryStatus level="warning" title="Облачные файлы: офлайн">
+                <p>
+                  Показан последний полученный список. Облачные действия
+                  отключены.
+                </p>
+              </LibraryStatus>
             )}
-            <details className="file-actions">
-              <summary>
-                Действия <span aria-hidden="true">⋯</span>
-              </summary>
-              <div>
-                <button
-                  onClick={() =>
-                    void run(async () => {
-                      const url = URL.createObjectURL(await downloadFile(row))
-                      const a = document.createElement('a')
-                      a.href = url
-                      a.download = row.name
-                      a.click()
-                      setTimeout(() => URL.revokeObjectURL(url), 5000)
-                    })
-                  }
+            {showImages && (
+              <ResourceGallery
+                key={tab + ':' + scope}
+                mode={tab}
+                owner={scope}
+                lessonEntries={entries}
+                openLesson={openLesson}
+                settings={settings}
+                usageFilter={filter}
+                refreshEpoch={epoch}
+                blocked={tab === 'cloud' ? blocked : busy}
+                legacyRows={tab === 'cloud' ? catalog?.rows : undefined}
+                publicationRefs={tab === 'cloud' ? catalog?.usage : undefined}
+                folder={tab === 'cloud' ? folder : undefined}
+                folders={folders}
+                onReload={reload}
+              />
+            )}
+            {showDocs && rows.length > 0 && (
+              <section className="atlas-files-documents">
+                <h2 className="course-section-title">Другие файлы</h2>
+                <LibraryItems
+                  settings={settings}
+                  columns={['Формат и размер', 'Использование']}
                 >
-                  Скачать
-                </button>
-                {row.mime === 'application/json' && openJSON && (
-                  <button
-                    onClick={() =>
-                      void run(async () =>
-                        openJSON(await (await downloadFile(row)).text())
-                      )
-                    }
-                  >
-                    Импортировать
-                  </button>
-                )}
-                <button
-                  onClick={() => {
-                    const name = prompt('Название файла', row.name)?.trim()
-                    if (name) void run(() => updateFile(row, { name }), true)
-                  }}
-                >
-                  Переименовать
-                </button>
-                <label>
-                  Переместить в папку
-                  <select
-                    value={row.folder}
-                    onChange={(e) =>
-                      void run(
-                        () =>
-                          updateFile(row, {
-                            folder: e.target.value,
-                          }),
-                        true
-                      )
-                    }
-                  >
-                    <option value="">Без папки</option>
-                    {options.map((name) => (
-                      <option key={name}>{name}</option>
-                    ))}
-                  </select>
-                </label>
-                {usageKnown && !refs.length && row.bucket !== 'images' && (
-                  <button className="file-delete" onClick={onRequestDelete}>
-                    Удалить из облака
-                  </button>
-                )}
-              </div>
-            </details>
+                  {rows.map((r) => {
+                    const Icon =
+                      r.mime === 'application/json'
+                        ? FileCode2
+                        : r.mime.includes('presentation')
+                          ? Presentation
+                          : FileText
+                    return (
+                      <LibraryCard
+                        key={resourceKey(r)}
+                        name={r.name}
+                        card={{ className: 'atlas-resource-card' }}
+                        thumbnail={
+                          r.bucket === 'images' ? (
+                            <img src={imageUrl(r)} alt="" loading="lazy" />
+                          ) : (
+                            <Icon size={34} />
+                          )
+                        }
+                        first={format(r) + ' · ' + size(r.size)}
+                        second={
+                          <button
+                            className="atlas-resource-links"
+                            onClick={() =>
+                              setDetail({ key: resourceKey(r), kind: 'links' })
+                            }
+                          >
+                            {catalog?.usage
+                              ? 'Связей: ' + refs(r).length
+                              : 'Не проверено'}
+                          </button>
+                        }
+                        open={() =>
+                          setDetail({ key: resourceKey(r), kind: 'preview' })
+                        }
+                        actions={actions(r)}
+                        disabled={blocked}
+                        notice={setError}
+                      />
+                    )
+                  })}
+                </LibraryItems>
+              </section>
+            )}
+            {showDocs && !showImages && !rows.length && (
+              <LibraryState title="Нет файлов по фильтру" />
+            )}
           </>
         )}
-      </div>
-    </article>
+        {filters && (
+          <FileDialog title="Фильтры файлов" close={() => setFilters(false)}>
+            <div className="atlas-file-detail-list">
+              {tab === 'cloud' && (
+                <>
+                  <label>
+                    Формат
+                    <select
+                      value={kind}
+                      onChange={(e) => setKind(e.target.value)}
+                    >
+                      <option value="">Все форматы</option>
+                      <option value="image/">Изображения</option>
+                      <option value="application/pdf">PDF</option>
+                      <option value="application/vnd">PPTX</option>
+                      <option value="application/json">JSON</option>
+                    </select>
+                  </label>
+                  <label>
+                    Папка
+                    <select
+                      value={folder}
+                      onChange={(e) => setFolder(e.target.value)}
+                    >
+                      <option value="">Все папки</option>
+                      {folders.map((f) => (
+                        <option key={f}>{f}</option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
+              <label>
+                Использование изображений
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                >
+                  <option value="all">Все</option>
+                  <option value="used">Используются</option>
+                  <option value="unused">Не используются</option>
+                  <option value="trash">В корзине</option>
+                </select>
+              </label>
+              <div className="atlas-file-dialog-actions">
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    setKind('')
+                    setFolder('')
+                    setFilter('all')
+                  }}
+                >
+                  Сбросить
+                </button>
+                <button className="primary" onClick={() => setFilters(false)}>
+                  Готово
+                </button>
+              </div>
+            </div>
+          </FileDialog>
+        )}
+        {allowed && (
+          <ResourceMaintenance
+            owner={scope}
+            online={online && owner}
+            open={maintenance}
+            onClose={() => setMaintenance(false)}
+            onComplete={async () => {
+              await onMaintenance?.()
+              await reload()
+            }}
+          />
+        )}
+        {selected && detail && (
+          <FileDialog
+            title={
+              detail.kind === 'links'
+                ? 'Связанные публикации'
+                : detail.kind === 'move'
+                  ? 'Переместить в папку'
+                  : detail.kind === 'delete'
+                    ? 'Удалить файл из облака?'
+                    : selected.name
+            }
+            close={() => setDetail(undefined)}
+            locked={busy}
+          >
+            {detail.kind === 'links' ? (
+              <div className="atlas-file-detail-list">
+                {!catalog?.usage ? (
+                  <p>Использование не проверено.</p>
+                ) : !refs(selected).length ? (
+                  <p>Связанные публикации не найдены.</p>
+                ) : (
+                  refs(selected).map((r) => (
+                    <a
+                      key={r.id}
+                      className="file-link"
+                      href={'#p/' + r.id}
+                      onClick={() => setDetail(undefined)}
+                    >
+                      {r.title}
+                    </a>
+                  ))
+                )}
+              </div>
+            ) : detail.kind === 'move' ? (
+              <label>
+                Папка
+                <select
+                  disabled={blocked}
+                  value={selected.folder}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    void run(async () => {
+                      await updateFile(selected, { folder: value })
+                      setDetail(undefined)
+                    }, true)
+                  }}
+                >
+                  <option value="">Без папки</option>
+                  {folders.map((f) => (
+                    <option key={f}>{f}</option>
+                  ))}
+                </select>
+              </label>
+            ) : detail.kind === 'delete' ? (
+              <>
+                <p>{selected.name}</p>
+                <div className="atlas-file-dialog-actions">
+                  <button
+                    className="secondary"
+                    onClick={() => setDetail(undefined)}
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    className="primary"
+                    disabled={
+                      blocked || !catalog?.usage || !!refs(selected).length
+                    }
+                    onClick={() =>
+                      void run(async () => {
+                        await removeUnusedFile(selected)
+                        setDetail(undefined)
+                      }, true)
+                    }
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <dl className="atlas-file-properties">
+                  <dt>Формат</dt>
+                  <dd>{format(selected)}</dd>
+                  <dt>Размер</dt>
+                  <dd>{size(selected.size)}</dd>
+                  <dt>Папка</dt>
+                  <dd>{selected.folder || 'Без папки'}</dd>
+                  <dt>Добавлен</dt>
+                  <dd>
+                    {new Date(selected.created_at).toLocaleDateString('ru')}
+                  </dd>
+                  <dt>Хранилище</dt>
+                  <dd>Облако</dd>
+                </dl>
+                {selected.bucket === 'images' && (
+                  <img
+                    className="atlas-file-preview-image"
+                    src={imageUrl(selected)}
+                    alt={selected.name}
+                  />
+                )}
+                <div className="atlas-file-dialog-actions">
+                  <button
+                    className="secondary"
+                    disabled={blocked}
+                    onClick={() => void run(() => fileDownload(selected))}
+                  >
+                    <Download size={16} /> Скачать
+                  </button>
+                  {selected.mime === 'application/json' && openJSON && (
+                    <button
+                      className="primary"
+                      disabled={blocked}
+                      onClick={() =>
+                        void run(async () => {
+                          await openJSON(
+                            await (await downloadFile(selected)).text()
+                          )
+                          setDetail(undefined)
+                        })
+                      }
+                    >
+                      Импортировать
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+            {error && <p role="alert">{error}</p>}
+          </FileDialog>
+        )}
+      </section>
+    </ActionMenus>
   )
 }
-
 export function Files({
   pick,
   openJSON,
@@ -667,6 +823,14 @@ export function Files({
   return pick ? (
     <ResourcePicker pick={pick} />
   ) : (
-    <CloudFiles openJSON={openJSON} />
+    <FileLibrary
+      entries={[]}
+      openLesson={() => {}}
+      openJSON={openJSON}
+      owner={!!currentWorkingOwner()}
+      online={navigator.onLine}
+      allowed={!!currentWorkingOwner()}
+      login={() => {}}
+    />
   )
 }

@@ -1,3 +1,4 @@
+import { LibraryStatus } from './LibraryStatus'
 import { desktopEditingMessage } from './libraryNavigation'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -420,28 +421,12 @@ export function TemplateLibrary({
         }
       />
       {(error || connection) && (
-        <div className="lib-notice" role={error ? 'alert' : 'status'}>
-          {error
-            ? 'Не удалось загрузить шаблоны. ' + error
-            : connection === 'offline'
-              ? 'Офлайн. Доступны шаблоны, сохранённые на устройстве.'
-              : 'Облако недоступно. Показаны шаблоны, сохранённые на устройстве.'}
-          {connection !== 'offline' && (
-            <button
-              className="lib-button lib-text"
-              disabled={loading || busy}
-              onClick={() => void run(refresh)}
-            >
-              Повторить
-            </button>
-          )}
-        </div>
+        <LibraryStatus level={error ? 'error' : 'warning'} title={error ? 'Не удалось обновить шаблоны' : 'Облачные шаблоны недоступны'}>
+          <p>{error || (connection === 'offline' ? 'Офлайн. Доступны локальные шаблоны.' : 'Показаны шаблоны, сохранённые на устройстве.')}</p>
+          {connection !== 'offline' && <button className="secondary" disabled={loading || busy} onClick={() => void run(refresh)}>Повторить</button>}
+        </LibraryStatus>
       )}
-      {busy && (
-        <p className="lib-results" role="status">
-          Выполняем действие…
-        </p>
-      )}
+      {busy && <LibraryStatus level="busy" title="Выполняем действие с шаблонами…" />}
       {!visible.length ? (
         loading && !forKind.length ? (
           <LibraryState title="Загружаем шаблоны…" />

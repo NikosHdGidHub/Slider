@@ -30,12 +30,12 @@ export function syncSummary(
     sync.records.filter((row) => row.dirty).length + courses.pending
   const error = sync.errors.length || courses.error
   if (conflicts) return { label: 'Обнаружен конфликт', Icon: CloudAlert }
+  if (error) return { label: 'Ошибка синхронизации', Icon: CloudAlert }
   if (!online) return { label: 'Офлайн', Icon: CloudOff }
   if (local) return { label: 'На этом устройстве', Icon: CloudOff }
   if (!authorized) return { label: 'Требуется вход', Icon: CloudOff }
   if (sync.syncing || courses.syncing)
     return { label: 'Синхронизация…', Icon: RefreshCw }
-  if (error) return { label: 'Ошибка синхронизации', Icon: CloudAlert }
   if (pending) return { label: 'Ожидают отправки', Icon: Cloud }
   return sync.checked && courses.checked
     ? { label: 'Синхронизировано', Icon: CloudCheck }
@@ -162,10 +162,18 @@ export function WorkingSyncPanel({
         </ul>
       )}
       {courses.conflict && (
-        <button className="secondary" onClick={openCourses} disabled={inEditor}>
-          Разрешить конфликт курсов
-        </button>
+        <div className="working-item">
+          <p>Структура курсов изменилась на другом устройстве. Локальные изменения сохранены.</p>
+          <div className="working-actions">
+            <button className="secondary" disabled={busy || inEditor || !online || !authorized}
+              onClick={() => void run(async () => { await courses.resolve('local') })}>Применить мои изменения</button>
+            <button className="secondary" disabled={busy || inEditor || !online || !authorized}
+              onClick={() => { if (confirm('Заменить ожидающие изменения курсов облачной версией?')) void run(async () => { await courses.resolve('remote') }) }}>Принять облачную версию</button>
+          </div>
+          <button className="secondary" disabled={inEditor} onClick={openCourses}>Открыть курсы</button>
+        </div>
       )}
+      {courses.error && <p role="alert">{courses.error}</p>}
       {!authorized && !local && online && (
         <button className="secondary" onClick={login}>
           Войти

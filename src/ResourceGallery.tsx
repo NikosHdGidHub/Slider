@@ -1,3 +1,29 @@
+import {
+  LibraryCard,
+  LibraryItems,
+  LibraryToolbar,
+  LibraryState,
+  useLibrarySettings,
+  type LibrarySettings,
+} from './Library'
+import { ActionMenus, type MenuItem } from './ActionMenu'
+import { LibraryStatus } from './LibraryStatus'
+import { FileDialog } from './FileDialog'
+import {
+  Eye,
+  Download,
+  CloudUpload,
+  MonitorDown,
+  Link2,
+  Info,
+  Trash2,
+  Pencil,
+  Folder,
+  RefreshCw,
+  Monitor,
+  Cloud,
+  Globe2,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { digest } from './digest'
 import { originalImage, optimize } from './media'
@@ -73,6 +99,10 @@ type Props = {
   folder?: string
   folders?: string[]
   onReload?: () => Promise<void>
+  settings?: LibrarySettings
+  usageFilter?: string
+  refreshEpoch?: number
+  blocked?: boolean
 }
 const errorText = (error: unknown) =>
   error instanceof Error
@@ -270,16 +300,8 @@ async function cardBlob(card: Card, owner: string | null) {
 }
 // Private thumbnails are fetched via authenticated download, never getPublicUrl.
 // Load on visibility and revoke every object URL on unmount/change.
-function Thumb({
-  card,
-  owner,
-  onPreview,
-}: {
-  card: Card
-  owner: string | null
-  onPreview: () => void
-}) {
-  const host = useRef<HTMLDivElement>(null)
+function Thumb({ card, owner }: { card: Card; owner: string | null }) {
+  const host = useRef<HTMLSpanElement>(null)
   const [visible, setVisible] = useState(false)
   const [src, setSrc] = useState('')
   const [failed, setFailed] = useState(false)
@@ -319,24 +341,18 @@ function Thumb({
       live = false
       if (url) URL.revokeObjectURL(url)
     }
-  }, [card, owner, visible])
+  }, [card.key, card.sha, owner, visible])
   return (
-    <div className="file-thumb" ref={host}>
-      <button
-        className="file-thumb-preview"
-        onClick={onPreview}
-        aria-label={'Просмотреть ' + card.name}
-      >
-        {src ? (
-          <img src={src} alt="" loading="lazy" />
-        ) : (
-          <span>{failed ? 'Нет предпросмотра' : 'Изображение'}</span>
-        )}
-      </button>
-    </div>
+    <span className="atlas-resource-thumb" ref={host}>
+      {src ? (
+        <img src={src} alt="" loading="lazy" />
+      ) : (
+        <span>{failed ? 'Нет предпросмотра' : 'Изображение'}</span>
+      )}
+    </span>
   )
 }
-async function importedBlob(file: File) {
+export async function importedBlob(file: File) {
   let blob: Blob = file
   if (/\.svg$/i.test(file.name))
     blob = await (await fetch((await optimize(file)).src)).blob()
@@ -363,16 +379,26 @@ export function ResourceGallery({
   folder,
   folders,
   onReload,
+  settings: outerSettings,
+  usageFilter,
+  refreshEpoch = 0,
+  blocked = false,
 }: Props) {
   const [cards, setCards] = useState<Card[]>()
   const [warning, setWarning] = useState('')
   const [error, setError] = useState('')
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState('all')
+  const pickerSettings = useLibrarySettings('file-picker')
+  const settings = outerSettings ?? pickerSettings
+  const filter = usageFilter ?? 'all'
+  const [checking, setChecking] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [detail, setDetail] = useState<{
+    key: string
+    kind: 'links' | 'properties' | 'copies'
+  }>()
   const [epoch, bump] = useState(0)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<{ url: string; name: string }>()
-  const upload = useRef<HTMLInputElement>(null)
   const alive = useRef(true)
   const running = useRef(false)
   useEffect(() => {
@@ -393,7 +419,8 @@ export function ResourceGallery({
   }, [owner, mode])
   useEffect(() => {
     let live = true
-    setCards(undefined)
+    setChecking(true)
+    setLoadFailed(false)
     setWarning('')
     const load = async () => {
       if (mode === 'local') return localCatalog(owner)
@@ -410,14 +437,28 @@ export function ResourceGallery({
         }
       })
       .catch((e) => {
-        if (live) setError(errorText(e))
+        if (live) {
+          setLoadFailed(true)
+          setError(errorText(e))
+        }
+      })
+      .finally(() => {
+        if (live) setChecking(false)
       })
     return () => {
       live = false
     }
-  }, [mode, owner, epoch, lessonEntries, legacyRows, publicationRefs])
+  }, [
+    mode,
+    owner,
+    epoch,
+    refreshEpoch,
+    lessonEntries,
+    legacyRows,
+    publicationRefs,
+  ])
   async function act(fn: () => Promise<void>, refresh = false) {
-    if (running.current) return
+    if (running.current || blocked) return
     running.current = true
     setBusy(true)
     setError('')
@@ -439,7 +480,7 @@ export function ResourceGallery({
       if (alive.current) setBusy(false)
     }
   }
-  const q = (outerQuery ?? query).trim().toLowerCase()
+  const q = (outerQuery ?? settings.query).trim().toLowerCase()
   const shown = cards?.filter(
     (c) =>
       (!folder || c.public.some((p) => p.folder === folder)) &&
@@ -456,421 +497,433 @@ export function ResourceGallery({
         ...c.trash.map((r) => r.title),
       ].some((v) => v.toLowerCase().includes(q))
   )
+  const ordered = [...(shown ?? [])].sort(
+    (a, b) =>
+      (settings.sort === 'reverse' ? -1 : 1) *
+      a.name.localeCompare(b.name, 'ru', { numeric: true })
+  )
+  const locked = blocked || busy || checking || loadFailed
+  const show = (card: Card) =>
+    void act(async () => {
+      const blob = await cardBlob(card, owner)
+      if (alive.current && owner === currentWorkingOwner())
+        setPreview({ url: URL.createObjectURL(blob), name: card.name })
+    })
+  const choose = (card: Card) =>
+    void act(async () => {
+      const image = await originalImage(await cardBlob(card, owner))
+      if (alive.current && owner === currentWorkingOwner()) pick?.(image)
+    })
+  const links = (card: Card) => setDetail({ key: card.key, kind: 'links' })
+  const selected = cards?.find((c) => c.key === detail?.key)
+  function actions(card: Card): MenuItem[] {
+    const items: MenuItem[] = [
+      { label: 'Просмотр', icon: Eye, run: () => show(card) },
+      {
+        label: 'Скачать',
+        icon: Download,
+        run: () =>
+          act(async () => download(await cardBlob(card, owner), card.name)),
+      },
+      { label: 'Связанные документы', icon: Link2, run: () => links(card) },
+      {
+        label: 'Свойства файла',
+        icon: Info,
+        run: () => setDetail({ key: card.key, kind: 'properties' }),
+      },
+    ]
+    if (mode === 'local' && owner && navigator.onLine)
+      items.push({
+        label: 'Добавить в облако',
+        icon: CloudUpload,
+        run: () =>
+          act(async () => {
+            await uploadLibraryImage(
+              owner,
+              await cardBlob(card, owner),
+              card.name
+            )
+          }, true),
+      })
+    if (mode === 'local' && !card.retained)
+      items.push({
+        label: 'Сохранить в библиотеку',
+        icon: MonitorDown,
+        run: () =>
+          act(async () => {
+            const blob = await cardBlob(card, owner)
+            await retainLibraryImage(owner, await digest(blob), blob, card.name)
+          }, true),
+      })
+    if (mode === 'cloud' && owner)
+      items.push({
+        label: 'Сохранить на устройстве',
+        icon: MonitorDown,
+        run: () =>
+          act(async () => {
+            if (card.private) await saveWorkingImageLocally(owner, card.private)
+            else await saveLegacyImageLocally(owner, card.public[0])
+          }, true),
+      })
+    if (card.public.length)
+      items.push({
+        label: 'Публичные копии',
+        icon: Folder,
+        run: () => setDetail({ key: card.key, kind: 'copies' }),
+      })
+    if (
+      mode === 'local' &&
+      card.retained &&
+      card.sha &&
+      card.known &&
+      !card.refs.length
+    )
+      items.push('separator', {
+        label: 'Удалить с устройства',
+        icon: Trash2,
+        danger: true,
+        disabled: locked,
+        run: () => {
+          if (
+            confirm(
+              'Удалить изображение с этого устройства? Облачная копия не изменится.'
+            )
+          )
+            return act(() => removeLocalLibraryImage(owner, card.sha!), true)
+        },
+      })
+    if (
+      mode === 'cloud' &&
+      owner &&
+      card.private &&
+      card.known &&
+      !card.refs.length &&
+      !card.trash.length
+    )
+      items.push('separator', {
+        label: 'Удалить приватную копию',
+        icon: Trash2,
+        danger: true,
+        disabled: locked,
+        run: () => {
+          if (
+            confirm(
+              'Удалить приватную облачную копию? Локальные и публичные копии сохранятся.'
+            )
+          )
+            return act(
+              () =>
+                removePrivateResource(owner, card.private!, () =>
+                  assertPrivatePublicationUnused(card.private!)
+                ),
+              true
+            )
+        },
+      })
+    return items
+  }
   return (
-    <section
-      aria-label={
-        mode === 'local' ? 'Локальные изображения' : 'Облачные изображения'
-      }
-      aria-busy={busy}
-    >
-      <div className="files-bar">
-        {outerQuery === undefined && (
-          <label className="files-search">
-            <input
-              type="search"
-              placeholder="Поиск изображений"
-              aria-label="Поиск изображений"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-        )}
-        {!pick && (
-          <select
-            aria-label="Использование изображения"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          >
-            <option value="all">Все изображения</option>
-            <option value="used">Используются</option>
-            <option value="unused">Не используются</option>
-            <option value="trash">В корзине</option>
-          </select>
-        )}
-        <button
-          className="secondary"
-          disabled={busy}
-          onClick={() => void act(async () => {}, true)}
-        >
-          Обновить изображения
-        </button>
-        {!pick && (
-          <>
-            <input
-              hidden
-              ref={upload}
-              type="file"
-              multiple
-              accept=".png,.jpg,.jpeg,.webp,.svg"
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? [])
-                e.target.value = ''
-                void act(async () => {
-                  const errors: string[] = []
-                  for (const file of files)
-                    try {
-                      const blob = await importedBlob(file)
-                      const name = /\.svg$/i.test(file.name)
-                        ? file.name.replace(/\.svg$/i, '.webp')
-                        : file.name
-                      if (mode === 'cloud' && owner)
-                        await uploadLibraryImage(owner, blob, name)
-                      else
-                        await retainLibraryImage(
-                          owner,
-                          await digest(blob),
-                          blob,
-                          name
-                        )
-                    } catch (e) {
-                      errors.push(file.name + ': ' + errorText(e))
-                    }
-                  if (errors.length) throw Error(errors.join(' · '))
-                }, true)
-              }}
-            />
-            <button
-              className="primary"
-              disabled={busy}
-              onClick={() => upload.current?.click()}
-            >
-              {mode === 'cloud'
-                ? 'Загрузить приватное изображение'
-                : 'Добавить изображение'}
-            </button>
-          </>
-        )}
-      </div>
-      {error && (
-        <p className="files-error" role="alert">
-          {error}
-        </p>
-      )}
-      {warning && !pick && <p className="files-note">{warning}</p>}
-      {!cards && !error && <p role="status">Читаем каталог изображений…</p>}
-      {cards && !shown?.length && (
-        <p className="files-note">
-          {cards.length ? 'Нет изображений по фильтру' : 'Нет изображений'}
-        </p>
-      )}
-      <div className="file-grid">
-        {shown?.map((card) => (
-          <article className="file-card" key={card.key}>
-            <Thumb
-              card={card}
-              owner={owner}
-              onPreview={() =>
-                void act(async () => {
-                  const blob = await cardBlob(card, owner)
-                  if (alive.current)
-                    setPreview({
-                      url: URL.createObjectURL(blob),
-                      name: card.name,
-                    })
-                })
-              }
-            />
-            <div className="file-body">
-              <h2>{card.name}</h2>
-              <p className="file-meta">
-                {card.mime.split('/')[1].toUpperCase()} ·{' '}
-                {card.size === null
-                  ? 'Размер неизвестен'
-                  : Math.max(1, Math.round(card.size / 1024)) + ' КиБ'}
-              </p>
-              {pick ? (
+    <ActionMenus>
+      <section
+        className="atlas-resource-gallery"
+        aria-label={
+          mode === 'local' ? 'Локальные изображения' : 'Облачные изображения'
+        }
+        aria-busy={checking || busy}
+      >
+        {pick && (
+          <LibraryToolbar
+            settings={settings}
+            label="Поиск изображений"
+            actions={
+              <>
                 <button
-                  className="secondary"
+                  className="lib-button lib-icon"
+                  aria-label="Обновить изображения"
                   disabled={busy}
-                  onClick={() =>
-                    void act(async () => {
-                      const image = await originalImage(
-                        await cardBlob(card, owner)
-                      )
-                      if (alive.current && owner === currentWorkingOwner())
-                        pick(image)
-                    })
-                  }
+                  onClick={() => bump((x) => x + 1)}
                 >
-                  Выбрать
+                  <RefreshCw size={17} />
                 </button>
-              ) : (
-                <>
-                  <p className="file-meta">
-                    {mode === 'local'
-                      ? card.retained
-                        ? 'На устройстве'
-                        : 'В старом JSON'
-                      : [
-                          card.private ? 'Приватный' : '',
-                          card.public.length
-                            ? 'Публичных копий: ' + card.public.length
-                            : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                  </p>
-                  <p className="file-usage">
-                    {card.refs.length
-                      ? 'Используется: ' + card.refs.length
-                      : card.known
-                        ? card.trash.length
-                          ? 'Связано с корзиной'
-                          : 'Не используется активно'
-                        : 'Использование не проверено'}
-                  </p>
-                  {!!card.refs.length && (
-                    <details className="file-links">
-                      <summary>Связанные документы</summary>
-                      {card.refs.map((r) => (
-                        <div key={r.kind + ':' + r.id}>
-                          {r.entry && openLesson ? (
-                            <button
-                              className="file-link"
-                              onClick={() => openLesson(r.entry!)}
-                            >
-                              {r.title}
-                            </button>
-                          ) : r.kind === 'publication' ? (
-                            <a className="file-link" href={'#p/' + r.id}>
-                              {r.title}
-                            </a>
-                          ) : (
-                            <span>
-                              {label(r)}: {r.title}
-                            </span>
+              </>
+            }
+          />
+        )}
+        {!pick && error && (
+          <LibraryStatus level="error" title="Не удалось обновить изображения">
+            <p>{error}</p>
+            <button
+              className="secondary"
+              onClick={() => {
+                setError('')
+                bump((x) => x + 1)
+              }}
+            >
+              Повторить
+            </button>
+            <button className="secondary" onClick={() => setError('')}>
+              Закрыть сообщение
+            </button>
+          </LibraryStatus>
+        )}
+        {!pick && warning && (
+          <LibraryStatus
+            level="warning"
+            title="Проверка использования изображений"
+          >
+            <p>{warning}</p>
+          </LibraryStatus>
+        )}
+        {!pick && (checking || busy) && (
+          <LibraryStatus level="busy" title="Обновляем изображения…" />
+        )}
+        {pick && error && (
+          <p className="atlas-picker-alert" role="alert">
+            {error}
+          </p>
+        )}
+        {!cards ? (
+          <LibraryState
+            title={
+              error
+                ? 'Каталог изображений недоступен'
+                : 'Загружаем изображения…'
+            }
+            error={!!error}
+          />
+        ) : !ordered.length ? (
+          <LibraryState
+            title={
+              cards.length ? 'Нет изображений по фильтру' : 'Нет изображений'
+            }
+          />
+        ) : (
+          <LibraryItems
+            settings={settings}
+            columns={['Формат и размер', 'Использование']}
+          >
+            {ordered.map((card) => (
+              <LibraryCard
+                key={card.key}
+                name={card.name}
+                card={
+                  {
+                    className: 'atlas-resource-card',
+                    'data-resource-key': card.key,
+                  } as React.HTMLAttributes<HTMLElement>
+                }
+                thumbnail={<Thumb card={card} owner={owner} />}
+                open={() => show(card)}
+                blockOpen={busy || blocked}
+                first={
+                  card.mime.split('/')[1].toUpperCase() +
+                  ' · ' +
+                  (card.size === null
+                    ? '—'
+                    : Math.max(1, Math.round(card.size / 1024)) + ' КиБ')
+                }
+                second={
+                  pick ? undefined : (
+                    <span className="atlas-resource-meta">
+                      {mode === 'local' ? (
+                        <Monitor
+                          size={13}
+                          aria-label={
+                            card.retained ? 'На устройстве' : 'В старом JSON'
+                          }
+                        />
+                      ) : (
+                        <>
+                          {card.private && (
+                            <Cloud size={13} aria-label="Приватное облако" />
                           )}
-                        </div>
-                      ))}
-                    </details>
-                  )}
-                  {!!card.trash.length && (
-                    <details className="file-links">
-                      <summary>Корзина ({card.trash.length})</summary>
-                      {card.trash.map((r) => (
-                        <div key={r.kind + ':' + r.id}>{r.title}</div>
-                      ))}
-                    </details>
-                  )}
-                  <details className="file-actions">
-                    <summary>
-                      Действия <span aria-hidden="true">⋯</span>
-                    </summary>
-                    <div>
+                          {!!card.public.length && (
+                            <Globe2 size={13} aria-label="Публичная копия" />
+                          )}
+                        </>
+                      )}
                       <button
-                        disabled={busy}
+                        className="atlas-resource-links"
+                        onClick={() => links(card)}
+                        title="Связанные документы"
+                      >
+                        {card.refs.length
+                          ? 'Связей: ' + card.refs.length
+                          : card.known
+                            ? card.trash.length
+                              ? 'В корзине'
+                              : 'Нет связей'
+                            : 'Не проверено'}
+                      </button>
+                    </span>
+                  )
+                }
+                actions={pick ? [] : actions(card)}
+                disabled={locked}
+                notice={setError}
+                controls={
+                  pick ? (
+                    <button
+                      className="lib-button lib-secondary"
+                      disabled={busy}
+                      onClick={() => choose(card)}
+                    >
+                      Выбрать
+                    </button>
+                  ) : undefined
+                }
+              />
+            ))}
+          </LibraryItems>
+        )}
+        {preview && (
+          <FileDialog title={preview.name} close={() => setPreview(undefined)}>
+            <img
+              className="atlas-file-preview-image"
+              src={preview.url}
+              alt={preview.name}
+            />
+          </FileDialog>
+        )}
+        {selected && detail && (
+          <FileDialog
+            title={
+              detail.kind === 'links'
+                ? 'Связанные документы'
+                : detail.kind === 'copies'
+                  ? 'Публичные копии'
+                  : selected.name
+            }
+            close={() => setDetail(undefined)}
+            locked={busy}
+          >
+            {detail.kind === 'links' ? (
+              <div className="atlas-file-detail-list">
+                {!selected.known && (
+                  <p>Использование проверено не полностью.</p>
+                )}
+                {!selected.refs.length && !selected.trash.length && (
+                  <p>Связанные документы не найдены.</p>
+                )}
+                {selected.refs.map((r) => (
+                  <div key={r.kind + ':' + r.id}>
+                    {r.entry && openLesson ? (
+                      <button
+                        className="lib-button lib-text"
+                        onClick={() => {
+                          setDetail(undefined)
+                          openLesson(r.entry!)
+                        }}
+                      >
+                        {r.title}
+                      </button>
+                    ) : r.kind === 'publication' ? (
+                      <a
+                        className="file-link"
+                        href={'#p/' + r.id}
+                        onClick={() => setDetail(undefined)}
+                      >
+                        {r.title}
+                      </a>
+                    ) : (
+                      <span>
+                        {label(r)}: {r.title}
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {selected.trash.map((r) => (
+                  <p key={'trash:' + r.kind + ':' + r.id}>Корзина: {r.title}</p>
+                ))}
+              </div>
+            ) : detail.kind === 'properties' ? (
+              <dl className="atlas-file-properties">
+                <dt>Название</dt>
+                <dd>{selected.name}</dd>
+                <dt>Формат</dt>
+                <dd>{selected.mime}</dd>
+                <dt>Размер</dt>
+                <dd>{selected.size ?? 'Неизвестно'} байт</dd>
+                <dt>Расположение</dt>
+                <dd>
+                  {mode === 'local'
+                    ? selected.retained
+                      ? 'На устройстве'
+                      : 'В старом JSON'
+                    : selected.private
+                      ? 'Приватное облако'
+                      : 'Публичный ресурс'}
+                </dd>
+                <dt>Публичных копий</dt>
+                <dd>{selected.public.length}</dd>
+                <dt>SHA-256</dt>
+                <dd>{selected.sha ?? 'Неизвестно'}</dd>
+              </dl>
+            ) : (
+              <div className="atlas-file-detail-list">
+                {selected.public.map((row) => (
+                  <section key={resourceKey(row)}>
+                    <strong>{row.name}</strong>
+                    <div className="atlas-file-dialog-actions">
+                      <button
+                        className="secondary"
+                        disabled={locked}
                         onClick={() =>
                           void act(async () =>
-                            download(await cardBlob(card, owner), card.name)
+                            download(
+                              await readLibraryLegacyImage(row),
+                              row.name
+                            )
                           )
                         }
                       >
-                        Скачать файл
+                        <Download size={15} /> Скачать
                       </button>
-                      {mode === 'local' && owner && navigator.onLine && (
-                        <button
-                          disabled={busy}
-                          onClick={() =>
-                            void act(async () => {
-                              await uploadLibraryImage(
-                                owner,
-                                await cardBlob(card, owner),
-                                card.name
-                              )
-                            }, true)
-                          }
-                        >
-                          Добавить изображение в облако
-                        </button>
-                      )}
-                      {mode === 'local' && !card.retained && (
-                        <button
-                          disabled={busy}
-                          onClick={() =>
-                            void act(async () => {
-                              const blob = await cardBlob(card, owner)
-                              await retainLibraryImage(
-                                owner,
-                                await digest(blob),
-                                blob,
-                                card.name
-                              )
-                            }, true)
-                          }
-                        >
-                          Сохранить в библиотеку
-                        </button>
-                      )}
-                      {mode === 'cloud' && owner && (
-                        <button
-                          disabled={busy}
-                          onClick={() =>
-                            void act(async () => {
-                              if (card.private)
-                                await saveWorkingImageLocally(
-                                  owner,
-                                  card.private
-                                )
-                              else
-                                await saveLegacyImageLocally(
-                                  owner,
-                                  card.public[0]
-                                )
-                            }, true)
-                          }
-                        >
-                          Сохранить на устройстве
-                        </button>
-                      )}
-                      {mode === 'local' &&
-                        card.retained &&
-                        card.sha &&
-                        card.known &&
-                        !card.refs.length && (
-                          <button
-                            className="file-delete"
-                            disabled={busy}
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  'Удалить изображение с этого устройства? Облачная копия не изменится.'
-                                )
-                              )
-                                void act(
-                                  () =>
-                                    removeLocalLibraryImage(owner, card.sha!),
-                                  true
-                                )
-                            }}
-                          >
-                            Удалить с устройства
-                          </button>
-                        )}
-                      {mode === 'cloud' &&
-                        owner &&
-                        card.private &&
-                        card.known &&
-                        !card.refs.length &&
-                        !card.trash.length && (
-                          <button
-                            className="file-delete"
-                            disabled={busy}
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  'Удалить приватную облачную копию? Локальные и публичные копии сохранятся.'
-                                )
-                              )
-                                void act(
-                                  () =>
-                                    removePrivateResource(
-                                      owner,
-                                      card.private!,
-                                      () =>
-                                        assertPrivatePublicationUnused(
-                                          card.private!
-                                        )
-                                    ),
-                                  true
-                                )
-                            }}
-                          >
-                            Удалить приватную копию
-                          </button>
-                        )}
-                      {card.public.map((row) => (
-                        <details key={resourceKey(row)}>
-                          <summary>Публичный файл: {row.name}</summary>
-                          <button
-                            disabled={busy}
-                            onClick={() =>
-                              void act(async () =>
-                                download(
-                                  await readLibraryLegacyImage(row),
-                                  row.name
-                                )
-                              )
-                            }
-                          >
-                            Скачать эту копию
-                          </button>
-                          <button
-                            disabled={busy}
-                            onClick={() => {
-                              const name = prompt(
-                                'Название файла',
-                                row.name
-                              )?.trim()
-                              if (name)
-                                void act(() => updateFile(row, { name }), true)
-                            }}
-                          >
-                            Переименовать
-                          </button>
-                          <label>
-                            Папка{' '}
-                            <select
-                              value={row.folder}
-                              onChange={(e) => {
-                                const folder = e.target.value
-                                void act(
-                                  () => updateFile(row, { folder }),
-                                  true
-                                )
-                              }}
-                            >
-                              <option value="">Без папки</option>
-                              {[
-                                ...new Set(
-                                  [...(folders ?? []), row.folder].filter(
-                                    Boolean
-                                  )
-                                ),
-                              ].map((f) => (
-                                <option key={f}>{f}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <p className="files-note">
-                            Удаление публичной копии после миграции старых
-                            ссылок.
-                          </p>
-                        </details>
-                      ))}
+                      <button
+                        className="secondary"
+                        disabled={locked}
+                        onClick={() => {
+                          const name = prompt(
+                            'Название файла',
+                            row.name
+                          )?.trim()
+                          if (name)
+                            void act(() => updateFile(row, { name }), true)
+                        }}
+                      >
+                        <Pencil size={15} /> Переименовать
+                      </button>
                     </div>
-                  </details>
-                </>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
-      {preview && (
-        <div
-          className="overlay"
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setPreview(undefined)
-          }}
-        >
-          <section
-            className="dialog file-preview"
-            role="dialog"
-            aria-modal="true"
-            aria-label={preview.name}
-          >
-            <h2>{preview.name}</h2>
-            <img src={preview.url} alt={preview.name} />
-            <button
-              autoFocus
-              className="secondary"
-              onClick={() => setPreview(undefined)}
-            >
-              Закрыть
-            </button>
-          </section>
-        </div>
-      )}
-    </section>
+                    <label>
+                      Папка
+                      <select
+                        disabled={locked}
+                        value={row.folder}
+                        onChange={(e) => {
+                          const folder = e.target.value
+                          void act(() => updateFile(row, { folder }), true)
+                        }}
+                      >
+                        <option value="">Без папки</option>
+                        {[
+                          ...new Set(
+                            [...(folders ?? []), row.folder].filter(Boolean)
+                          ),
+                        ].map((f) => (
+                          <option key={f}>{f}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <p>Публичные копии не удаляются этим интерфейсом.</p>
+                  </section>
+                ))}
+              </div>
+            )}
+            {error && <p role="alert">{error}</p>}
+          </FileDialog>
+        )}
+      </section>
+    </ActionMenus>
   )
 }
 export function ResourcePicker({ pick }: { pick: Pick }) {

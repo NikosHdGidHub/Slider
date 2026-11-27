@@ -1,3 +1,4 @@
+import { LibraryStatus } from './LibraryStatus'
 import { download } from './instructions'
 import { unreadableDocuments } from './storage'
 import {
@@ -35,7 +36,13 @@ const lessonSorts: LibrarySort[] = [
 const templateSorts: LibrarySort[] = ['name', 'reverse']
 
 export function useLibrarySettings(
-  scope: 'lessons' | 'published' | 'presentation' | 'layout'
+  scope:
+    | 'lessons'
+    | 'published'
+    | 'presentation'
+    | 'layout'
+    | 'files'
+    | 'file-picker'
 ) {
   const key = 'atlas.library.v1.' + scope
   const sorts =
@@ -354,26 +361,28 @@ export function MigrationFailures({ kind }: { kind: 'lesson' | 'template' }) {
   const failures = unreadableDocuments(kind)
   if (!failures.length) return null
   return (
-    <details className="lib-migration-failures">
-      <summary>Не удалось открыть документы · {failures.length}</summary>
-      <ul>
-        {failures.map(({ title, message, source }, index) => (
-          <li key={index}>
-            <strong>{title}</strong>
-            <p>{message}</p>
-            <button
-              onClick={() =>
-                download(
-                  'atlas-original-' + (index + 1) + '.json',
-                  JSON.stringify(source, null, 2)
-                )
-              }
-            >
-              Скачать исходный JSON
-            </button>
-          </li>
-        ))}
-      </ul>
-    </details>
+    <LibraryStatus level="error" title="Не удалось открыть документы">
+      <details className="lib-migration-failures">
+        <summary>Не удалось открыть документы · {failures.length}</summary>
+        <ul>
+          {failures.map(({ title, message, source }, index) => (
+            <li key={index}>
+              <strong>{title}</strong>
+              <p>{message}</p>
+              <button
+                onClick={() =>
+                  download(
+                    'atlas-original-' + (index + 1) + '.json',
+                    JSON.stringify(source, null, 2)
+                  )
+                }
+              >
+                Скачать исходный JSON
+              </button>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </LibraryStatus>
   )
 }

@@ -1,3 +1,4 @@
+import { LibraryStatus } from './LibraryStatus'
 import { desktopEditingMessage } from './libraryNavigation'
 import {
   ArrowDownUp,
@@ -476,65 +477,23 @@ export function LessonLibrary(props: Props) {
         />
       )}
       {allowed && <MigrationFailures kind="lesson" />}
-      {allowed &&
-        courses.cloud &&
-        (!courses.online ||
-          courses.error ||
-          courses.conflict ||
-          courses.dirty ||
-          courses.syncing) && (
-          <div
-            className="course-sync"
-            role={courses.conflict || courses.error ? 'alert' : 'status'}
-          >
-            <span>
-              {courses.conflict
-                ? 'Структура курсов изменилась на другом устройстве. Ваши изменения сохранены здесь.'
-                : courses.error ||
-                  (!courses.online
-                    ? 'Курсы доступны офлайн. Изменения синхронизируются после подключения.'
-                    : courses.syncing
-                      ? 'Синхронизация курсов…'
-                      : 'Изменения курсов ожидают синхронизации.')}
-            </span>
-            {courses.conflict ? (
-              <>
-                <button
-                  className="lib-button lib-secondary"
-                  onClick={() => void run(() => courses.resolve('local'))}
-                >
-                  Применить мои изменения
-                </button>
-                <button
-                  className="lib-button lib-secondary"
-                  onClick={() => {
-                    if (
-                      confirm(
-                        'Заменить ожидающие изменения курсов облачной версией?'
-                      )
-                    )
-                      void run(() => courses.resolve('remote'))
-                  }}
-                >
-                  Принять облачную версию
-                </button>
-              </>
-            ) : (
-              courses.error && (
-                <button
-                  className="lib-button lib-secondary"
-                  onClick={courses.retry}
-                >
-                  Повторить синхронизацию
-                </button>
-              )
-            )}
-          </div>
-        )}
-      {allowed && !courses.cloud && courses.error && (
-        <p role="alert" className="course-sync">
-          {courses.error}
-        </p>
+      {allowed && courses.error && (
+        <LibraryStatus level="error" title="Курсы: ошибка">
+          <p>{courses.error}</p>
+          {courses.cloud && (
+            <button className="secondary" onClick={courses.retry}>
+              Повторить синхронизацию
+            </button>
+          )}
+        </LibraryStatus>
+      )}
+      {allowed && error && rows.length > 0 && (
+        <LibraryStatus level="error" title="Не удалось обновить методички">
+          <p>{error}</p>
+          <button className="secondary" onClick={retry}>
+            Повторить
+          </button>
+        </LibraryStatus>
       )}
       {selecting && (
         <div className="course-bulk" role="group" aria-label="Выбор методичек">
@@ -569,7 +528,7 @@ export function LessonLibrary(props: Props) {
         >
           Войдите, чтобы открыть сохранённые на этом устройстве методички.
         </LibraryState>
-      ) : error ? (
+      ) : error && !rows.length ? (
         <LibraryState
           title="Библиотека недоступна"
           error
@@ -875,14 +834,15 @@ export function LessonLibrary(props: Props) {
             )
           )}
           {props.publicationsLoading && (
-            <p className="lib-results" role="status">
-              Загружаем публикации…
-            </p>
+            <LibraryStatus level="busy" title="Загружаем публикации…" />
           )}
           {props.publicationsError && (
-            <p className="lib-results">
-              Часть публикаций недоступна. Локальные методички можно открыть.
-            </p>
+            <LibraryStatus level="error" title="Часть публикаций недоступна">
+              <p>
+                Локальные методички можно открыть. Повторите синхронизацию в
+                этом окне.
+              </p>
+            </LibraryStatus>
           )}
         </>
       )}

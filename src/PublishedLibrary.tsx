@@ -1,3 +1,4 @@
+import { LibraryStatus } from './LibraryStatus'
 import { useMemo, useState } from 'react'
 import {
   Download,
@@ -44,7 +45,14 @@ export function PublicationThumbnail({ row }: { row: PublishedRow }) {
   )
 }
 type Action =
-  'view' | 'copy' | 'qr' | 'edit' | 'save' | 'offline' | 'export' | 'unpublish'
+  | 'view'
+  | 'copy'
+  | 'qr'
+  | 'edit'
+  | 'save'
+  | 'offline'
+  | 'export'
+  | 'unpublish'
 
 export function PublishedLibrary({
   rows,
@@ -216,13 +224,37 @@ export function PublishedLibrary({
               </button>
             )}
             {!online && (
-              <p className="lib-notice">
-                Офлайн. Показан последний загруженный каталог.
-              </p>
+              <LibraryStatus level="warning" title="Публикации: офлайн">
+                <p>Показан последний загруженный каталог.</p>
+              </LibraryStatus>
             )}
             {failed && (
-              <LibraryState
+              <LibraryStatus
+                level="error"
                 title="Не удалось обновить публикации"
+              >
+                <button className="secondary" onClick={retry}>
+                  Повторить
+                </button>
+              </LibraryStatus>
+            )}
+            {rows.some((row) => !row.indexed) && online && (
+              <LibraryStatus
+                level="warning"
+                title="Не все публикации индексированы"
+              >
+                <p>У части публикаций ещё нет названий в каталоге.</p>
+                <button className="secondary" onClick={backfill}>
+                  Индексировать прежние публикации
+                </button>
+              </LibraryStatus>
+            )}
+            {loading && rows.length > 0 && (
+              <LibraryStatus level="busy" title="Обновляем публикации…" />
+            )}
+            {failed && !rows.length && (
+              <LibraryState
+                title="Каталог публикаций недоступен"
                 error
                 action={
                   <button className="secondary" onClick={retry}>
@@ -231,15 +263,7 @@ export function PublishedLibrary({
                 }
               />
             )}
-            {rows.some((row) => !row.indexed) && online && (
-              <div className="lib-notice">
-                У части публикаций ещё нет названий в каталоге.
-                <button className="lib-button lib-text" onClick={backfill}>
-                  Индексировать прежние публикации
-                </button>
-              </div>
-            )}
-            {loading && !rows.length && (
+            {loading && !rows.length && !failed && (
               <LibraryState title="Загружаем публикации…" />
             )}
             {!loading &&
