@@ -67,6 +67,19 @@ async function restoreStoredDocument(
     return asset.blob
   })
 }
+async function prepareStoredDocument(document: WorkingDocument) {
+  const kind: WorkingKind = 'deck' in document ? 'template' : 'lesson'
+
+  const prepared =
+    'deck' in document
+      ? validateTemplate({
+          ...document,
+          deck: await prepareDocumentImages(document.deck),
+        })
+      : await prepareDocumentImages(document)
+
+  return packLocalDocument(kind, prepared)
+}
 const workingChanges = new EventTarget()
 const workingChannel =
   typeof BroadcastChannel === 'function'
@@ -110,10 +123,11 @@ const opened = new Promise<IDBDatabase>((resolve, reject) => {
     if (!request.result.objectStoreNames.contains('originalDocuments'))
       request.result.createObjectStore('originalDocuments')
     for (const name of [
+      'lessons',
+      'templates',
       'workingState',
-      'workingAssets',
       'workingBackups',
-      'publicCatalog',
+      'workingAssets',
     ])
       if (!request.result.objectStoreNames.contains(name))
         request.result.createObjectStore(name)
@@ -294,6 +308,56 @@ export async function saveEntry(
   }
 
   const db = await opened
+  let backupDocument: StoredWorkingDocument | undefined
+
+  if (!remove && revision > 0) {
+    const previousRow = await new Promise<any>((resolve, reject) => {
+      const request = db
+        .transaction('lessons')
+        .objectStore('lessons')
+        .get(deck.id)
+
+      request.onsuccess = () => resolve(request.result)
+
+      request.onerror = () => reject(request.error)
+    })
+
+    if (
+      !previousRow ||
+      !belongs(previousRow, owner) ||
+      previousRow.revision !== revision
+    ) {
+      throw Error('Версия документа изменилась.')
+    }
+
+    const previous = previousRow.packed?.document ?? previousRow.deck
+
+    const requiresBackup =
+      backupBeforeSync ||
+      (deck.migrated === false && (previous.version < 3 || previous.migrated))
+
+    if (requiresBackup) {
+      const restored = await restoreStoredDocument('lesson', previousRow, owner)
+
+      if ('deck' in restored) throw Error('Ожидалась методичка.')
+
+      const backup: Deck = {
+        ...restored,
+
+        id: crypto.randomUUID(),
+
+        title: backupBeforeSync
+          ? restored.title.slice(0, 970) + ' — до синхронизации'
+          : restored.title.slice(0, 990) + ' — до смены шаблона',
+      }
+
+      const result = await prepareStoredDocument(backup)
+
+      backupDocument = result.stored
+
+      for (const [sha, blob] of result.assets) assets.set(sha, blob)
+    }
+  }
   return new Promise<void>((resolve, reject) => {
     const stores = [
       'lessons',
@@ -328,34 +392,20 @@ export async function saveEntry(
       } else {
         const previous = read.result?.deck
         if (previous) storeOriginal(tx, 'lesson', deck.id, previous)
-        if (backupBeforeSync && previous) {
-          const backup = {
-            ...previous,
-            id: crypto.randomUUID(),
-            title: previous.title.slice(0, 970) + ' — до синхронизации',
-          }
+        if (backupDocument) {
+          const backup = backupDocument.document
+
           store.add({
             deck: backup,
+            packed: backupDocument,
             revision: 1,
             updated: Date.now(),
             scope: owner ?? undefined,
           })
-        } else if (
-          deck.migrated === false &&
-          previous &&
-          (previous.version < 3 || previous.migrated)
-        ) {
-          const backup = {
-            ...previous,
-            id: crypto.randomUUID(),
-            title: previous.title.slice(0, 990) + ' — до смены шаблона',
+
+          if (owner) {
+            enqueueWorking(tx, owner, 'lesson', backup, false)
           }
-          store.add({
-            deck: backup,
-            revision: 1,
-            updated: Date.now(),
-            scope: owner ?? undefined,
-          })
         }
         store.put({
           deck: packed ? packed.document : deck,
@@ -667,7 +717,28 @@ function enqueueWorking(
     store.put(next, key)
   }
 }
+function transferLocalAssets(
+  tx: IDBTransaction,
+  owner: string,
+  packed: StoredWorkingDocument
+) {
+  const store = tx.objectStore('workingAssets')
 
+  for (const sha of new Set(packed.refs)) {
+    const request = store.get(['local', sha])
+
+    request.onsuccess = () => {
+      const asset: Asset | undefined = request.result
+
+      if (!asset) {
+        tx.abort()
+        return
+      }
+
+      retainAsset(tx, owner, sha, asset.blob)
+    }
+  }
+}
 export async function registerWorking(owner: string) {
   const db = await opened
   return new Promise<void>((resolve, reject) => {
@@ -700,8 +771,16 @@ export async function registerWorking(owner: string) {
           const read = state.get(key)
           read.onsuccess = () => {
             if (read.result && existing.scope) return
-            if (!existing.scope && existing.packed) return
-            if (!existing.scope) collection.put({ ...existing, scope: owner })
+            if (!existing.scope) {
+              if (existing.packed) {
+                transferLocalAssets(tx, owner, existing.packed)
+              }
+
+              collection.put({
+                ...existing,
+                scope: owner,
+              })
+            }
             if (read.result?.dirty) return
             const previous: WorkingRecord = {
               id,
@@ -807,17 +886,21 @@ export async function updateWorking(
 ) {
   const assets = new Map<string, Blob>()
 
-  const documentsToRetain = [replacement?.document, replacement?.copy].filter(
-    (document): document is WorkingDocument => !!document
-  )
+  async function prepare(
+    document?: WorkingDocument
+  ): Promise<StoredWorkingDocument | undefined> {
+    if (!document) return undefined
 
-  for (const document of documentsToRetain) {
-    const documentKind = 'deck' in document ? 'template' : 'lesson'
-
-    const result = await packLocalDocument(documentKind, document)
+    const result = await prepareStoredDocument(document)
 
     for (const [sha, blob] of result.assets) assets.set(sha, blob)
+
+    return result.stored
   }
+
+  const packedDocument = await prepare(replacement?.document)
+  const packedCopy = await prepare(replacement?.copy)
+  const packedBackup = await prepare(replacement?.backup)
   const db = await opened
   return new Promise<boolean>((resolve, reject) => {
     const table = kind === 'lesson' ? 'lessons' : 'templates'
@@ -850,7 +933,7 @@ export async function updateWorking(
       if (!replacement) return
       retainDocumentAssets(tx, owner, assets)
       const documents = tx.objectStore(table)
-      const document = replacement.document
+      const document = packedDocument?.document
       const docId =
         read.result?.localId ?? (document ? workingDeck(document).id : id)
       const previous = documents.get(docId)
@@ -859,18 +942,41 @@ export async function updateWorking(
           tx.abort()
           return
         }
-        if (replacement.backup)
+        if (packedBackup)
           tx.objectStore('workingBackups').put(
-            { document: replacement.backup, until: Date.now() + 7 * 86400000 },
+            {
+              document: packedBackup.document,
+              packed: packedBackup,
+              until: Date.now() + 7 * 86400000,
+            },
+
             [...key, crypto.randomUUID()]
           )
-        if (replacement.copy) {
-          const copy = replacement.copy
+        if (packedCopy) {
+          const copy = packedCopy.document
+
           const data =
             'deck' in copy
-              ? { template: copy, cloudRevision: 0, dirty: true }
-              : { deck: copy, updated: Date.now() }
-          documents.add({ ...data, scope: owner, revision: 1 })
+              ? {
+                  template: copy,
+                  cloudRevision: 0,
+                  dirty: true,
+                }
+              : {
+                  deck: copy,
+                  updated: Date.now(),
+                }
+
+          documents.add({
+            ...data,
+
+            packed: packedCopy,
+
+            scope: owner,
+
+            revision: 1,
+          })
+
           enqueueWorking(tx, owner, kind, copy, false)
         }
         if (replacement.preserve) return
@@ -894,6 +1000,7 @@ export async function updateWorking(
               }
         documents.put({
           ...data,
+          packed: packedDocument,
           scope: owner,
           revision: (previous.result?.revision ?? 0) + 1,
         })
@@ -1025,17 +1132,61 @@ export async function workingAsset(
 
 export async function workingBackups(owner: string) {
   const db = await opened
-  return new Promise<{ document: WorkingDocument; until: number }[]>(
-    (resolve, reject) => {
-      const q = db
-        .transaction('workingBackups')
-        .objectStore('workingBackups')
-        .getAll(ownerRange(owner))
-      q.onsuccess = () =>
-        resolve(q.result.filter((row) => row.until > Date.now()))
-      q.onerror = () => reject(q.error)
+
+  const rows = await new Promise<
+    {
+      document: WorkingDocument
+      packed?: StoredWorkingDocument
+      until: number
+    }[]
+  >((resolve, reject) => {
+    const q = db
+      .transaction('workingBackups')
+      .objectStore('workingBackups')
+      .getAll(ownerRange(owner))
+
+    q.onsuccess = () =>
+      resolve(q.result.filter((row) => row.until > Date.now()))
+
+    q.onerror = () => reject(q.error)
+  })
+
+  const result: {
+    document: WorkingDocument
+    until: number
+  }[] = []
+
+  for (const row of rows) {
+    let document = row.document
+
+    if (row.packed) {
+      const kind: WorkingKind = 'deck' in document ? 'template' : 'lesson'
+
+      document = await unpackLocalDocument(
+        kind,
+        workingDeck(document).id,
+        row.packed,
+
+        async (sha) => {
+          const asset = await workingAsset(owner, sha)
+
+          if (!asset)
+            throw Error(
+              'Ресурс резервной копии отсутствует: ' + sha.slice(0, 12)
+            )
+
+          return asset.blob
+        }
+      )
     }
-  )
+
+    result.push({
+      document,
+      until: row.until,
+    })
+  }
+
+  return result
 }
 
 export async function savedPublicCatalog(
