@@ -11,11 +11,11 @@ import {
 } from './courseModel'
 
 import {
+  packWorking,
   workingDeck,
   type WorkingDocument,
   type WorkingKind,
   type WorkingRecord,
-  type WorkingMeta,
 } from './workingDocument'
 import { prepareDocumentImages } from './media'
 
@@ -31,6 +31,9 @@ export function setWorkingOwner(owner: string | null) {
 }
 export function currentWorkingOwner() {
   return workingOwner
+}
+export function assetScope(owner: string | null): string {
+  return owner ?? 'local'
 }
 const workingChanges = new EventTarget()
 const workingChannel =
@@ -222,14 +225,26 @@ export async function saveEntry(
   deleteCloud = false,
   owner = workingOwner
 ) {
+  const assets = new Map<string, Blob>()
+
   if (!remove) {
     deck = await prepareDocumentImages(deck)
-    validateDeck(deck)
+
+    const packed = await packWorking('lesson', deck)
+
+    for (const [sha, blob] of packed.assets) {
+      assets.set(sha, blob)
+    }
   }
 
   const db = await opened
   return new Promise<void>((resolve, reject) => {
-    const stores = ['lessons', 'originalDocuments', 'workingState']
+    const stores = [
+      'lessons',
+      'originalDocuments',
+      'workingState',
+      'workingAssets',
+    ]
     if (placement) stores.push('libraryCourses')
     const tx = db.transaction(stores, 'readwrite'),
       store = tx.objectStore('lessons')
@@ -247,6 +262,7 @@ export async function saveEntry(
         tx.abort()
         return
       }
+      if (!remove) retainDocumentAssets(tx, owner, assets)
       if (owner && (!remove || deleteCloud))
         enqueueWorking(tx, owner, 'lesson', deck, remove)
       if (remove) {
@@ -349,7 +365,7 @@ export function localTemplates() {
 }
 export async function writeTemplate(entry: TemplateEntry, remove = false) {
   const owner = workingOwner
-
+  const assets = new Map<string, Blob>()
   if (!remove) {
     entry = {
       ...entry,
@@ -363,7 +379,7 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
   const db = await opened
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(
-        ['templates', 'originalDocuments', 'workingState'],
+        ['templates', 'originalDocuments', 'workingState', 'workingAssets'],
         'readwrite'
       ),
       store = tx.objectStore('templates'),
@@ -382,6 +398,7 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
         tx.abort()
         return
       }
+      if (!remove) retainDocumentAssets(tx, owner, assets)
       if (owner && !remove && entry.dirty)
         enqueueWorking(tx, owner, 'template', entry.template, false)
 
@@ -688,7 +705,6 @@ export async function localWorkingDocument(
     read.onerror = () => reject(read.error)
   })
 }
-
 export async function updateWorking(
   owner: string,
   kind: WorkingKind,
@@ -702,11 +718,30 @@ export async function updateWorking(
     copy?: WorkingDocument
   }
 ) {
+  const assets = new Map<string, Blob>()
+
+  const documentsToRetain = [replacement?.document, replacement?.copy].filter(
+    (document): document is WorkingDocument => !!document
+  )
+
+  for (const document of documentsToRetain) {
+    const documentKind = 'deck' in document ? 'template' : 'lesson'
+
+    const packed = await packWorking(documentKind, document)
+
+    for (const [sha, blob] of packed.assets) assets.set(sha, blob)
+  }
   const db = await opened
   return new Promise<boolean>((resolve, reject) => {
     const table = kind === 'lesson' ? 'lessons' : 'templates'
     const tx = db.transaction(
-      ['workingState', table, 'workingBackups', 'originalDocuments'],
+      [
+        'workingState',
+        table,
+        'workingBackups',
+        'originalDocuments',
+        'workingAssets',
+      ],
       'readwrite'
     )
     const state = tx.objectStore('workingState')
@@ -726,6 +761,7 @@ export async function updateWorking(
       state.put(next, key)
       changed = true
       if (!replacement) return
+      retainDocumentAssets(tx, owner, assets)
       const documents = tx.objectStore(table)
       const document = replacement.document
       const docId =
@@ -784,7 +820,74 @@ export async function updateWorking(
   })
 }
 
-type Asset = { blob: Blob; uploaded: boolean }
+export type Asset = {
+  blob: Blob
+  uploaded: boolean
+  name?: string
+  createdAt?: number
+  retained?: boolean
+}
+function assetExtension(mime: string) {
+  switch (mime) {
+    case 'image/png':
+      return 'png'
+
+    case 'image/jpeg':
+      return 'jpg'
+
+    case 'image/webp':
+      return 'webp'
+
+    default:
+      return 'bin'
+  }
+}
+
+function retainAsset(
+  tx: IDBTransaction,
+  owner: string,
+  sha: string,
+  blob: Blob
+) {
+  const store = tx.objectStore('workingAssets')
+  const key = [owner, sha]
+
+  const request = store.get(key)
+
+  request.onsuccess = () => {
+    const existing: Asset | undefined = request.result
+
+    if (existing?.retained) return
+
+    const next: Asset = {
+      blob: existing?.blob ?? blob,
+
+      uploaded: existing?.uploaded ?? false,
+
+      retained: true,
+
+      name:
+        existing?.name ??
+        'Изображение-' + sha.slice(0, 12) + '.' + assetExtension(blob.type),
+
+      createdAt: existing?.createdAt ?? Date.now(),
+    }
+
+    store.put(next, key)
+  }
+}
+
+function retainDocumentAssets(
+  tx: IDBTransaction,
+  owner: string | null,
+  assets: Map<string, Blob>
+) {
+  for (const [sha, blob] of assets) {
+    if (!blob.type.startsWith('image/')) continue
+
+    retainAsset(tx, assetScope(owner), sha, blob)
+  }
+}
 export async function workingAsset(
   owner: string,
   sha: string,
@@ -796,14 +899,38 @@ export async function workingAsset(
     const store = tx.objectStore('workingAssets')
     const key = [owner, sha]
     const request = store.get(key)
+    let result: Asset | undefined
+
     request.onsuccess = () => {
+      const existing: Asset | undefined = request.result
+
+      result = existing
+
+      if (!write) return
+
+      result = {
+        ...write,
+        ...existing,
+
+        blob: existing?.blob ?? write.blob,
+
+        uploaded: !!existing?.uploaded || write.uploaded,
+
+        retained: !!existing?.retained || !!write.retained,
+
+        createdAt: existing?.createdAt ?? write.createdAt ?? Date.now(),
+      }
+
       if (
-        write &&
-        (!request.result || (write.uploaded && !request.result.uploaded))
-      )
-        store.put(write, key)
+        !existing ||
+        result.uploaded !== existing.uploaded ||
+        result.retained !== existing.retained ||
+        !existing.createdAt
+      ) {
+        store.put(result, key)
+      }
     }
-    tx.oncomplete = () => resolve(write ?? request.result)
+    tx.oncomplete = () => resolve(result)
     tx.onabort = () =>
       reject(tx.error ?? Error('Не удалось сохранить приватный ресурс.'))
   })
@@ -836,5 +963,51 @@ export async function savedPublicCatalog(
     tx.oncomplete = () => resolve(write ?? req.result ?? [])
     tx.onabort = () =>
       reject(tx.error ?? Error('Не удалось открыть каталог на устройстве.'))
+  })
+}
+export type LocalAsset = Asset & {
+  sha: string
+}
+
+export async function localAssets(owner = workingOwner): Promise<LocalAsset[]> {
+  const db = await opened
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('workingAssets', 'readonly')
+
+    const store = tx.objectStore('workingAssets')
+
+    const result: LocalAsset[] = []
+
+    const cursor = store.openCursor(ownerRange(assetScope(owner)))
+
+    cursor.onsuccess = () => {
+      const row = cursor.result
+
+      if (!row) return
+
+      const value: Asset = row.value
+      const key = row.key
+
+      if (
+        Array.isArray(key) &&
+        value.retained &&
+        value.blob.type.startsWith('image/')
+      ) {
+        result.push({
+          ...value,
+          sha: String(key[1]),
+        })
+      }
+
+      row.continue()
+    }
+
+    tx.oncomplete = () => {
+      resolve(result.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)))
+    }
+
+    tx.onabort = () =>
+      reject(tx.error ?? Error('Не удалось прочитать библиотеку изображений.'))
   })
 }
