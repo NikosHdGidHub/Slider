@@ -1,4 +1,11 @@
-import { useRef, useState, useEffect, useId, type ReactNode } from 'react'
+import {
+  useRef,
+  useState,
+  useEffect,
+  useId,
+  type ReactNode,
+  useLayoutEffect,
+} from 'react'
 
 import {
   Monitor,
@@ -15,6 +22,7 @@ import {
 } from 'lucide-react'
 
 import './availability.css'
+import { createPortal } from 'react-dom'
 
 export type AvailabilityState = {
   local: boolean
@@ -35,6 +43,7 @@ export type AvailabilityProps = {
   state: AvailabilityState
   disabled?: boolean
   cloudDisabled?: boolean
+  compact?: boolean
 
   onLocal: (enabled: boolean) => Promise<void>
   onCloud: (enabled: boolean) => Promise<void>
@@ -127,6 +136,7 @@ export function AvailabilityControl({
   onConflict,
   onUpdatePublication,
   onError,
+  compact = false,
 }: AvailabilityProps) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -134,7 +144,7 @@ export function AvailabilityControl({
   const running = useRef(false)
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
-
+  const panel = useRef<HTMLDivElement>(null)
   const panelId = useId()
 
   useEffect(() => {
@@ -143,7 +153,8 @@ export function AvailabilityControl({
     function outside(event: PointerEvent) {
       if (
         event.target instanceof Node &&
-        !root.current?.contains(event.target)
+        !root.current?.contains(event.target) &&
+        !panel.current?.contains(event.target)
       ) {
         setOpen(false)
       }
@@ -165,7 +176,54 @@ export function AvailabilityControl({
       document.removeEventListener('keydown', keyboard)
     }
   }, [open])
+  useLayoutEffect(() => {
+    if (!open) return
 
+    function position() {
+      const anchor = trigger.current
+      const element = panel.current
+
+      if (!anchor || !element) return
+
+      const rect = anchor.getBoundingClientRect()
+      const gap = 8
+
+      const width = Math.min(340, window.innerWidth - gap * 2)
+
+      const left = Math.max(
+        gap,
+        Math.min(rect.right - width, window.innerWidth - width - gap)
+      )
+
+      const below = window.innerHeight - rect.bottom - gap * 2
+
+      const above = rect.top - gap * 2
+
+      const upward = below < element.scrollHeight && above > below
+
+      element.style.width = width + 'px'
+      element.style.left = left + 'px'
+
+      element.style.maxHeight = Math.max(24, upward ? above : below) + 'px'
+
+      element.style.top =
+        (upward
+          ? Math.max(gap, rect.top - element.offsetHeight - gap)
+          : rect.bottom + gap) + 'px'
+
+      element.style.visibility = 'visible'
+    }
+
+    position()
+
+    window.addEventListener('resize', position)
+    window.addEventListener('scroll', position, true)
+
+    return () => {
+      window.removeEventListener('resize', position)
+      window.removeEventListener('scroll', position, true)
+    }
+  }, [open, busy, state])
   async function execute(action: () => void | Promise<void>) {
     if (running.current || disabled) return
 
@@ -267,7 +325,12 @@ export function AvailabilityControl({
             : 'inactive'
 
   return (
-    <div className="availability-control" ref={root} aria-busy={busy}>
+    <div
+      className="availability-control"
+      data-compact={compact || undefined}
+      ref={root}
+      aria-busy={busy}
+    >
       <div className="availability-indicators">
         <AvailabilityIndicator label={localLabel} tone={localTone}>
           <LocalIcon
@@ -321,112 +384,113 @@ export function AvailabilityControl({
         />
       </button>
 
-      {open && (
-        <div
-          id={panelId}
-          className="availability-panel"
-          role="group"
-          aria-label="Управление доступностью"
-        >
-          <div className="availability-heading">Управление доступностью</div>
+      {open &&
+        createPortal(
+          <div ref={panel} id={panelId} className="availability-panel">
+            <div className="availability-heading">Управление доступностью</div>
 
-          <AvailabilitySwitch
-            title="На устройстве"
-            description={localLabel}
-            enabled={state.local}
-            disabled={
-              locked ||
-              state.localSaving ||
-              state.localError ||
-              (state.local &&
-                (state.pending || state.syncing || state.conflict))
-            }
-            icon={<Monitor size={21} />}
-            onChange={() => void execute(() => onLocal(!state.local))}
-          />
-
-          <AvailabilitySwitch
-            title="В личном облаке"
-            description={cloudLabel}
-            enabled={state.cloud}
-            disabled={
-              remoteLocked ||
-              state.syncing ||
-              state.pending ||
-              state.conflict ||
-              state.localSaving ||
-              state.localError
-            }
-            icon={<Cloud size={21} />}
-            onChange={() => void execute(() => onCloud(!state.cloud))}
-          />
-
-          {state.published !== undefined && onPublished && (
             <AvailabilitySwitch
-              title="Публичный доступ"
-              description={publicationLabel}
-              enabled={state.published}
-              disabled={remoteLocked || state.localSaving || state.localError}
-              icon={<Globe2 size={21} />}
-              onChange={() => void execute(() => onPublished(!state.published))}
+              title="На устройстве"
+              description={localLabel}
+              enabled={state.local}
+              disabled={
+                locked ||
+                state.localSaving ||
+                state.localError ||
+                (state.local &&
+                  (state.pending || state.syncing || state.conflict))
+              }
+              icon={<Monitor size={21} />}
+              onChange={() => void execute(() => onLocal(!state.local))}
             />
-          )}
 
-          {state.conflict && onConflict && (
-            <button
-              type="button"
-              className="availability-action conflict"
-              disabled={remoteLocked}
-              onClick={() => {
-                setOpen(false)
-                void execute(onConflict)
-              }}
-            >
-              <AlertTriangle size={17} />
-              Разрешить конфликт
-            </button>
-          )}
+            <AvailabilitySwitch
+              title="В личном облаке"
+              description={cloudLabel}
+              enabled={state.cloud}
+              disabled={
+                remoteLocked ||
+                state.syncing ||
+                state.pending ||
+                state.conflict ||
+                state.localSaving ||
+                state.localError
+              }
+              icon={<Cloud size={21} />}
+              onChange={() => void execute(() => onCloud(!state.cloud))}
+            />
 
-          {state.cloud && !state.conflict && onSync && (
-            <button
-              type="button"
-              className="availability-action"
-              disabled={remoteLocked || state.syncing}
-              onClick={() => void execute(onSync)}
-            >
-              <RefreshCw size={17} />
-              Синхронизировать сейчас
-            </button>
-          )}
+            {state.published !== undefined && onPublished && (
+              <AvailabilitySwitch
+                title="Публичный доступ"
+                description={publicationLabel}
+                enabled={state.published}
+                disabled={remoteLocked || state.localSaving || state.localError}
+                icon={<Globe2 size={21} />}
+                onChange={() =>
+                  void execute(() => onPublished(!state.published))
+                }
+              />
+            )}
 
-          {state.published &&
-            state.publicationOutdated &&
-            onUpdatePublication && (
+            {state.conflict && onConflict && (
               <button
                 type="button"
-                className="availability-action"
-                disabled={remoteLocked || state.localSaving || state.localError}
-                onClick={() => void execute(onUpdatePublication)}
+                className="availability-action conflict"
+                disabled={remoteLocked}
+                onClick={() => {
+                  setOpen(false)
+                  void execute(onConflict)
+                }}
               >
-                <Globe2 size={17} />
-                Обновить публикацию
+                <AlertTriangle size={17} />
+                Разрешить конфликт
               </button>
             )}
 
-          {busy && (
-            <div className="availability-progress" role="status">
-              <RefreshCw size={15} className="availability-spinning" />
-              Выполняется операция…
-            </div>
-          )}
+            {state.cloud && !state.conflict && onSync && (
+              <button
+                type="button"
+                className="availability-action"
+                disabled={remoteLocked || state.syncing}
+                onClick={() => void execute(onSync)}
+              >
+                <RefreshCw size={17} />
+                Синхронизировать сейчас
+              </button>
+            )}
 
-          {state.offline && (
-            <div className="availability-note">
-              Нет подключения к интернету. Облачные операции недоступны.
-            </div>
-          )}
-        </div>
-      )}
+            {state.published &&
+              state.publicationOutdated &&
+              onUpdatePublication && (
+                <button
+                  type="button"
+                  className="availability-action"
+                  disabled={
+                    remoteLocked || state.localSaving || state.localError
+                  }
+                  onClick={() => void execute(onUpdatePublication)}
+                >
+                  <Globe2 size={17} />
+                  Обновить публикацию
+                </button>
+              )}
+
+            {busy && (
+              <div className="availability-progress" role="status">
+                <RefreshCw size={15} className="availability-spinning" />
+                Выполняется операция…
+              </div>
+            )}
+
+            {state.offline && (
+              <div className="availability-note">
+                Нет подключения к интернету. Облачные операции недоступны.
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

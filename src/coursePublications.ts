@@ -55,5 +55,12 @@ export function useCoursePublications(
     rows: state.owner === owner ? state.rows : [],
     failure: !!owner && online && failure,
     loading: !!owner && online && loading,
+    checked:
+      state.owner === owner &&
+      !!owner &&
+      online &&
+      authorized &&
+      !loading &&
+      !failure,
   }
 }

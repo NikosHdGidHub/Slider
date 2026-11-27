@@ -56,6 +56,7 @@ import {
   presentationInstructionsName,
   templateInstructions,
 } from './instructions'
+import { AvailabilityControl, AvailabilityProps } from './AvailabilityControl'
 
 export function TemplateLibrary({
   kind,
@@ -70,6 +71,7 @@ export function TemplateLibrary({
   create,
   refresh,
   notice,
+  availabilityFor,
 }: {
   kind: Template['kind']
   setKind: (kind: Template['kind']) => void
@@ -83,6 +85,7 @@ export function TemplateLibrary({
   create: (deck: Deck) => Promise<void>
   refresh: () => Promise<void>
   notice: (message: string) => void
+  availabilityFor?: (row: CatalogRow) => AvailabilityProps
 }) {
   const [busy, setBusy] = useState(false)
   const active = useRef(false)
@@ -470,13 +473,22 @@ export function TemplateLibrary({
                 key={deck.id}
                 deck={row.meta ? undefined : deck}
                 name={deck.title}
-                first={<TemplateStatus row={row} />}
+                first={
+                  row.builtin || !editable || !availabilityFor ? (
+                    <TemplateStatus row={row} />
+                  ) : null
+                }
                 preflight
                 description={row.template.description}
                 actions={actions(row)}
                 disabled={busy}
                 notice={notice}
                 open={() => showPreview(row)}
+                availability={
+                  !row.builtin && editable && availabilityFor ? (
+                    <AvailabilityControl {...availabilityFor(row)} compact />
+                  ) : undefined
+                }
               />
             ))}
           </LibraryItems>

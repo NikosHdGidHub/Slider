@@ -90,9 +90,8 @@
 /* Выпадающая панель */
 
 .availability-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
+  position: fixed;
+  visibility: hidden;
 
   width: 340px;
   max-width: calc(100vw - 24px);
@@ -103,7 +102,7 @@
 
   padding: 8px;
 
-  z-index: 300;
+  z-index: 1000;
 
   background: Canvas;
   color: CanvasText;
@@ -347,4 +346,34 @@
 .edit-head .availability-option,
 .edit-head .availability-action {
   white-space: normal;
+}
+.availability-control[data-compact='true'] {
+  gap: 5px;
+}
+
+.availability-control[data-compact='true'] .availability-indicators {
+  gap: 2px;
+}
+
+.availability-control[data-compact='true'] .availability-indicator {
+  width: 20px;
+  height: 28px;
+}
+
+.availability-control[data-compact='true'] .availability-indicator svg {
+  width: 16px;
+  height: 16px;
+}
+
+.availability-control[data-compact='true'] .availability-trigger {
+  width: 30px;
+  min-height: 30px;
+  padding: 4px;
+}
+
+.availability-control[data-compact='true'] .availability-trigger > span,
+.availability-control[data-compact='true']
+  .availability-trigger
+  > svg:last-child {
+  display: none;
 }

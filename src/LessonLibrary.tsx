@@ -48,6 +48,7 @@ import {
   type CourseCommand,
 } from './courseModel'
 import type { CourseLibrary } from './courseSync'
+import { AvailabilityControl, AvailabilityProps } from './AvailabilityControl'
 
 const formatDate = new Intl.DateTimeFormat('ru-RU', {
   day: 'numeric',
@@ -72,6 +73,7 @@ export type LessonRow = Entry & {
 }
 
 interface Props {
+  availabilityFor?: (entry: LessonRow) => AvailabilityProps
   settings: LibrarySettings
   rows: LessonRow[]
   courses: CourseLibrary
@@ -650,6 +652,10 @@ export function LessonLibrary(props: Props) {
                 const selectedHere = selected.has(lessonId)
                 const orderThis = ordering && !!course
                 const isPublished = published.has(lessonId)
+                const availability =
+                  editable && !ordering && !selecting
+                    ? props.availabilityFor?.(entry)
+                    : undefined
                 const actions: MenuItem[] = [
                   { label: 'Просмотр', icon: Play, run: () => view(entry) },
                 ]
@@ -677,7 +683,7 @@ export function LessonLibrary(props: Props) {
                   icon: Download,
                   run: () => exportJSON(entry),
                 })
-                if (!revision)
+                if (!availability && !revision)
                   actions.push({
                     label: 'Сохранить на устройство',
                     icon: Monitor,
@@ -696,14 +702,19 @@ export function LessonLibrary(props: Props) {
                         )
                     },
                   })
-                if (revision)
+                if (!availability && revision)
                   actions.push('separator', {
                     label: 'Удалить с устройства',
                     icon: Trash2,
                     danger: true,
                     run: () => remove(entry),
                   })
-                if (props.cloud && entry.cloudMeta && !entry.cloudMeta.deleted)
+                if (
+                  !availability &&
+                  props.cloud &&
+                  entry.cloudMeta &&
+                  !entry.cloudMeta.deleted
+                )
                   actions.push({
                     label: 'Удалить из облака',
                     icon: Trash2,
@@ -715,6 +726,11 @@ export function LessonLibrary(props: Props) {
                     key={deck.id}
                     deck={entry.working || entry.publication ? undefined : deck}
                     name={deck.title}
+                    availability={
+                      availability ? (
+                        <AvailabilityControl {...availability} compact />
+                      ) : undefined
+                    }
                     thumbnail={
                       entry.publication?.thumbnail ? (
                         <img
@@ -732,17 +748,20 @@ export function LessonLibrary(props: Props) {
                         {entry.slideCount === 0
                           ? '—'
                           : countSlides(entry.slideCount ?? deck.slides.length)}
-                        {entry.syncConflict && (
+
+                        {!availability && entry.syncConflict && (
                           <span className="course-publication">Конфликт</span>
                         )}
-                        {!!revision && (
+
+                        {!availability && !!revision && (
                           <Monitor
                             className="course-publication"
                             size={13}
                             aria-label="Сохранена на устройстве"
                           />
                         )}
-                        {isPublished && (
+
+                        {!availability && isPublished && (
                           <Globe2
                             className="course-publication"
                             size={13}

@@ -86,6 +86,7 @@ import { useStoredPreference } from './workspacePreferences'
 import { ImportPreview } from './ImportPreview'
 import { builtins, validateTemplate, type Template } from './catalog'
 import {
+  deleteTemplate,
   getCatalog,
   loadCatalogRow,
   saveLocal,
@@ -232,7 +233,6 @@ function App() {
     const rows = new Map<string, LessonRow>(
       list.map((entry) => [entry.deck.id.toLowerCase(), entry])
     )
-    const deleted = new Set<string>()
     for (const record of working.records) {
       if (record.kind !== 'lesson') continue
       const row = rows.get(record.id),
@@ -248,7 +248,6 @@ function App() {
       }
       if (!row && (record.deleted || meta?.deleted)) {
         rows.delete(record.id)
-        deleted.add(record.id)
       } else if (!row && meta && !meta.deleted && !record.dirty)
         rows.set(record.id, {
           deck: workingCardDeck(meta.id, meta.title),
@@ -260,7 +259,7 @@ function App() {
         })
     }
     for (const publication of publications.rows) {
-      if (rows.has(publication.id) || deleted.has(publication.id)) continue
+      if (rows.has(publication.id)) continue
       rows.set(publication.id, {
         deck: workingCardDeck(publication.id, publicationTitle(publication)),
         revision: 0,
@@ -1442,6 +1441,226 @@ function App() {
           onError: notice,
         }
       : undefined
+  function libraryAvailabilityState(
+    kind: 'lesson' | 'template',
+    id: string,
+    local: boolean
+  ) {
+    const record = working.records.find(
+      (item) => item.kind === kind && item.id === id.toLowerCase()
+    )
+
+    return {
+      local,
+
+      cloud: !client
+        ? false
+        : working.checked && !working.errors.length && online && signedInOwner
+          ? !!record?.meta && !record.meta.deleted
+          : null,
+
+      pending: !!record?.dirty,
+
+      syncing: !!record?.dirty && working.syncing,
+
+      conflict: !!record?.conflict,
+
+      offline: !online,
+
+      error: !!record?.dirty && working.errors.length > 0,
+    }
+  }
+  function lessonAvailability(entry: LessonRow): AvailabilityProps {
+    const id = entry.deck.id
+
+    return {
+      state: {
+        ...libraryAvailabilityState('lesson', id, !!entry.revision),
+
+        published: !client
+          ? false
+          : publications.checked
+            ? publications.published.has(id.toLowerCase())
+            : null,
+      },
+
+      disabled: !!busy,
+
+      cloudDisabled: !workingOwner || !signedInOwner,
+
+      onLocal: async (enabled) => {
+        if (enabled) {
+          await savePublicationLocally(id)
+
+          notice('Методичка сохранена на устройстве.')
+        } else {
+          await remove(entry, false)
+        }
+
+        working.retry()
+      },
+
+      onCloud: async (enabled) => {
+        if (!workingOwner || !signedInOwner)
+          throw Error('Необходимо войти в аккаунт.')
+
+        if (enabled) {
+          if (!entry.revision) await savePublicationLocally(id)
+
+          await requestCloudCreation(workingOwner, 'lesson', id)
+
+          working.retry()
+
+          notice('Методичка поставлена в очередь загрузки.')
+        } else {
+          await remove(entry, true)
+        }
+      },
+
+      onPublished: async (enabled) => {
+        if (!owner || !signedInOwner || !online)
+          throw Error('Для публикации необходим интернет.')
+
+        if (enabled) {
+          if (
+            !confirm(
+              'Опубликовать методичку «' +
+                entry.deck.title +
+                '»? Она будет доступна по публичной ссылке.'
+            )
+          )
+            return
+
+          const deck = await lessonBody(entry)
+
+          if (
+            deck.resources.fonts.length &&
+            !confirm(
+              'Шрифты будут доступны зрителям. ' +
+                'Лицензия разрешает распространение?'
+            )
+          )
+            return
+
+          const published = await publish(
+            deck,
+            async () => !(await publishedHash(id))
+          )
+
+          if (!published)
+            throw Error('Публикация уже существует. ' + 'Обновите библиотеку.')
+
+          localStorage.setItem(marker(id), await fingerprint(deck))
+
+          publicationChanged((stamp) => stamp + 1)
+
+          setValue(link(id))
+          setModal('link')
+        } else {
+          if (
+            !confirm(
+              'Снять методичку с публикации? ' + 'Рабочие копии сохранятся.'
+            )
+          )
+            return
+
+          await unpublish(id)
+
+          localStorage.removeItem(marker(id))
+
+          publicationChanged((stamp) => stamp + 1)
+
+          notice('Методичка снята с публикации.')
+        }
+      },
+
+      onSync: () => {
+        working.retry()
+      },
+
+      onConflict: () => {
+        dialog('working-sync')
+      },
+
+      onError: notice,
+    }
+  }
+  function templateAvailability(row: CatalogRow): AvailabilityProps {
+    const id = row.template.deck.id
+
+    return {
+      state: libraryAvailabilityState('template', id, !!row.entry),
+
+      disabled: !!busy || !!row.builtin,
+
+      cloudDisabled: !workingOwner || !signedInOwner,
+
+      onLocal: async (enabled) => {
+        if (enabled) {
+          await saveTemplateLocally(row)
+
+          notice('Шаблон сохранён на устройстве.')
+        } else {
+          if (
+            !confirm(
+              'Удалить локальную копию шаблона? ' +
+                'Облачная копия сохранится, ' +
+                'если она существует.'
+            )
+          )
+            return
+
+          await deleteTemplate(row, false)
+
+          notice('Локальная копия шаблона удалена.')
+        }
+
+        working.retry()
+
+        await refreshCatalog()
+      },
+
+      onCloud: async (enabled) => {
+        if (!workingOwner || !signedInOwner)
+          throw Error('Необходимо войти в аккаунт.')
+
+        if (enabled) {
+          if (!row.entry) await saveTemplateLocally(row)
+
+          await requestCloudCreation(workingOwner, 'template', id)
+
+          working.retry()
+
+          notice('Шаблон поставлен в очередь загрузки.')
+        } else {
+          if (
+            !confirm(
+              'Удалить облачную копию шаблона? ' + 'Локальные копии сохранятся.'
+            )
+          )
+            return
+
+          await deleteTemplate(row, true)
+
+          working.retry()
+
+          notice('Облачная копия шаблона удалена.')
+        }
+
+        await refreshCatalog()
+      },
+
+      onSync: () => {
+        working.retry()
+      },
+
+      onConflict: () => {
+        dialog('working-sync')
+      },
+
+      onError: notice,
+    }
+  }
   async function remove(en: LessonRow, cloud = false) {
     const title = en.deck.title
 
@@ -1603,6 +1822,7 @@ function App() {
           {page === 'library' ? (
             <ActionMenus>
               <LessonLibrary
+                availabilityFor={lessonAvailability}
                 settings={courseLocation.settings}
                 rows={allowed ? libraryRows : []}
                 courses={courses}
@@ -1689,6 +1909,7 @@ function App() {
           ) : page === 'templates' && allowed ? (
             <ActionMenus>
               <TemplateLibrary
+                availabilityFor={templateAvailability}
                 kind={catalogKind}
                 setKind={setCatalogKind}
                 rows={visibleRows}

@@ -254,6 +254,7 @@ export function LibraryCard({
   number,
   selected,
   blockOpen,
+  availability,
 }: {
   deck?: Deck
   name?: string
@@ -271,6 +272,7 @@ export function LibraryCard({
   number?: number
   selected?: boolean
   blockOpen?: boolean
+  availability?: ReactNode
 }) {
   const title = deck?.title ?? name ?? ''
   const thumbnailRef = useRef<HTMLSpanElement>(null)
@@ -289,7 +291,13 @@ export function LibraryCard({
   return (
     <article
       {...card}
-      className={['lib-card', card?.className].filter(Boolean).join(' ')}
+      className={[
+        'lib-card',
+        availability && 'lib-card-availability',
+        card?.className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
     >
       <button
         className="lib-card-open"
@@ -327,6 +335,7 @@ export function LibraryCard({
         )}
       </div>
       <div className="lib-card-menu">
+        {!controls && availability}
         {controls ?? (
           <ActionMenu
             label={'Действия: ' + title}
