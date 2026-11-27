@@ -40,6 +40,7 @@ npm run preview
 
 ## Инструкции
 
+- [Облачная синхронизация, рабочие черновики и каталог публикаций](docs/CLOUD_SYNC_REPORT.md)
 - [Подключение Supabase и настройка владельца](docs/SUPABASE_SETUP.md)
 - [Пошаговое развёртывание на GitHub Pages](docs/GITHUB_PAGES.md)
 - [Библиотека файлов, публикации и отчёт о проверках](docs/FILES_AND_PUBLICATIONS.md)
