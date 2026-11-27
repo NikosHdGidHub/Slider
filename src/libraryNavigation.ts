@@ -27,7 +27,7 @@ export function useLibraryScroll(
     if (!visible || !content.current) return
     const element = content.current
     const root = document.scrollingElement!
-    const persisted = key.startsWith('library/')
+    const persisted = key.startsWith('library/') || key.startsWith('published/')
     const storageKey = 'atlas.scroll.v1.' + key
     let previous = 0
     if (persisted) {

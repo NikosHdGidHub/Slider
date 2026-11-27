@@ -519,7 +519,7 @@ export async function localWorkingDocument(owner: string, state: WorkingRecord):
 export async function updateWorking(
   owner: string, kind: WorkingKind, id: string,
   update: (before: WorkingRecord | undefined) => WorkingRecord | undefined,
-  replacement?: { document?: WorkingDocument; backup?: WorkingDocument; original?: unknown }
+  replacement?: { document?: WorkingDocument; backup?: WorkingDocument; original?: unknown; preserve?: boolean }
 ) {
   const db = await opened
   return new Promise<boolean>((resolve, reject) => {
@@ -550,6 +550,7 @@ export async function updateWorking(
             { document: replacement.backup, until: Date.now() + 7 * 86400000 },
             [...key, crypto.randomUUID()]
           )
+        if (replacement.preserve) return
         if (replacement.original) storeOriginal(tx, kind, id, replacement.original)
         if (!document) {
           documents.delete(docId)

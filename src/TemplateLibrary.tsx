@@ -6,7 +6,6 @@ import {
   ArrowRight,
   Cloud,
   CloudCheck,
-  CloudUpload,
   Copy,
   Download,
   Eye,
@@ -46,7 +45,7 @@ import { originalDocument, originalIds, saveOriginal } from './storage'
 import {
   deleteTemplate,
   saveLocal,
-  syncTemplate,
+  loadCatalogRow,
   type CatalogRow,
 } from './templateStore'
 import {
@@ -62,11 +61,9 @@ export function TemplateLibrary({
   rows,
   settings,
   editable,
-  onlineOwner,
   loading,
   error,
   connection,
-  online,
   edit,
   create,
   refresh,
@@ -77,8 +74,6 @@ export function TemplateLibrary({
   rows: CatalogRow[]
   settings: LibrarySettings
   editable: boolean
-  onlineOwner: boolean
-  online: boolean
   loading: boolean
   error: string
   connection?: 'offline' | 'error'
@@ -186,141 +181,79 @@ export function TemplateLibrary({
       exportJSON: handler('Экспортировать JSON'),
     }
   }
+  function showPreview(row: CatalogRow) {
+    return run(async () => {
+      const loaded = await loadCatalogRow(row)
+      setPreview({ template: loaded.template, importing: false, row: loaded })
+    })
+  }
   function actions(row: CatalogRow): MenuItem[] {
-    const { template, builtin, entry } = row
+    const { template, builtin } = row
     const { deck } = template
+    const withDocument = (work: (loaded: CatalogRow) => void | Promise<void>, update = false) =>
+      run(async () => work(await loadCatalogRow(row)), update)
     const menu: MenuItem[] = [
-      {
-        label: 'Предпросмотр',
-        icon: Eye,
-        run: () =>
-          setPreview({
-            template,
-            importing: false,
-            row,
-          }),
-      },
+      { label: 'Предпросмотр', icon: Eye, run: () => showPreview(row) },
     ]
     if (editable) {
-      if (!builtin)
-        menu.push({
-          label: 'Редактировать',
-          icon: Pencil,
-          run: () => edit(structuredClone(template), row),
-        })
-      if (template.kind === 'presentation')
-        menu.push({
-          label: 'Создать методичку',
-          icon: Plus,
-          run: () => run(() => create(instantiate(template))),
-        })
-      menu.push({
-        label: 'Создать копию',
-        icon: Copy,
-        run: () =>
-          run(() => {
-            const title = deck.title.slice(0, 980) + ' — копия'
-            const copy = copyDeck(deck, title)
-            copy.master.name = title
-            return saveLocal({ ...template, deck: copy })
-          }, true),
+      if (!builtin) menu.push({
+        label: 'Редактировать', icon: Pencil,
+        run: () => withDocument((loaded) => edit(structuredClone(loaded.template), loaded)),
       })
-    }
-    if (!builtin)
+      if (template.kind === 'presentation') menu.push({
+        label: 'Создать методичку', icon: Plus,
+        run: () => withDocument((loaded) => create(instantiate(loaded.template))),
+      })
       menu.push({
-        label: 'Переименовать',
-        icon: Pencil,
+        label: 'Создать копию', icon: Copy,
+        run: () => withDocument((loaded) => {
+          const title = deck.title.slice(0, 980) + ' — копия'
+          const copy = copyDeck(loaded.template.deck, title)
+          copy.master.name = title
+          return saveLocal({ ...loaded.template, deck: copy })
+        }, true),
+      })
+      if (!builtin) menu.push({
+        label: 'Переименовать', icon: Pencil,
         run: () => {
           const title = prompt('Название шаблона', deck.title)?.trim()
           if (title && title !== deck.title)
-            return run(
-              () =>
-                saveLocal(
-                  {
-                    ...template,
-                    deck: {
-                      ...deck,
-                      title,
-                      master: { ...deck.master, name: title },
-                    },
-                  },
-                  row
-                ),
-              true
-            )
+            return withDocument((loaded) => {
+              const template = loaded.template
+              return saveLocal({
+                ...template, deck: { ...template.deck, title, master: { ...template.deck.master, name: title } },
+              }, loaded)
+            }, true)
         },
       })
+    }
     if (template.kind === 'presentation')
       menu.push('separator', {
-        label: 'Инструкция ИИ для презентации',
-        icon: FileText,
-        run: () =>
-          run(async () => {
-            const text = await presentationInstructionsForTemplate(template)
-            if (mounted.current)
-              download(
-                presentationInstructionsName(deck.title),
-                text,
-                'text/plain'
-              )
-          }),
+        label: 'Инструкция ИИ для презентации', icon: FileText,
+        run: () => withDocument(async (loaded) => {
+          const text = await presentationInstructionsForTemplate(loaded.template)
+          if (mounted.current) download(presentationInstructionsName(deck.title), text, 'text/plain')
+        }),
       })
-    menu.push('separator')
-    if (!builtin && entry && (onlineOwner || entry.cloudRevision))
-      menu.push({
-        label: 'Сохранить в облаке',
-        icon: CloudUpload,
-        disabled: !onlineOwner || !entry.dirty,
-        reason: !onlineOwner
-          ? 'Восстановите подключение к облаку'
-          : !entry.dirty
-            ? 'Версия уже сохранена'
-            : undefined,
-        run: () => run(() => syncTemplate(row), true),
-      })
-    menu.push({
-      label: 'Экспортировать JSON',
-      icon: Download,
-      run: () =>
-        download(
-          deck.title.replace(/[\\/]/g, '_') + '.atlas.json',
-          JSON.stringify(validateTemplate(template), null, 2)
-        ),
+    menu.push('separator', {
+      label: 'Экспортировать JSON', icon: Download,
+      run: () => withDocument((loaded) =>
+        download(deck.title.replace(/[\\/]/g, '_') + '.atlas.json', JSON.stringify(validateTemplate(loaded.template), null, 2))),
     })
-    if (originals.has(deck.id))
-      menu.push({
-        label: 'Скачать исходный JSON до миграции',
-        icon: Download,
-        run: async () => {
-          const raw = await originalDocument('template', deck.id)
-          if (raw)
-            download(
-              'atlas-original-' + deck.id + '.atlas.json',
-              JSON.stringify(raw, null, 2)
-            )
-        },
-      })
-    if (!builtin && entry)
-      menu.push('separator', {
-        label: 'Удалить шаблон',
-        icon: Trash2,
-        danger: true,
-        disabled: !!entry.cloudRevision && !online,
-        reason:
-          entry.cloudRevision && !online
-            ? 'Для удаления облачной копии требуется интернет'
-            : undefined,
-        run: () => {
-          if (
-            confirm(
-              'Удалить шаблон «' +
-                deck.title +
-                '» и его сохранённые копии? Созданные методички сохранятся.'
-            )
-          )
-            return run(() => deleteTemplate(row), true)
-        },
-      })
+    if (originals.has(deck.id)) menu.push({
+      label: 'Скачать исходный JSON до миграции', icon: Download,
+      run: async () => {
+        const raw = await originalDocument('template', deck.id)
+        if (raw) download('atlas-original-' + deck.id + '.atlas.json', JSON.stringify(raw, null, 2))
+      },
+    })
+    if (!builtin && editable) menu.push('separator', {
+      label: 'Удалить шаблон', icon: Trash2, danger: true,
+      run: () => {
+        if (confirm('Удалить шаблон «' + deck.title + '»? Созданные методички сохранятся.'))
+          return run(() => deleteTemplate(row), true)
+      },
+    })
     return menu
   }
 
@@ -454,20 +387,15 @@ export function TemplateLibrary({
             {visible.map(({ deck, row }) => (
               <LibraryCard
                 key={deck.id}
-                deck={deck}
+                deck={row.meta ? undefined : deck}
+                name={deck.title}
                 first={<TemplateStatus row={row} />}
                 preflight
                 description={row.template.description}
                 actions={actions(row)}
                 disabled={busy}
                 notice={notice}
-                open={() =>
-                  setPreview({
-                    template: row.template,
-                    importing: false,
-                    row,
-                  })
-                }
+                open={() => showPreview(row)}
               />
             ))}
           </LibraryItems>

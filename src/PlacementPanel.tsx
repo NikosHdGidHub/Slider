@@ -18,6 +18,7 @@ export function PlacementPanel({
   deck,
   slide,
   templates,
+  resolveTemplate,
   update,
   select,
   selected,
@@ -28,6 +29,7 @@ export function PlacementPanel({
   deck: Deck
   slide: Slide
   templates: Template[]
+  resolveTemplate?: (t: Template) => Promise<Template>
   update: (d: Deck) => void
   select: (id: string) => void
   selected: string
@@ -74,7 +76,7 @@ export function PlacementPanel({
             Сменить главный шаблон
             <select
               value=""
-              onChange={(e) => {
+              onChange={async (e) => {
                 const t = templates.find((t) => t.deck.id === e.target.value)
                 if (!t) return
                 if (
@@ -86,7 +88,8 @@ export function PlacementPanel({
                 )
                   return
                 try {
-                  const next = switchMaster(deck, t.deck)
+                  const template = resolveTemplate ? await resolveTemplate(t) : t
+                  const next = switchMaster(deck, template.deck)
                   update(validateDeck(next))
                   const n = next.slides.reduce(
                     (a, s) =>
@@ -121,7 +124,7 @@ export function PlacementPanel({
               <select
                 aria-label="Режим области слайда"
                 value={slide.structure ? 'structured' : 'free'}
-                onChange={(e) => {
+                onChange={async (e) => {
                   if (e.target.value === 'structured') return
                   const t = templates.find((t) => t.deck.id === e.target.value)
                   if (
@@ -138,7 +141,8 @@ export function PlacementPanel({
                   )
                     return
                   try {
-                    update(validateDeck(setStructure(deck, slide, t?.deck)))
+                    const template = t && resolveTemplate ? await resolveTemplate(t) : t
+                    update(validateDeck(setStructure(deck, slide, template?.deck)))
                     select('')
                   } catch (err) {
                     notice((err as Error).message)

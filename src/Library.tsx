@@ -1,6 +1,6 @@
 import { download } from './instructions'
 import { unreadableDocuments } from './storage'
-import { useState, type ReactNode, type HTMLAttributes } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type HTMLAttributes } from 'react'
 import { ArrowDownUp, LayoutGrid, List, Search, X } from 'lucide-react'
 import { ActionMenu, type MenuItem } from './ActionMenu'
 import { IconButton } from './IconButton'
@@ -29,10 +29,10 @@ const lessonSorts: LibrarySort[] = [
 const templateSorts: LibrarySort[] = ['name', 'reverse']
 
 export function useLibrarySettings(
-  scope: 'lessons' | 'presentation' | 'layout'
+  scope: 'lessons' | 'published' | 'presentation' | 'layout'
 ) {
   const key = 'atlas.library.v1.' + scope
-  const sorts = scope === 'lessons' ? lessonSorts : templateSorts
+  const sorts = scope === 'lessons' || scope === 'published' ? lessonSorts : templateSorts
   const [query, setQuery] = useState('')
   const [view, setView] = useStoredPreference<'gallery' | 'list'>(
     key + '.view',
@@ -50,10 +50,10 @@ export function useLibrarySettings(
 export type LibrarySettings = ReturnType<typeof useLibrarySettings>
 
 export function normalizeLibraryQuery(text: string) {
-  return text.normalize('NFC').toLocaleLowerCase('ru')
+  return text.normalize('NFC').toLocaleLowerCase('ru').trim().replace(/\s+/g, ' ')
 }
 
-export function selectLibraryRows<T extends { deck: Deck; updated?: number }>(
+export function selectLibraryRows<T extends { deck: Pick<Deck, 'title'>; updated?: number; slideCount?: number }>(
   rows: T[],
   { query, sort }: LibrarySettings
 ) {
@@ -66,7 +66,8 @@ export function selectLibraryRows<T extends { deck: Deck; updated?: number }>(
       if (sort === 'name') return name
       if (sort === 'reverse') return -name
       if (sort === 'slides')
-        return b.deck.slides.length - a.deck.slides.length || name
+        return (b.slideCount ?? ('slides' in b.deck ? (b.deck as Deck).slides.length : 0)) -
+          (a.slideCount ?? ('slides' in a.deck ? (a.deck as Deck).slides.length : 0)) || name
       const date = (b.updated ?? 0) - (a.updated ?? 0)
       return (sort === 'recent' ? date : -date) || name
     })
@@ -242,6 +243,16 @@ export function LibraryCard({
   blockOpen?: boolean
 }) {
   const title = deck?.title ?? name ?? ''
+  const thumbnailRef = useRef<HTMLSpanElement>(null)
+  const [seen, setSeen] = useState(typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    if (!deck || seen || !thumbnailRef.current) return
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setSeen(true)
+    }, { rootMargin: '160px' })
+    observer.observe(thumbnailRef.current)
+    return () => observer.disconnect()
+  }, [deck, seen])
   return (
     <article
       {...card}
@@ -255,8 +266,8 @@ export function LibraryCard({
         aria-pressed={selected}
         aria-label={(preflight ? 'Предпросмотр ' : 'Открыть ') + title}
       >
-        <span className="lib-thumbnail" aria-hidden="true">
-          {thumbnail ?? (deck && <Stage deck={deck} slide={deck.slides[0]} />)}
+        <span className="lib-thumbnail" ref={thumbnailRef} aria-hidden="true">
+          {thumbnail ?? (deck && seen && <Stage deck={deck} slide={deck.slides[0]} />)}
         </span>
         <span className="lib-card-title" title={title}>
           {number !== undefined && (

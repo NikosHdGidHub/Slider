@@ -30,7 +30,8 @@ import {
   selectLibraryRows,
   type LibrarySettings,
 } from './Library'
-import type { Deck } from './model'
+import type { WorkingMeta } from './workingDocument'
+import type { PublishedRow } from './publicationCatalog'
 import { originalDocument, originalIds, type Entry } from './storage'
 import { download } from './instructions'
 import { useEffect, useMemo, useState } from 'react'
@@ -61,9 +62,16 @@ const countSlides = (n: number) => counted(n, ['слайд', 'слайда', 'с
 const countLessons = (n: number) =>
   counted(n, ['методичка', 'методички', 'методичек'])
 
+export type LessonRow = Entry & {
+  slideCount?: number
+  working?: WorkingMeta
+  publication?: PublishedRow
+  syncConflict?: boolean
+}
+
 interface Props {
   settings: LibrarySettings
-  rows: Entry[]
+  rows: LessonRow[]
   courses: CourseLibrary
   course: Course | undefined
   openCourse: (id: string | null) => void
@@ -77,12 +85,13 @@ interface Props {
   create: () => void
   fromTemplate: () => void
   importJSON: () => void
-  duplicate: (entry: Entry, course: string | null) => Promise<void>
-  view: (deck: Deck) => void
-  edit: (entry: Entry) => void
-  exportJSON: (deck: Deck) => Promise<void>
-  remove: (entry: Entry) => Promise<void>
-  saveLocally: (entry: Entry) => Promise<void>
+  duplicate: (entry: LessonRow, course: string | null) => Promise<void>
+  view: (entry: LessonRow) => void
+  edit: (entry: LessonRow) => void
+  exportJSON: (entry: LessonRow) => Promise<void>
+  remove: (entry: LessonRow, cloud?: boolean) => Promise<void>
+  cloud?: boolean
+  saveLocally: (entry: LessonRow) => Promise<void>
   login: () => void
   example: () => void
   retry: () => void
@@ -633,7 +642,7 @@ export function LessonLibrary(props: Props) {
                 const orderThis = ordering && !!course
                 const isPublished = published.has(lessonId)
                 const actions: MenuItem[] = [
-                  { label: 'Просмотр', icon: Play, run: () => view(deck) },
+                  { label: 'Просмотр', icon: Play, run: () => view(entry) },
                 ]
                 if (editable)
                   actions.push(
@@ -657,7 +666,7 @@ export function LessonLibrary(props: Props) {
                 actions.push({
                   label: 'Экспортировать JSON',
                   icon: Download,
-                  run: () => exportJSON(deck),
+                  run: () => exportJSON(entry),
                 })
                 if (!revision)
                   actions.push({
@@ -685,13 +694,23 @@ export function LessonLibrary(props: Props) {
                     danger: true,
                     run: () => remove(entry),
                   })
+                if (props.cloud && (revision || entry.working))
+                  actions.push({
+                    label: 'Удалить рабочий черновик', icon: Trash2,
+                    danger: true, run: () => remove(entry, true),
+                  })
                 return (
                   <LibraryCard
                     key={deck.id}
-                    deck={deck}
+                    deck={entry.working || entry.publication ? undefined : deck}
+                    name={deck.title}
+                    thumbnail={entry.publication?.thumbnail
+                      ? <img src={entry.publication.thumbnail} loading="lazy" decoding="async" alt="" />
+                      : entry.working || entry.publication ? <Globe2 size={27} /> : undefined}
                     first={
                       <>
-                        {countSlides(deck.slides.length)}
+                        {entry.slideCount === 0 ? '—' : countSlides(entry.slideCount ?? deck.slides.length)}
+                        {entry.syncConflict && <span className="course-publication">Конфликт</span>}
                         {!!revision && (
                           <Monitor
                             className="course-publication"
@@ -735,7 +754,7 @@ export function LessonLibrary(props: Props) {
                         ? selectLesson(lessonId)
                         : editable
                           ? edit(entry)
-                          : view(deck)
+                          : view(entry)
                     }
                     actions={actions}
                     notice={notice}

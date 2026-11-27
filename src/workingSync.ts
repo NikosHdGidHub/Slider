@@ -59,10 +59,16 @@ async function uploadAsset(owner: string, sha: string) {
   await workingAsset(owner, sha, { ...asset, uploaded: true })
 }
 
-export async function fetchWorking(owner: string, kind: WorkingKind, id: string) {
-  const reply = await rpc<{ meta: WorkingMeta; document: WorkingDocument | null } | null>(
+async function readWorking(owner: string, kind: WorkingKind, id: string) {
+  return rpc<{ meta: WorkingMeta; document: WorkingDocument | null } | null>(
     'atlas_working_get', { expected_owner: owner, doc_kind: kind, doc_id: id }
   )
+}
+export async function workingMetadata(owner: string, kind: WorkingKind, id: string) {
+  return (await readWorking(owner, kind, id))?.meta
+}
+export async function fetchWorking(owner: string, kind: WorkingKind, id: string) {
+  const reply = await readWorking(owner, kind, id)
   if (!reply) throw Error('Облачный документ не найден.')
   const source = reply.document
   const document = source && await unpackWorking(reply.meta, source, async (sha) =>
@@ -227,7 +233,9 @@ export async function resolveWorking(owner: string, row: WorkingRecord, choice: 
       return { ...current, attempt: undefined, conflict: undefined, base: shown.revision, generation: current.generation + 1 }
     const next = clean(shown, current.generation + 1, localId)
     return restore ? { ...next, dirty: true, deleted: false } : next
-  }, keepLocal ? undefined : { document, backup, original: remote.source })
+  }, keepLocal
+    ? { preserve: true, backup: remote.document ?? undefined }
+    : { document, backup, original: remote.source })
   if (!changed) throw Error('Локальный документ изменился. Обновите панель.')
 }
 

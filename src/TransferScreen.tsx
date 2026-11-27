@@ -7,8 +7,13 @@ import {
   QrCode,
   Smartphone,
 } from 'lucide-react'
-import { listPublished, readPublic } from './cloud'
+import { adminId, readPublic } from './cloud'
 import { validateDeck } from './model'
+import { useMemo } from 'react'
+import { normalizeLibraryQuery } from './Library'
+import { PublicationThumbnail, publicationTitle } from './PublishedLibrary'
+import { memberships, type CourseSnapshot } from './courseModel'
+import { publicationCatalog, type PublishedRow } from './publicationCatalog'
 import {
   cancelTransfer,
   inspectTransfer,
@@ -53,7 +58,7 @@ function Frame({
   )
 }
 
-function QrImage({ address, label }: { address: string; label: string }) {
+export function QrImage({ address, label }: { address: string; label: string }) {
   const [image, setImage] = useState('')
   const [error, setError] = useState(false)
   useEffect(() => {
@@ -330,35 +335,12 @@ function Received({ id, again }: { id: string; again: () => void }) {
   )
 }
 
-type Lesson = { id: string; title: string }
-async function lessonChoices(signal: AbortSignal): Promise<Lesson[]> {
-  const ids = await listPublished(signal)
-  const choices: Lesson[] = []
-  let index = 0
-  async function worker() {
-    while (!signal.aborted && index < ids.length) {
-      const id = ids[index++]
-      try {
-        const deck = validateDeck(await readPublic(id, signal))
-        if (deck.id === id) choices.push({ id, title: deck.title })
-      } catch {
-        if (signal.aborted) return
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: 3 }, worker))
-  if (ids.length && !choices.length)
-    throw Error(
-      'Не удалось прочитать опубликованные методички. Попробуйте снова.'
-    )
-  return choices.sort((a, b) => a.title.localeCompare(b.title, 'ru'))
-}
-
 export function SendLesson({
   pair,
   close,
   login,
   authorized,
+  courses,
   online,
   enabled,
 }: {
@@ -366,6 +348,7 @@ export function SendLesson({
   close: () => void
   login: () => void
   authorized: boolean | null
+  courses: CourseSnapshot
   online: boolean
   enabled: boolean
 }) {
@@ -373,9 +356,28 @@ export function SendLesson({
   const [details, setDetails] = useState<{
     code: string
     deadline: number
-    lessons: Lesson[]
+    lessons: PublishedRow[]
   }>()
   const [selected, select] = useState('')
+  const [query, search] = useState('')
+  const [course, filter] = useState('')
+  const [limit, show] = useState(48)
+  const parent = useMemo(() => memberships(courses), [courses])
+  const names = useMemo(() => new Map(courses.courses.map(({ id, title }) => [id, title])), [courses])
+  const lessons = useMemo(() => (details?.lessons ?? []).filter((lesson) => {
+    const belongs = parent.get(lesson.id)
+    return (!course || (course === 'none' ? !belongs : belongs === course)) &&
+      normalizeLibraryQuery(publicationTitle(lesson)).includes(normalizeLibraryQuery(query))
+  }).sort((a, b) => publicationTitle(a).localeCompare(publicationTitle(b), 'ru', { numeric: true })), [details, parent, course, query])
+  const validSelection = lessons.some((lesson) => lesson.id === selected)
+  useEffect(() => {
+    if (selected && !validSelection) { select(''); confirm(false) }
+  }, [selected, validSelection])
+  function resetList() {
+    select('')
+    confirm(false)
+    show(48)
+  }
   const [confirmed, confirm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
@@ -408,7 +410,7 @@ export function SendLesson({
         setError(transferMessage(result.status))
         return
       }
-      const lessons = await lessonChoices(signal)
+      const lessons = await publicationCatalog(adminId, signal)
       if (active() && !signal.aborted) setDetails({ ...result, lessons })
       else if (active())
         setError('Не удалось загрузить публикации вовремя. Попробуйте снова.')
@@ -445,7 +447,7 @@ export function SendLesson({
     if (
       !pair ||
       !details ||
-      !selected ||
+      !validSelection ||
       !confirmed ||
       sendingRequest.current ||
       !authorized ||
@@ -464,7 +466,7 @@ export function SendLesson({
         setNeedsLogin(result.status === 'forbidden')
         setError(transferMessage(result.status))
         if (result.status === 'missing_publication') {
-          select('')
+          resetList()
           setDetails({
             ...details,
             lessons: details.lessons.filter((lesson) => lesson.id !== selected),
@@ -484,7 +486,7 @@ export function SendLesson({
       title={
         sent
           ? 'Ссылка передана на компьютер'
-          : 'Выберите методичку для передачи'
+          : 'Передача методички'
       }
       close={close}
       phone
@@ -522,6 +524,7 @@ export function SendLesson({
           )}
           {details && !terminal && (
             <>
+              <p className="transfer-connected" role="status">Компьютер подключён и ожидает методичку</p>
               <Code code={details.code} />
               {details.lessons.length ? (
                 <form
@@ -531,36 +534,45 @@ export function SendLesson({
                     void submit()
                   }}
                 >
+                  <div className="transfer-filters">
+                    <label>Поиск публикаций
+                      <input type="search" value={query} placeholder="Название методички" disabled={sending}
+                        onChange={(e) => { search(e.target.value); resetList() }} />
+                    </label>
+                    <label>Фильтр по курсам
+                      <select value={course} disabled={sending} onChange={(e) => { filter(e.target.value); resetList() }}>
+                        <option value="">Все курсы</option>
+                        {courses.courses.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+                        <option value="none">Без курса</option>
+                      </select>
+                    </label>
+                  </div>
+                  <p role="status">Доступно: {lessons.length} из {details.lessons.length}</p>
                   <fieldset className="transfer-choices" disabled={sending}>
                     <legend>Опубликованные методички</legend>
-                    {details.lessons.map((lesson) => (
+                    {lessons.slice(0, limit).map((lesson) => (
                       <label key={lesson.id}>
-                        <input
-                          type="radio"
-                          name="publication"
-                          value={lesson.id}
-                          checked={selected === lesson.id}
-                          onChange={() => select(lesson.id)}
-                        />
-                        <span>{lesson.title}</span>
+                        <input type="radio" name="publication" value={lesson.id}
+                          checked={selected === lesson.id} onChange={() => select(lesson.id)} />
+                        <span className="transfer-thumb" aria-hidden="true"><PublicationThumbnail row={lesson} /></span>
+                        <span className="transfer-choice-title">{publicationTitle(lesson)}
+                          <small>{names.get(parent.get(lesson.id) ?? '') ?? 'Без курса'}</small>
+                        </span>
                       </label>
                     ))}
+                    {!lessons.length && <p>По заданным условиям публикаций нет.</p>}
                   </fieldset>
-                  <label className="transfer-confirm">
-                    <input
-                      type="checkbox"
-                      checked={confirmed}
-                      onChange={(e) => confirm(e.currentTarget.checked)}
-                      disabled={sending}
-                    />
-                    Код совпадает с кодом на компьютере
-                  </label>
-                  <button
-                    className="primary"
-                    disabled={!selected || !confirmed || sending}
-                  >
-                    {sending ? 'Передаём…' : 'Передать на компьютер'}
-                  </button>
+                  {lessons.length > limit && <button className="secondary" type="button" onClick={() => show(limit + 48)}>Показать ещё</button>}
+                  <div className="transfer-send">
+                    <label className="transfer-confirm">
+                      <input type="checkbox" checked={confirmed}
+                        onChange={(e) => confirm(e.currentTarget.checked)} disabled={sending} />
+                      Код совпадает с кодом на компьютере
+                    </label>
+                    <button className="primary" disabled={!validSelection || !confirmed || sending}>
+                      {sending ? 'Передаём…' : 'Передать на компьютер'}
+                    </button>
+                  </div>
                 </form>
               ) : (
                 <p>Доступных опубликованных методичек нет.</p>

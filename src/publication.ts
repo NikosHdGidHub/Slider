@@ -1,7 +1,8 @@
 import { storageReference } from './fileUsage'
 import { digest } from './digest'
 import { mediaSlides } from './grid.ts'
-import { isProjectStorageUrl, publishDocument, withStorageLock } from './cloud'
+import { adminId, isProjectStorageUrl, publishDocument, withStorageLock } from './cloud'
+import { recordPublication } from './publicationCatalog'
 import { uploadImage } from './resources'
 import { imageAddress } from './storage'
 import { validateDeck, type Deck } from './model'
@@ -49,6 +50,8 @@ export async function publish(deck: Deck, approve: () => Promise<boolean>) {
     }
     const document = validateDeck(copy)
     await publishDocument(copy.id, document, bucket)
+    // The publication is usable while a failed index write awaits repair.
+    await recordPublication(adminId, document, null).catch(() => {})
     return true
   })
 }

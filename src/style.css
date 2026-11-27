@@ -1169,3 +1169,54 @@ h1 {
     justify-content: center;
   }
 }
+
+.transfer-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: .75rem;
+}
+
+.transfer-filters label {
+  display: grid;
+  gap: .3rem;
+  min-width: 0;
+}
+
+.transfer-filters input, .transfer-filters select {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  padding: .45rem .65rem;
+}
+
+.transfer-thumb {
+  flex: 0 0 44px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: #eef4ed;
+  color: #496b59;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.transfer-thumb > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.transfer-choice-title { min-width: 0; }
+.transfer-choice-title small { display: block; color: #486151; }
+.transfer-connected { color: #386a51; }
+
+.transfer-send {
+  position: sticky;
+  bottom: 0;
+  padding: .5rem 0 max(.75rem, env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid #d8e2d8;
+  z-index: 1;
+}
+
+.transfer-send > button { width: 100%; justify-content: center; }

@@ -1,9 +1,13 @@
 import {
+  adminId,
+  client,
   listPublished,
   readPublishedForInventory,
   withStorageLock,
 } from './cloud'
 import { mediaSlides } from './grid'
+import { entries, localTemplates, workingBackups, workingRecords } from './storage'
+import { workingDeck } from './workingDocument'
 import { validateDeck, type Deck } from './model'
 import { purgeFile, resourceKey, type Resource } from './resources'
 
@@ -48,6 +52,21 @@ export function removeUnusedFile(row: Resource) {
       throw Error(
         'Файл используется в публикациях. Сначала обновите или снимите их.'
       )
+    const references = await client!.rpc('atlas_working_resource_urls', { expected_owner: adminId })
+    if (references.error && references.error.code !== 'PGRST202' && references.error.code !== '42883')
+      throw Error('Не удалось проверить ссылки в облачных черновиках.')
+    const [lessons, templates, backups, pending] = await Promise.all([
+      entries(), localTemplates(), workingBackups(adminId), workingRecords(adminId),
+    ])
+    const local = [
+      ...lessons.map(({ deck }) => deck),
+      ...templates.map(({ template }) => template.deck),
+      ...backups.map(({ document }) => workingDeck(document)),
+      ...pending.flatMap(({ previous }) => previous ? [workingDeck(previous)] : []),
+    ]
+    if ((references.data as string[] | null)?.some((url) => storageReference(url) === resourceKey(row)) ||
+        local.some((deck) => Array.from(imageSources(deck)).some((url) => storageReference(url) === resourceKey(row))))
+      throw Error('Файл используется в облачном черновике или шаблоне.')
     await purgeFile(row, bucket)
   })
 }

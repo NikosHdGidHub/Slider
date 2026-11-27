@@ -34,6 +34,7 @@ import {
   Type,
   Play,
   Check,
+  Cloud,
   CircleAlert,
   LoaderCircle,
   FileDown,
@@ -78,6 +79,9 @@ type Props = {
   initialSlideId?: string
   styleLibrary?: StyleLibrary
   templates?: Template[]
+  resolveTemplate?: (t: Template) => Promise<Template>
+  syncLabel?: string
+  openSync?: () => void
   gridTemplateKind?: Template['kind']
   saveAs?: () => void
   saveTemplate?: () => void
@@ -102,6 +106,9 @@ export function Editor({
   saveAs,
   styleLibrary,
   templates = [],
+  resolveTemplate,
+  syncLabel,
+  openSync,
   saveTemplate,
   exportTemplate,
   headerTools,
@@ -592,6 +599,10 @@ export function Editor({
               )}
               <span>{status}</span>
             </small>
+            {openSync && <button className="editor-sync" type="button" onClick={openSync}
+              title={syncLabel} aria-label={'Синхронизация: ' + syncLabel}>
+              <Cloud size={16} /> <span>{syncLabel}</span>
+            </button>}
             {!saveTemplate && (
               <button
                 className="primary"
@@ -755,7 +766,14 @@ export function Editor({
               deck={deck}
               slide={slide}
               templates={templates}
-              update={(next) => change(() => next)}
+              resolveTemplate={resolveTemplate}
+              update={(next) => change((latest) => {
+                if (latest !== deck) {
+                  notice('Методичка изменилась. Примените шаблон ещё раз.')
+                  return latest
+                }
+                return next
+              })}
               select={select}
               selected={item?.locked ? '' : sel}
               notice={notice}
@@ -998,7 +1016,7 @@ export function Editor({
                         <select
                           aria-label="Применить компоновку"
                           value=""
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const t = templates.find(
                               (t) => t.deck.id === e.target.value
                             )
@@ -1013,8 +1031,14 @@ export function Editor({
                             )
                               return
                             try {
-                              const next = applyLayout(deck, slide.id, t)
-                              change(() => next)
+                              const template = resolveTemplate ? await resolveTemplate(t) : t
+                              change((latest) => {
+                                if (latest !== deck) {
+                                  notice('Методичка изменилась. Примените компоновку ещё раз.')
+                                  return latest
+                                }
+                                return applyLayout(latest, slide.id, template)
+                              })
                             } catch (err) {
                               notice((err as Error).message)
                             }

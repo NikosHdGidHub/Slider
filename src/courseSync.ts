@@ -105,6 +105,7 @@ export function useCourses(scope: string | null, online: boolean) {
     scope: string
     record: CourseRecord
   }>()
+  const [checked, setChecked] = useState(false)
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
   const retry = useRef<() => void>(() => {})
@@ -114,6 +115,7 @@ export function useCourses(scope: string | null, online: boolean) {
 
   useEffect(() => {
     setError('')
+    setChecked(false)
     setSyncing(false)
     if (!scope) return
     const owner = scope
@@ -137,7 +139,7 @@ export function useCourses(scope: string | null, online: boolean) {
       setSyncing(true)
       void syncCourses(owner, () => live && navigator.onLine)
         .then(() => {
-          if (live) setError('')
+          if (live) { setChecked(true); setError('') }
         })
         .catch((err) => {
           if (live) setError(syncMessage(err))
@@ -198,7 +200,9 @@ export function useCourses(scope: string | null, online: boolean) {
     snapshot,
     ready: loaded?.scope === scope,
     syncing,
+    checked,
     error,
+    pending: record.pending.length,
     dirty: record.pending.length > 0,
     conflict: !!record.conflict,
     cloud,

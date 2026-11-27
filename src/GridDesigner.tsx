@@ -111,6 +111,8 @@ function Padding({
 }
 export function GridDesigner({
   libraryAvailable,
+  syncLabel,
+  openSync,
   template,
   set,
   history,
@@ -119,6 +121,8 @@ export function GridDesigner({
   notice,
 }: {
   libraryAvailable?: boolean
+  syncLabel?: string
+  openSync?: () => void
   template: Template
   history: HistoryControls
   set: (t: Template) => void
@@ -373,6 +377,8 @@ export function GridDesigner({
         history={history}
         change={(update) => set({ ...template, deck: update(deck) })}
         status="Редактор оформления"
+        syncLabel={syncLabel}
+        openSync={openSync}
         exitLabel="К сетке шаблона"
         back={() => setObjects(false)}
         headerTools={
@@ -397,6 +403,8 @@ export function GridDesigner({
         inspectorRequest={inspectorRequest}
         header={
           <>
+            {openSync && <button className="editor-sync" type="button" onClick={openSync}
+              aria-label={'Синхронизация: ' + syncLabel}>{syncLabel}</button>}
             <IconButton label="В библиотеку" onClick={back}>
               <ArrowLeft />
             </IconButton>
