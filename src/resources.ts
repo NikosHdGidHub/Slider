@@ -7,8 +7,8 @@ import {
   type StorageWriter,
 } from './cloud'
 import { validateDeck } from './model'
-import { optimize } from './media'
-import { currentWorkingOwner, retainLibraryImage } from './storage'
+import { optimize, originalImage } from './media'
+import { currentWorkingOwner, retainLibraryImage, type MigrationLine } from './storage'
 export type Resource = {
   sha: string | null
   name: string
@@ -430,4 +430,56 @@ export async function removePrivateResource(
           'Удаление не подтверждено. Резервирование сохранено.'
       )
   })
+}
+
+// Historical public copies remain physically separate. Only verified bytes may establish SHA identity.
+export async function indexLegacyImages(owner:string,onLine?:(line:MigrationLine)=>void):Promise<MigrationLine[]> {
+  if(owner!==currentWorkingOwner())throw Error('Изменился аккаунт.')
+  const result:MigrationLine[]=[]
+  for(const row of await resources()){
+    if(row.bucket!=='images'||!['image/png','image/jpeg','image/webp'].includes(row.mime))continue
+    const info={kind:'public-image',id:row.path,title:row.name}
+    let line:MigrationLine
+    try{
+      if(owner!==currentWorkingOwner())throw Error('Изменился аккаунт.')
+      await withStorageLock(async()=>{
+        const fresh=await inventory().select('*').eq('bucket',row.bucket).eq('path',row.path).single()
+        if(fresh.error||!fresh.data)throw Error('Публичный объект изменился или отсутствует.')
+        const current=fresh.data as Resource
+        const blob=await readLibraryLegacyImage(current)
+        const sha=await digest(blob)
+        await originalImage(blob)
+        if(owner!==currentWorkingOwner())throw Error('Изменился аккаунт.')
+        if(!current.sha){
+          await register({...current,size:blob.size},sha)
+          const check=await inventory().select('sha').eq('bucket',row.bucket).eq('path',row.path).single()
+          if(check.error||check.data?.sha!==sha)throw Error('Индексирование не подтверждено.')
+        }
+        line={...info,status:current.sha?'verified':'migrated'}
+      })
+      result.push(line!);onLine?.(line!)
+    }catch(error){line={...info,status:'error',detail:error instanceof Error?error.message:String((error as {message?:string})?.message??error)};result.push(line);onLine?.(line)}
+  }
+  return result
+}
+export async function auditCloudLibrary(owner:string,onLine?:(line:MigrationLine)=>void):Promise<MigrationLine[]>{
+  if(owner!==currentWorkingOwner())throw Error('Изменился аккаунт.')
+  const {data,error}=await db().rpc('atlas_resource_audit',{expected_owner:owner}).abortSignal(AbortSignal.timeout(30000))
+  if(error||!Array.isArray(data))throw Error(error?.message??'Аудит не настроен. Примените resource-library-audit.sql.')
+  const rows:MigrationLine[]=data.map((r:MigrationLine)=>({...r}))
+  rows.forEach(r=>onLine?.(r))
+  // Explicit deep verification: authenticated Storage download for each object, including fonts.
+  for(const row of await workingResources(owner)){
+    if(owner!==currentWorkingOwner())throw Error('Изменился аккаунт.')
+    const info={kind:'private-asset',id:row.sha,title:row.path}
+    let line:MigrationLine
+    try{
+      if(row.bucket!=='atlas-private-resources'||row.path!==owner+'/'+row.sha||! /^[0-9a-f]{64}$/.test(row.sha))throw Error('Некорректный путь ресурса.')
+      const {data:blob,error:failure}=await db().storage.from(row.bucket).download(row.path,{}, {cache:'no-store',signal:AbortSignal.timeout(30000)})
+      if(failure||!blob||await digest(blob)!==row.sha)throw Error(failure?.message??'Контрольная сумма не совпадает.')
+      line={...info,status:'verified'}
+    }catch(e){line={...info,status:'error',detail:e instanceof Error?e.message:String(e)}}
+    rows.push(line);onLine?.(line)
+  }
+  return rows
 }

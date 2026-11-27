@@ -28,6 +28,7 @@ import {
 } from './resources'
 import { currentWorkingOwner, type Entry } from './storage'
 import { ResourceGallery, ResourcePicker } from './ResourceGallery'
+import { ResourceMaintenance } from './ResourceMaintenance'
 
 const formatOf = (mime: string) =>
   ({
@@ -97,6 +98,7 @@ export function FileLibrary({
   online,
   allowed,
   login,
+  onMaintenance,
 }: {
   entries: Entry[]
   openLesson: (entry: Entry) => void
@@ -105,8 +107,10 @@ export function FileLibrary({
   online: boolean
   allowed: boolean
   login: () => void
+  onMaintenance?: () => Promise<void>
 }) {
   const [tab, setTab] = useState<'local' | 'cloud'>('local')
+  const [maintenanceEpoch, setMaintenanceEpoch] = useState(0)
   return (
     <section className="files-library" aria-label="Библиотека файлов">
       <p className="files-description">
@@ -121,10 +125,14 @@ export function FileLibrary({
           <Cloud size={18} />В облаке
         </button>
       </div>
+      {allowed && <ResourceMaintenance owner={currentWorkingOwner()} online={online} onComplete={async()=>{
+        setMaintenanceEpoch(n=>n+1)
+        await onMaintenance?.()
+      }}/>}
       {tab === 'local' ? (
         allowed ? (
           <ResourceGallery
-            key={currentWorkingOwner() ?? 'local'}
+            key={(currentWorkingOwner() ?? "local") + ":" + maintenanceEpoch}
             mode="local"
             owner={currentWorkingOwner()}
             lessonEntries={entries}
@@ -151,7 +159,7 @@ export function FileLibrary({
           </button>
         </EmptyFiles>
       ) : (
-        <Files openJSON={openJSON} />
+        <Files key={maintenanceEpoch} openJSON={openJSON} />
       )}
     </section>
   )

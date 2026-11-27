@@ -1963,6 +1963,11 @@ function App() {
             </ActionMenus>
           ) : page === 'files' && allowed ? (
             <FileLibrary
+              onMaintenance={async()=>{
+                await refresh()
+                await refreshCatalog()
+                working.retry()
+              }}
               entries={allowed ? list : []}
               openLesson={(entry) =>
                 phone ? setWatch(entry.deck) : open(entry.deck, entry.revision)

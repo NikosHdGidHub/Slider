@@ -20,6 +20,7 @@ import {
   type WorkingRecord,
 } from './workingDocument'
 import { prepareDocumentImages } from './media'
+import { mediaSlides } from './grid'
 import { digest } from './digest'
 
 export type Entry = {
@@ -542,16 +543,7 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
 
   const db = await opened
   return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(
-        [
-          'lessons',
-          'templates',
-          'workingState',
-          'workingBackups',
-          'workingAssets',
-        ],
-        'readwrite'
-      ),
+    const tx = db.transaction(['templates', 'originalDocuments', 'workingState', 'workingAssets'], 'readwrite'),
       store = tx.objectStore('templates'),
       id = entry.template.deck.id
     const q = store.get(id)
@@ -782,16 +774,7 @@ function transferLocalAssets(
 export async function registerWorking(owner: string) {
   const db = await opened
   return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(
-      [
-        'lessons',
-        'templates',
-        'workingState',
-        'workingBackups',
-        'workingAssets',
-      ],
-      'readwrite'
-    )
+    const tx = db.transaction(['lessons', 'templates', 'workingState', 'workingBackups', 'workingAssets'], 'readwrite')
     const state = tx.objectStore('workingState')
     for (const kind of ['lesson', 'template'] as const) {
       const collection = tx.objectStore(
@@ -1461,4 +1444,165 @@ export async function removeLocalLibraryImage(
     tx.onabort = () => reject(tx.error ?? Error(reason))
   })
   reportWorkingChange(owner)
+}
+
+// Stage 6: explicit, resumable maintenance. No automatic cloud creation or deletion.
+export type MigrationLine = { kind: string; id: string; title: string; status: 'migrated' | 'verified' | 'skipped' | 'error'; detail?: string }
+type MaintenanceRow = StoredDocumentRow & { revision?: number; document?: WorkingDocument; until?: number; [key: string]: unknown }
+type MaintenanceSnapshot = { key: IDBValidKey; row: MaintenanceRow }
+function migrationMessage(error: unknown) { return error instanceof Error ? error.message : String(error) }
+function assertMaintenanceOwner(owner: string | null) {
+  if (owner !== workingOwner) throw Error('Изменился аккаунт. Операция остановлена.')
+}
+async function maintenanceRows(table: string, range?: IDBKeyRange): Promise<MaintenanceSnapshot[]> {
+  const db = await opened
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(table, 'readonly')
+    const rows: MaintenanceSnapshot[] = []
+    const q = tx.objectStore(table).openCursor(range)
+    q.onsuccess = () => { const c = q.result; if (c) { rows.push({key:c.primaryKey,row:c.value}); c.continue() } }
+    tx.oncomplete = () => resolve(rows)
+    tx.onabort = () => reject(tx.error ?? Error('Не удалось прочитать локальное хранилище.'))
+  })
+}
+export async function maintenanceLocalKeys(owner: string | null): Promise<Set<string>> {
+  assertMaintenanceOwner(owner)
+  const keys = new Set<string>()
+  for (const [kind,table] of [['lesson','lessons'],['template','templates']] as const)
+    for (const {key,row} of await maintenanceRows(table)) if (belongs(row,owner)) keys.add(kind+':'+String(key).toLowerCase())
+  assertMaintenanceOwner(owner)
+  return keys
+}
+// The bytes here come from packLocalDocument, which computes the SHA itself.
+// Replace a damaged cached copy explicitly; preserve receipts and user metadata.
+function writeVerifiedAssets(tx: IDBTransaction, owner: string | null, assets: Map<string,Blob>) {
+  const store=tx.objectStore('workingAssets')
+  for (const [sha,blob] of assets) {
+    const key=[assetScope(owner),sha], q=store.get(key)
+    q.onsuccess=()=>{
+      const old:Asset|undefined=q.result
+      store.put({ ...old, blob, retained:true, uploaded:old?.uploaded??false,
+        createdAt:old?.createdAt??Date.now(), name:old?.name??(blob.type.startsWith('image/')?'Изображение-':'Ресурс-')+sha.slice(0,12)+'.'+assetExtension(blob.type) } satisfies Asset,key)
+    }
+  }
+}
+export async function migrateLocalLibrary(owner: string | null, recover?: (sha:string)=>Promise<Blob>, onLine?: (line:MigrationLine)=>void): Promise<MigrationLine[]> {
+  assertMaintenanceOwner(owner)
+  const results:MigrationLine[]=[]
+  const report=(line:MigrationLine)=>{results.push(line);onLine?.(line)}
+  const tables: {table:string;kind:'lesson'|'template'|'backup';range?:IDBKeyRange}[]=[{table:'lessons',kind:'lesson'},{table:'templates',kind:'template'}]
+  if(owner)tables.push({table:'workingBackups',kind:'backup',range:ownerRange(owner)})
+  for(const {table,kind,range} of tables){
+    for(const {key,row} of await maintenanceRows(table,range)){
+      assertMaintenanceOwner(owner)
+      if(kind!=='backup'&&!belongs(row,owner))continue
+      if(kind==='backup'&&Number(row.until)<=Date.now())continue
+      const raw = row.packed?.document ?? (kind==='backup'?row.document:kind==='lesson'?row.deck:row.template)
+      const actualKind:WorkingKind=kind==='backup'?(raw&&typeof raw==='object'&&'deck' in raw?'template':'lesson'):kind
+      const id=kind==='backup'?String(Array.isArray(key)?key[key.length-1]:key):String(key)
+      const body=raw&&typeof raw==='object'&&'deck' in raw?raw.deck:raw
+      const title=body&&typeof body==='object'&&'title' in body?String(body.title):id
+      try{
+        let recovered=false
+        const scope=kind==='backup'?owner:row.scope??null
+        const document=row.packed?await unpackLocalDocument(actualKind,workingDeck(row.packed.document).id,row.packed,async sha=>{
+          const cached=await workingAsset(assetScope(scope),sha)
+          if(cached?.blob&&await digest(cached.blob)===sha)return cached.blob
+          if(!recover||!owner||scope!==owner)throw Error('Отсутствует или повреждён ресурс '+sha)
+          const blob=await recover(sha)
+          if(await digest(blob)!==sha)throw Error('Неверная контрольная сумма восстановленного ресурса '+sha)
+          recovered=true;return blob
+        }):actualKind==='lesson'?validateDeck(raw):validateTemplate(raw)
+        const result=await prepareStoredDocument(document)
+        let needsWrite=recovered||!row.packed||row.packed.hash!==result.stored.hash||(kind!=='backup'&&(row.scope??null)!==owner)
+        for(const [sha,blob] of result.assets){
+          const saved=await workingAsset(assetScope(owner),sha)
+          if(!saved?.retained||saved.blob.type!==blob.type||await digest(saved.blob)!==sha)needsWrite=true
+        }
+        if(!needsWrite){report({kind,id,title,status:'verified'});continue}
+        assertMaintenanceOwner(owner)
+        const db=await opened
+        const status=await new Promise<'migrated'|'skipped'>((resolve,reject)=>{
+          const stores=[table,'workingAssets','workingState','originalDocuments']
+          const tx=db.transaction(stores,'readwrite'), store=tx.objectStore(table), q=store.get(key)
+          let outcome:'migrated'|'skipped'='skipped', reason='Локальная миграция отменена.'
+          const fail=(message:string)=>{reason=message;tx.abort()}
+          q.onsuccess=()=>{
+            const current:MaintenanceRow|undefined=q.result
+            // Compare raw snapshots, not only revisions: registration can change scope.
+            if(!current||JSON.stringify(current)!==JSON.stringify(row))return
+            if(owner!==workingOwner){fail('Изменился аккаунт.');return}
+            if(kind==='backup'&&Number(current.until)<=Date.now())return
+            const write=()=>{
+              if(owner!==workingOwner){fail('Изменился аккаунт.');return}
+              writeVerifiedAssets(tx,owner,result.assets)
+              if(kind==='backup')store.put({...current,document:result.stored.document,packed:result.stored},key)
+              else {
+                if(!current.packed)storeOriginal(tx,actualKind,id,raw)
+                const field=kind==='lesson'?'deck':'template'
+                store.put({...current,[field]:result.stored.document,packed:result.stored,scope:owner??undefined,revision:(current.revision??0)+1})
+                if(owner)enqueueWorking(tx,owner,actualKind,document,false)
+              }
+              outcome='migrated'
+            }
+            if(owner&&kind!=='backup'){
+              const pending=tx.objectStore('workingState').get(docKey(owner,actualKind,id))
+              pending.onsuccess=()=>{
+                const state:WorkingRecord|undefined=pending.result
+                if(state&&(state.dirty||state.attempt||state.conflict||state.createCloud||state.deleted))return
+                write()
+              }
+            } else write()
+          }
+          tx.oncomplete=()=>resolve(outcome)
+          tx.onabort=()=>reject(tx.error??Error(reason))
+        })
+        report({kind,id,title,status,detail:status==='skipped'?'Документ изменился или ожидает синхронизации; повторите после завершения.':undefined})
+      }catch(error){report({kind,id,title,status:'error',detail:migrationMessage(error)})}
+    }
+  }
+  reportWorkingChange(owner)
+  return results
+}
+export async function auditLocalAssets(owner:string|null):Promise<MigrationLine[]> {
+  assertMaintenanceOwner(owner)
+  const result:MigrationLine[]=[]
+  for(const {key,row} of await maintenanceRows('workingAssets',ownerRange(assetScope(owner)))){
+    assertMaintenanceOwner(owner)
+    const sha=String(Array.isArray(key)?key[1]:key), asset=row as unknown as Asset
+    try{
+      if(!asset.blob||await digest(asset.blob)!==sha)throw Error('Контрольная сумма не совпадает.')
+      result.push({kind:'local-asset',id:sha,title:asset.name??sha,status:'verified'})
+    }catch(error){result.push({kind:'local-asset',id:sha,title:asset.name??sha,status:'error',detail:migrationMessage(error)})}
+  }
+  return result
+}
+// Read-only document audit; no fetch of an external URL and no repair writes.
+export async function auditLocalDocuments(owner:string|null):Promise<MigrationLine[]> {
+  assertMaintenanceOwner(owner)
+  const result:MigrationLine[]=[]
+  const tables: {table:string;kind:'lesson'|'template'|'backup';range?:IDBKeyRange}[]=[{table:'lessons',kind:'lesson'},{table:'templates',kind:'template'}]
+  if(owner)tables.push({table:'workingBackups',kind:'backup',range:ownerRange(owner)})
+  for(const {table,kind,range} of tables)for(const {key,row} of await maintenanceRows(table,range)){
+    assertMaintenanceOwner(owner)
+    if(kind!=='backup'&&!belongs(row,owner))continue
+    if(kind==='backup'&&Number(row.until)<=Date.now())continue
+    const id=kind==='backup'?String(Array.isArray(key)?key[key.length-1]:key):String(key)
+    const raw=row.packed?.document??(kind==='backup'?row.document:kind==='lesson'?row.deck:row.template)
+    const actualKind:WorkingKind=kind==='backup'?(raw&&typeof raw==='object'&&'deck' in raw?'template':'lesson'):kind
+    const scope=kind==='backup'?owner:row.scope??null
+    const body=raw&&typeof raw==='object'&&'deck' in raw?raw.deck:raw
+    const title=body&&typeof body==='object'&&'title' in body?String(body.title):id
+    try{
+      const document=row.packed?await unpackLocalDocument(actualKind,workingDeck(row.packed.document).id,row.packed,async sha=>{
+        const a=await workingAsset(assetScope(scope),sha)
+        if(!a?.blob)throw Error('Отсутствует ресурс '+sha)
+        if(!a.retained)throw Error('Ресурс не закреплён в локальной библиотеке '+sha)
+        return a.blob
+      }):actualKind==='lesson'?validateDeck(raw):validateTemplate(raw)
+      const links=mediaSlides(workingDeck(document)).some(s=>!!s.background&&!s.background.startsWith('data:')||s.items.some(i=>i.type==='image'&&!i.src.startsWith('data:')))
+      result.push({kind,id,title,status:row.packed&&!links?'verified':'skipped',detail:links?'Есть внешние ссылки; требуется миграция онлайн.':row.packed?undefined:'Старый формат JSON; требуется миграция.'})
+    }catch(e){result.push({kind,id,title,status:'error',detail:migrationMessage(e)})}
+  }
+  return result
 }

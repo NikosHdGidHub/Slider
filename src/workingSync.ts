@@ -3,6 +3,9 @@ import { copyDeck } from './catalog'
 import { digest } from './digest'
 import {
   addWorkingMetadata,
+  currentWorkingOwner,
+  maintenanceLocalKeys,
+  type MigrationLine,
   localWorkingDocument,
   registerWorking,
   updateWorking,
@@ -756,4 +759,50 @@ export function workingPresence(
     session_id: session,
     release,
   })
+}
+
+// Maintenance is explicit. Cloud-only documents remain cloud-only: no IDB writes.
+export async function recoverMaintenanceResource(owner:string,sha:string):Promise<Blob>{
+  if(owner!==currentWorkingOwner()||! /^[0-9a-f]{64}$/.test(sha))throw Error('Некорректный ресурс или аккаунт.')
+  return downloadAsset(owner,sha,false)
+}
+export async function migrateCloudOnlyLibrary(owner:string,onLine?:(line:MigrationLine)=>void):Promise<MigrationLine[]>{
+  if(!client||owner!==currentWorkingOwner())throw Error('Необходимо войти в аккаунт.')
+  const result:MigrationLine[]=[]
+  const report=(line:MigrationLine)=>{result.push(line);onLine?.(line)}
+  const catalog=await rpc<WorkingMeta[]>('atlas_working_list',{expected_owner:owner})
+  if(!Array.isArray(catalog))throw Error('Некорректный облачный каталог.')
+  for(const meta of catalog){
+    if(owner!==currentWorkingOwner())throw Error('Изменился аккаунт.')
+    const info={kind:meta.kind,id:meta.id,title:meta.title}
+    if(meta.deleted){report({...info,status:'skipped',detail:'Корзина сохранена без изменений.'});continue}
+    const key=workingKey(meta.kind,meta.id)
+    const isLocal=async()=> (await maintenanceLocalKeys(owner)).has(key)||(await workingRecords(owner)).some(r=>workingKey(r.kind,r.id)===key&&(r.localId||r.dirty||r.attempt||r.conflict||r.createCloud))
+    try{
+      if(await isLocal()){report({...info,status:'skipped',detail:'Есть локальная копия или незавершённая операция; используется обычная синхронизация.'});continue}
+      const reply=await readWorking(owner,meta.kind,meta.id)
+      if(!reply?.document||reply.meta.deleted||reply.meta.revision!==meta.revision)throw Error('Облачный документ изменился.')
+      const document=await unpackWorking(reply.meta,reply.document,sha=>downloadAsset(owner,sha,false))
+      const packed=await packWorking(meta.kind,await prepareWorkingImages(document))
+      if(packed.hash===meta.hash){report({...info,status:'verified'});continue}
+      for(const [sha,blob] of packed.assets){
+        if(owner!==currentWorkingOwner())throw Error('Изменился аккаунт.')
+        const api=client.storage.from(bucket),path=owner+'/'+sha
+        const existing=await api.info(path)
+        if(!existing.data){
+          const upload=await api.upload(path,blob,{upsert:false,contentType:blob.type,cacheControl:'0'})
+          if(upload.error){try{await downloadAsset(owner,sha,false)}catch{throw upload.error}}
+        }
+        await downloadAsset(owner,sha,false)
+      }
+      if(owner!==currentWorkingOwner()||await isLocal())throw Error('Появилась локальная копия или изменился аккаунт.')
+      const receipt=await rpc<{accepted:boolean;committed?:number;meta:WorkingMeta|null}>('atlas_working_save',{
+        expected_owner:owner,doc_kind:meta.kind,doc_id:meta.id,expected_revision:meta.revision,mutation:crypto.randomUUID(),
+        payload:packed.document,payload_hash:packed.hash,refs:[...packed.assets.keys()],remove_doc:false,create_doc:false
+      })
+      if(!receipt.accepted||receipt.meta?.hash!==packed.hash||receipt.meta.deleted)throw Error('Облачная версия изменилась; миграция не подтверждена.')
+      report({...info,status:'migrated'})
+    }catch(error){report({...info,status:'error',detail:error instanceof Error?error.message:String((error as {message?:string})?.message??error)})}
+  }
+  return result
 }
