@@ -894,6 +894,7 @@ function App() {
   }
   async function savePublicationLocally(id: string): Promise<Entry> {
     if (!allowed) throw Error('Для сохранения методички необходимо войти.')
+    id = id.toLowerCase()
     const existing = (await entries()).find(
       (entry) => entry.deck.id.toLowerCase() === id
     )
@@ -909,11 +910,7 @@ function App() {
         if (!errorText(error).includes('Примените cloud-sync.sql')) throw error
       }
     }
-    if (workingOwner && meta) {
-      if (meta.deleted || workingRow?.deleted)
-        throw Error(
-          'Рабочий черновик удалён. Восстановите его через панель синхронизации.'
-        )
+    if (workingOwner && meta && !meta.deleted) {
       await openWorking(workingOwner, meta)
       const cached = (await entries()).find(
         (entry) => entry.deck.id.toLowerCase() === id

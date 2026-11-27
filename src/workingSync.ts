@@ -268,7 +268,7 @@ async function runRecord(
     ) {
       return {
         ...current,
-        base: reply.meta?.revision ?? null,
+        base: null,
         meta: reply.meta ?? undefined,
         dirty: false,
         deleted: !current.localId,
@@ -288,6 +288,8 @@ async function runRecord(
           base: reply.meta.revision,
           meta: reply.meta,
           attempt: undefined,
+          createCloud: false,
+          dirty: true,
         }
       return clean(reply.meta, current.generation, current.localId)
     }
@@ -307,6 +309,8 @@ async function runRecord(
         base: committed,
         meta: reply.meta,
         attempt: undefined,
+        createCloud: false,
+        dirty: true,
       }
     return {
       ...clean(reply.meta, current.generation, current.localId),
@@ -428,7 +432,7 @@ async function detachWorkingCloud(
 
     return {
       ...current,
-      base: meta?.revision ?? null,
+      base: null,
       meta,
       dirty: false,
       deleted: !current.localId,
@@ -480,7 +484,64 @@ export async function syncWorking(
 
         continue
       }
+      // A local-only document can have the same UUID
+      // as a newly created or restored cloud document.
+      if (
+        row.localId &&
+        meta &&
+        !meta.deleted &&
+        (row.base === null || row.meta?.deleted) &&
+        !row.createCloud &&
+        !row.attempt &&
+        !row.conflict
+      ) {
+        const local = await localWorkingDocument(owner, row)
 
+        if (!local) throw Error('Локальная копия недоступна.')
+
+        const packed = await packWorking(row.kind, local)
+
+        let matches = meta.hash === packed.hash
+
+        if (!meta.hash) {
+          const remote = await fetchWorking(owner, row.kind, row.id, false)
+
+          if (
+            remote.meta.revision !== meta.revision ||
+            !remote.document ||
+            remote.meta.deleted
+          )
+            throw Error('Облачная версия изменилась. Повторите проверку.')
+
+          matches =
+            (await packWorking(row.kind, remote.document)).hash === packed.hash
+        }
+
+        await updateWorking(owner, row.kind, row.id, (current) => {
+          if (
+            !current ||
+            current.generation !== row.generation ||
+            current.attempt ||
+            current.conflict ||
+            current.createCloud
+          )
+            return current
+
+          if (matches) {
+            return clean(meta, current.generation + 1, current.localId)
+          }
+
+          return {
+            ...current,
+            dirty: true,
+            conflict: meta,
+            meta,
+            generation: current.generation + 1,
+          }
+        })
+
+        continue
+      }
       if (row.conflict) {
         if (meta && meta.revision !== row.conflict.revision)
           await updateWorking(owner, row.kind, row.id, (current) =>
@@ -624,6 +685,10 @@ export async function resolveWorking(
           attempt: undefined,
           conflict: undefined,
           base: shown.revision,
+          meta: shown,
+          dirty: true,
+          deleted: false,
+          createCloud: !!shown.deleted,
           generation: current.generation + 1,
         }
       const next = clean(shown, current.generation + 1, localId)
