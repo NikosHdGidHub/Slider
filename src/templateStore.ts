@@ -43,7 +43,8 @@ export async function getCatalog(allowed: boolean) {
       entry: status
         ? { ...entry, dirty: status.dirty, cloudRevision: status.base ?? 0 }
         : entry,
-      remote: status?.meta?.revision,
+      remote:
+        status?.meta && !status.meta.deleted ? status.meta.revision : undefined,
     })
   }
   for (const status of sync.values()) {

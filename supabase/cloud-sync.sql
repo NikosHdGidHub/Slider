@@ -130,9 +130,21 @@ begin
     case when d.deleted_at is null or d.deleted_at > now() - interval '30 days' then d.document else null end);
 end; $$;
 
+drop function if exists public.atlas_working_save(
+  uuid,text,uuid,bigint,uuid,jsonb,text,text[],boolean
+);
+
 create or replace function public.atlas_working_save(
-  expected_owner uuid, doc_kind text, doc_id uuid, expected_revision bigint, mutation uuid,
-  payload jsonb, payload_hash text, refs text[], remove_doc boolean
+  expected_owner uuid,
+  doc_kind text,
+  doc_id uuid,
+  expected_revision bigint,
+  mutation uuid,
+  payload jsonb,
+  payload_hash text,
+  refs text[],
+  remove_doc boolean,
+  create_doc boolean default false
 )
 returns jsonb language plpgsql volatile security definer set search_path = '' as $$
 declare
@@ -150,7 +162,11 @@ begin
     raise exception using errcode = '42501', message = 'Working library owner required';
   end if;
   if doc_kind is null or doc_kind not in ('lesson','template') or doc_id is null or mutation is null
-     or expected_revision is null or expected_revision < 0 or remove_doc is null
+     or expected_revision is null
+      or expected_revision < 0
+      or remove_doc is null
+      or create_doc is null
+      or (create_doc and remove_doc)
      or payload_hash is null or payload_hash !~ '^[0-9a-f]{64}$' or refs is null then
     raise exception using errcode = '22023', message = 'Invalid working revision';
   end if;
@@ -165,6 +181,32 @@ begin
   end if;
   if coalesce(old.revision,0) <> expected_revision then
     return jsonb_build_object('accepted', false, 'meta',case when old.id is not null then public.atlas_working_meta(old) else null end);
+  end if;
+    -- Creating or restoring a cloud copy requires
+  -- an explicit user action.
+  if create_doc then
+    if old.id is not null
+      and old.deleted_at is null then
+      return jsonb_build_object(
+        'accepted', false,
+        'meta', public.atlas_working_meta(old)
+      );
+    end if;
+  else
+    -- Automatic synchronization cannot create
+    -- or restore a missing cloud document.
+    if old.id is null
+      or old.deleted_at is not null then
+      return jsonb_build_object(
+        'accepted', false,
+        'meta',
+        case
+          when old.id is not null
+          then public.atlas_working_meta(old)
+          else null
+        end
+      );
+    end if;
   end if;
   if remove_doc and not (coalesce(payload,'{}'::jsonb) ? any(array['deck','slides'])) then
     if old.id is null then
@@ -239,10 +281,10 @@ end; $$;
 
 revoke all on function public.atlas_working_meta(public.atlas_working_documents) from public, anon, authenticated;
 revoke all on function public.atlas_working_list(uuid), public.atlas_working_get(uuid,text,uuid),
-  public.atlas_working_save(uuid,text,uuid,bigint,uuid,jsonb,text,text[],boolean),
+  public.atlas_working_save(uuid,text,uuid,bigint,uuid,jsonb,text,text[],boolean,boolean),
   public.atlas_working_editing(uuid,text,uuid,uuid,boolean) from public, anon, authenticated;
 grant execute on function public.atlas_working_list(uuid), public.atlas_working_get(uuid,text,uuid),
-  public.atlas_working_save(uuid,text,uuid,bigint,uuid,jsonb,text,text[],boolean),
+  public.atlas_working_save(uuid,text,uuid,bigint,uuid,jsonb,text,text[],boolean,boolean),
   public.atlas_working_editing(uuid,text,uuid,uuid,boolean) to authenticated;
 -- The index is a projection of current Storage objects. An interrupted indexing
 -- request leaves a listed, indexable publication, and a deleted object is hidden.

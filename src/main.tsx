@@ -230,12 +230,12 @@ function App() {
       if (record.kind !== 'lesson') continue
       const row = rows.get(record.id),
         meta = record.meta
-      if (record.deleted || (meta?.deleted && !record.dirty)) {
+      if (!row && (record.deleted || meta?.deleted)) {
         rows.delete(record.id)
         deleted.add(record.id)
       } else if (row && record.conflict)
         rows.set(record.id, { ...row, syncConflict: true })
-      else if (!row && meta && !record.dirty)
+      else if (!row && meta && !meta.deleted && !record.dirty)
         rows.set(record.id, {
           deck: workingCardDeck(meta.id, meta.title),
           revision: 0,

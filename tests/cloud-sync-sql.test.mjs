@@ -73,9 +73,10 @@ test('working-library migration preserves templates, prevents cross-owner access
       payload,
       refs = [],
       remove = false,
-      kind = 'lesson'
+      kind = 'lesson',
+      create = false
     ) =>
-      rpc('atlas_working_save($1,$2,$3,$4,$5,$6,$7,$8,$9)', [
+      rpc('atlas_working_save($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [
         owner,
         kind,
         id(doc),
@@ -85,6 +86,7 @@ test('working-library migration preserves templates, prevents cross-owner access
         sha,
         refs,
         remove,
+        create,
       ])
     await role('authenticated', owner)
     assert.equal((await list()).length, 1)
@@ -101,28 +103,46 @@ test('working-library migration preserves templates, prevents cross-owner access
       ]),
       true
     )
+    // Automatic synchronization must not create a cloud copy.
+    const automatic = await write(90, 0, 90, source(90, 'Только локально'))
 
+    assert.equal(automatic.accepted, false)
+    assert.equal(await read(90), null)
     const first = source(1, 'Черновик')
     first.slides[0].background = 'atlas-resource:' + sha + ':image/png'
     await assert.rejects(
-      () => write(1, 0, 10, first, [sha]),
+      () => write(1, 0, 10, first, [sha], false, 'lesson', true),
       /Missing private resource/
     )
     await db.query(
       'insert into storage.objects(bucket_id,name) values($1,$2)',
       ['atlas-private-resources', owner + '/' + sha]
     )
-    const receipt = await write(1, 0, 10, first, [sha])
+    const receipt = await write(1, 0, 10, first, [sha], false, 'lesson', true)
     assert.equal(receipt.committed, 1)
-    assert.deepEqual(await write(1, 0, 10, first, [sha]), receipt)
+    assert.deepEqual(
+      await write(1, 0, 10, first, [sha], false, 'lesson', true),
+      receipt
+    )
     const second = source(1, 'Новая версия')
     assert.equal((await write(1, 1, 11, second)).committed, 2)
     assert.equal((await write(1, 1, 12, first, [sha])).accepted, false)
-    const replay = await write(1, 0, 10, first, [sha])
+    const replay = await write(1, 0, 10, first, [sha], false, 'lesson', true)
     assert.equal(replay.committed, 1)
     assert.equal(replay.meta.revision, 2)
     assert.equal(
-      (await write(2, 0, 13, source(2, 'Независимая'))).accepted,
+      (
+        await write(
+          2,
+          0,
+          13,
+          source(2, 'Независимая'),
+          [],
+          false,
+          'lesson',
+          true
+        )
+      ).accepted,
       true
     )
     assert.equal(
@@ -135,7 +155,15 @@ test('working-library migration preserves templates, prevents cross-owner access
       true
     )
     assert.deepEqual((await read()).document, second)
-    assert.equal((await write(1, 3, 15, second)).meta.deleted, null)
+    // Automatic synchronization must not restore a deleted copy.
+    const automaticRestore = await write(1, 3, 91, second)
+
+    assert.equal(automaticRestore.accepted, false)
+    assert.ok((await read()).meta.deleted)
+    assert.equal(
+      (await write(1, 3, 15, second, [], false, 'lesson', true)).meta.deleted,
+      null
+    )
     assert.equal((await catalog())[0].id, id(1))
     assert.equal(
       await rpc('atlas_working_editing($1,$2,$3,$4,false)', [

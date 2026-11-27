@@ -498,12 +498,15 @@ function enqueueWorking(
   const read = store.get(key)
   read.onsuccess = () => {
     const before: WorkingRecord | undefined = read.result
+    const hasCloud = !!before?.meta && !before.meta.deleted
+
+    const shouldSync = hasCloud || !!before?.createCloud || !!before?.attempt
     const next: WorkingRecord = {
       ...before,
       kind,
       id,
       localId: workingDeck(document).id,
-      dirty: true,
+      dirty: shouldSync,
       deleted,
       title: workingDeck(document).title,
       templateKind: 'deck' in document ? document.kind : undefined,
@@ -560,7 +563,7 @@ export async function registerWorking(owner: string) {
               localSlides: workingDeck(document).slides.length,
               base: existing.cloudRevision || null,
               generation: 1,
-              dirty: true,
+              dirty: false,
               deleted: false,
             }
             state.put(previous, key)

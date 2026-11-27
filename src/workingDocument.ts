@@ -26,6 +26,7 @@ export type WorkingAttempt = {
   hash: string
   refs: string[]
   deleted: boolean
+  createCloud?: boolean
 }
 export type WorkingRecord = {
   kind: WorkingKind
@@ -38,6 +39,7 @@ export type WorkingRecord = {
   localSlides?: number
   generation: number
   dirty: boolean
+  createCloud?: boolean
   deleted: boolean
   previous?: WorkingDocument
   conflict?: WorkingMeta

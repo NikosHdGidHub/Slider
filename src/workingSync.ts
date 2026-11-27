@@ -218,6 +218,7 @@ async function runRecord(
       hash: packed.hash,
       refs: [...packed.assets.keys()],
       deleted: row.deleted,
+      createCloud: !!row.createCloud,
     }
     if (
       !(await updateWorking(owner, row.kind, row.id, (current) =>
@@ -244,6 +245,7 @@ async function runRecord(
       payload_hash: attempt.hash,
       refs: attempt.refs,
       remove_doc: attempt.deleted,
+      create_doc: !!attempt.createCloud,
     })
   } catch (error) {
     if (error instanceof WorkingRemoteError && error.code === '23503')
@@ -253,6 +255,22 @@ async function runRecord(
   const submitted = attempt
   await updateWorking(owner, row.kind, row.id, (current) => {
     if (!current || !sameAttempt(current, submitted)) return current
+    if (
+      !submitted.createCloud &&
+      !submitted.deleted &&
+      (!reply.meta || reply.meta.deleted)
+    ) {
+      return {
+        ...current,
+        base: reply.meta?.revision ?? null,
+        meta: reply.meta ?? undefined,
+        dirty: false,
+        deleted: !current.localId,
+        attempt: undefined,
+        conflict: undefined,
+        createCloud: false,
+      }
+    }
     if (
       !reply.accepted &&
       reply.meta?.hash === submitted.hash &&
@@ -290,7 +308,76 @@ async function runRecord(
     }
   })
 }
+export async function requestCloudCreation(
+  owner: string,
+  kind: WorkingKind,
+  id: string
+) {
+  id = id.toLowerCase()
 
+  const row = (await workingRecords(owner)).find(
+    (item) => item.id === id && item.kind === kind
+  )
+
+  if (!row || row.deleted) throw Error('Локальный документ не найден.')
+
+  const local = await localWorkingDocument(owner, row)
+
+  if (!local) throw Error('Локальная копия отсутствует.')
+
+  const remote = await workingMetadata(owner, kind, id)
+
+  if (remote && !remote.deleted)
+    throw Error('Документ уже существует в облаке.')
+
+  const changed = await updateWorking(owner, kind, id, (current) => {
+    if (
+      !current ||
+      current.generation !== row.generation ||
+      current.attempt ||
+      current.conflict
+    )
+      return current
+
+    return {
+      ...current,
+      base: remote?.revision ?? 0,
+      meta: remote,
+      dirty: true,
+      deleted: false,
+      createCloud: true,
+      generation: current.generation + 1,
+    }
+  })
+
+  if (!changed) throw Error('Документ изменился. Повторите действие.')
+}
+async function detachWorkingCloud(
+  owner: string,
+  row: WorkingRecord,
+  meta: WorkingMeta | undefined
+) {
+  await updateWorking(owner, row.kind, row.id, (current) => {
+    if (
+      !current ||
+      current.generation !== row.generation ||
+      current.attempt?.request !== row.attempt?.request
+    )
+      return current
+
+    return {
+      ...current,
+      base: meta?.revision ?? null,
+      meta,
+      dirty: false,
+      deleted: !current.localId,
+      conflict: undefined,
+      attempt: undefined,
+      createCloud: false,
+      generation: current.generation + 1,
+    }
+  })
+}
 export async function syncWorking(
   owner: string,
   active: () => string | undefined,
@@ -317,7 +404,22 @@ export async function syncWorking(
     if (!stillActive() || !navigator.onLine) break
     const key = workingKey(row.kind, row.id)
     const meta = cloud.get(key)
+    cloud.delete(key)
+
     try {
+      if ((!meta || meta.deleted) && !row.createCloud && !row.attempt) {
+        if (
+          row.dirty ||
+          row.conflict ||
+          row.meta?.revision !== meta?.revision ||
+          row.deleted !== !row.localId
+        ) {
+          await detachWorkingCloud(owner, row, meta)
+        }
+
+        continue
+      }
+
       if (row.conflict) {
         if (meta && meta.revision !== row.conflict.revision)
           await updateWorking(owner, row.kind, row.id, (current) =>
@@ -325,7 +427,10 @@ export async function syncWorking(
           )
         continue
       }
-      if (row.dirty) {
+      if (
+        row.dirty &&
+        ((meta && !meta.deleted) || row.createCloud || row.attempt)
+      ) {
         await runRecord(owner, row, meta)
       } else if (meta && meta.revision > (row.base ?? 0) && active() !== key) {
         if (row.localId)
@@ -344,7 +449,6 @@ export async function syncWorking(
           (error instanceof Error ? error.message : String(error))
       )
     }
-    cloud.delete(key)
   }
   if (stillActive())
     await addWorkingMetadata(
