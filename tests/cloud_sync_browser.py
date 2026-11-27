@@ -337,6 +337,7 @@ def run(browser, base, persistent=None, zoom=None):
         expect(phone.get_by_text(f'Доступно: {n} из {n}', exact=True)).to_be_visible()
         qr_elapsed = round((time.perf_counter() - started) * 1000)
         assert len(api.public_reads) == start_reads
+        assert len(api.catalog_requests) - qr_calls == 1
         print('CATALOG', n, total, api.catalog_requests[-1],
               len(api.catalog_requests[start_catalog:qr_calls]), elapsed, search,
               len(api.catalog_requests) - qr_calls, qr_elapsed, work_elapsed, flush=True)

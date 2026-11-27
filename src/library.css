@@ -993,7 +993,7 @@
   color: inherit;
 }
 
-.working-dialog {
+.dialog.working-dialog {
   width: min(560px, 92vw);
 }
 
@@ -1013,5 +1013,16 @@
   .published-library .lib-heading > button {
     justify-content: center;
     padding-inline: 11px;
+  }
+}
+
+@media (min-width: 560px) {
+  .working-item dl {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .working-item dl > div {
+    flex-direction: column;
+    justify-content: flex-start;
   }
 }

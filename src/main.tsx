@@ -178,8 +178,16 @@ function App() {
   const creationCourse = useRef<string | null>(null)
   const templateCourse = useRef<string | null>(null)
   const [publicationStamp, publicationChanged] = useState(0)
+  const inTransfer =
+    hash === receiveHash ||
+    hash === '#transfer' ||
+    hash.startsWith('#transfer/')
   const publications = useCoursePublications(
-    page === 'library' || page === 'published' ? page : null,
+    !inTransfer &&
+      !hash.startsWith('#p/') &&
+      (page === 'library' || page === 'published')
+      ? page
+      : null,
     online,
     workingOwner,
     !!signedInOwner,
@@ -290,9 +298,7 @@ function App() {
     !watch &&
     !(editingTemplate && allowed && !phone) &&
     !hash.startsWith('#p/') &&
-    hash !== receiveHash &&
-    hash !== '#transfer' &&
-    !hash.startsWith('#transfer/')
+    !inTransfer
   useLibraryScroll(
     libraryContent,
     homeVisible,

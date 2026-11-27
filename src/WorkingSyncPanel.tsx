@@ -140,7 +140,7 @@ export function WorkingSyncPanel({
         ))}
       </dl>
       <p>
-        Ожидают отправки: {pending.length + courses.pending} · Конфликты:{' '}
+        Ожидают отправки: {pending.length - conflicts.length + courses.pending} · Конфликты:{' '}
         {conflicts.length + Number(courses.conflict)}
       </p>
       {sync.lastSuccess && (

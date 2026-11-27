@@ -208,8 +208,7 @@ h1 {
   letter-spacing: -1.9px;
 }
 .primary,
-.secondary,
-.pub button {
+.secondary {
   border-radius: 7px;
   padding: 11px 15px;
   font-size: 14px;
@@ -220,8 +219,7 @@ h1 {
   background: #255b44;
   color: white;
 }
-.secondary,
-.pub button {
+.secondary {
   border: 1px solid #d4dbd0;
   background: #fff;
 }
@@ -246,28 +244,6 @@ h1 {
   color: #67766a;
   line-height: 1.5;
   font-size: 14px;
-}
-.pub {
-  position: relative;
-  background: #fff;
-  border: 1px solid #d6ddd2;
-  border-radius: 10px;
-  padding: 12px;
-}
-.pub {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 12px 0;
-}
-.pub div {
-  min-width: 0;
-  flex: 1;
-}
-.pub a {
-  display: block;
-  overflow-wrap: anywhere;
-  color: #406b52;
 }
 .guide {
   max-width: 780px;
@@ -431,9 +407,6 @@ h1 {
     align-items: flex-start;
     flex-wrap: wrap;
     margin-bottom: 20px;
-  }
-  .pub {
-    flex-wrap: wrap;
   }
 }
 .title-row {
