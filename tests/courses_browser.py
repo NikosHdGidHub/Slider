@@ -317,7 +317,11 @@ def touch_library(browser, url):
 def cloud(browser, url):
     public = fixture('water-frame')
     hidden = fixture('map-standard')
+    from working_api import WorkingAPI
     published = {public['id']: public}
+    working = WorkingAPI(published)
+    # Courses remain usable until the working-library migration is applied.
+    working.missing = True
     revision = {'revision': 0, 'courses': [], 'lessons': {}}
     receipts = set()
     reads = []
@@ -342,6 +346,8 @@ def cloud(browser, url):
             return send(user)
         if path in ('/rest/v1/atlas_templates', '/rest/v1/atlas_file_inventory', '/rest/v1/atlas_folders'):
             return send([])
+        if working.route(route, send):
+            return
         if path == '/rest/v1/rpc/atlas_get_courses':
             if gap['missing']:
                 return send({'code': 'PGRST202', 'message': 'missing RPC'}, 404)
@@ -501,20 +507,21 @@ def cloud(browser, url):
     a.get_by_label('Название методички').fill('Версия только на устройстве')
     button(a, 'В библиотеку').click()
     expect(a.get_by_role('dialog', name='Выход из редактора')).to_be_visible()
-    button(a, 'Оставить локально и выйти').click()
+    button(a, 'Сохранить черновик и выйти').click()
     expect(button(a, 'Открыть Версия только на устройстве')).to_be_visible()
     published[hidden['id']]['title'] = 'Версия с другого устройства'
     choose(a, 'Версия только на устройстве', 'Редактировать')
-    button(a, 'Синхронизовать').click()
+    button(a, 'Публикация изменилась').click()
     button(a, 'Загрузить опубликованную версию').click()
     expect(a.get_by_label('Название методички')).to_have_value('Версия с другого устройства')
     expect(button(a, 'Опубликовано')).to_be_visible()
     button(a, 'В библиотеку').click()
     expect(button(a, 'Открыть Версия с другого устройства')).to_be_visible()
     button(a, 'Опубликованные').click()
-    publication = a.locator('.pub').filter(has_text='Версия с другого устройства')
+    a.get_by_label('Фильтр по курсам').select_option(value=course_id)
+    publication = button(a, 'Открыть Версия с другого устройства')
     expect(publication).to_be_visible()
-    button(publication, 'Снять с публикации').click()
+    choose(a, 'Версия с другого устройства', 'Снять с публикации')
     expect(publication).to_have_count(0)
     assert hidden['id'] not in published
     assert revision == structure

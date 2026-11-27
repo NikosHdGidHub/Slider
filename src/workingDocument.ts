@@ -1,7 +1,7 @@
 import { validateTemplate, type Template } from './catalog.ts'
 import { digest } from './digest.ts'
 import { mediaSlides } from './grid.ts'
-import { validateDeck, type Deck } from './model.ts'
+import { newDeck, validateDeck, type Deck } from './model.ts'
 
 export type WorkingKind = 'lesson' | 'template'
 export type WorkingDocument = Deck | Template
@@ -45,24 +45,40 @@ export type WorkingRecord = {
   meta?: WorkingMeta
 }
 
-const pointer = /^atlas-resource:([0-9a-f]{64}):(image\/(?:png|jpeg|webp)|font\/(?:woff2|woff|ttf|otf))$/
+const pointer =
+  /^atlas-resource:([0-9a-f]{64}):(image\/(?:png|jpeg|webp)|font\/(?:woff2|woff|ttf|otf))$/
+
+const cardDeck = newDeck('Без названия')
+// A list row exposes identity and title. Editor actions must resolve its body.
+export function workingCardDeck(id: string, title: string): Deck {
+  return { ...cardDeck, id, title }
+}
 
 export function workingDeck(document: WorkingDocument) {
   return 'deck' in document ? document.deck : document
 }
 function validate(kind: WorkingKind, document: unknown) {
-  return kind === 'template' ? validateTemplate(document) : validateDeck(document)
+  return kind === 'template'
+    ? validateTemplate(document)
+    : validateDeck(document)
 }
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, current) =>
     current && typeof current === 'object' && !Array.isArray(current)
-      ? Object.fromEntries(Object.keys(current).sort().map((key) => [key, current[key]]))
+      ? Object.fromEntries(
+          Object.keys(current)
+            .sort()
+            .map((key) => [key, current[key]])
+        )
       : current
   )
 }
 
-async function replaceResources(deck: Deck, transform: (source: string, font?: string) => Promise<string>) {
+async function replaceResources(
+  deck: Deck,
+  transform: (source: string, font?: string) => Promise<string>
+) {
   for (const slide of mediaSlides(deck)) {
     if (slide.background) slide.background = await transform(slide.background)
     for (const item of slide.items)
@@ -78,17 +94,44 @@ export async function packWorking(kind: WorkingKind, source: WorkingDocument) {
   const converted = new Map<string, string>()
   await replaceResources(workingDeck(document), async (source, font) => {
     const url = font ? 'data:font/' + font + ';base64,' + source : source
-    if (!url.startsWith('data:')) return source
+    if (!url.startsWith('data:')) {
+      const address = new URL(source)
+      const temporary =
+        /\/storage\/v1\/(?:object|render\/image)\/sign\//.test(
+          address.pathname
+        ) ||
+        [...address.searchParams.keys()].some((key) =>
+          /^(?:X-Amz-Signature|X-Goog-Signature|Signature)$/i.test(key)
+        )
+      if (!temporary) return source
+    }
     const known = converted.get(url)
     if (known) return known
-    const blob = await (await fetch(url)).blob()
+    const response = await fetch(url, { signal: AbortSignal.timeout(20000) })
+    if (!response.ok)
+      throw Error(
+        'Не удалось получить временное изображение. Вставьте его заново.'
+      )
+    const blob = await response.blob()
+    if (
+      !font &&
+      (!['image/png', 'image/jpeg', 'image/webp'].includes(blob.type) ||
+        blob.size > 18 * 1024 * 1024)
+    )
+      throw Error(
+        'Ожидается изображение PNG, JPEG или WebP размером до 18 МиБ.'
+      )
     const sha = await digest(blob)
     const result = 'atlas-resource:' + sha + ':' + blob.type
     assets.set(sha, blob)
     converted.set(url, result)
     return result
   })
-  return { document, assets, hash: await digest(new Blob([canonical(document)])) }
+  return {
+    document,
+    assets,
+    hash: await digest(new Blob([canonical(document)])),
+  }
 }
 
 function dataURI(bytes: Uint8Array, type: string) {
@@ -103,20 +146,26 @@ export async function unpackWorking(
   source: WorkingDocument,
   resource: (sha: string) => Promise<Blob>
 ) {
-  if (meta.hash && !meta.deleted && meta.hash !== await digest(new Blob([canonical(source)])))
+  if (meta.hash && meta.hash !== (await digest(new Blob([canonical(source)]))))
     throw Error('Контрольная сумма облачного документа не совпадает.')
-  const document = structuredClone(source)
+  const document = meta.hash
+    ? structuredClone(source)
+    : validate(meta.kind, source)
   const converted = new Map<string, Uint8Array>()
   await replaceResources(workingDeck(document), async (value, font) => {
     if (!value.startsWith('atlas-resource:')) return value
     const match = pointer.exec(value)
-    if (!match || (font ? match[2] !== 'font/' + font : !match[2].startsWith('image/')))
+    if (
+      !match ||
+      (font ? match[2] !== 'font/' + font : !match[2].startsWith('image/'))
+    )
       throw Error('Некорректная ссылка на приватный ресурс.')
     const [, sha, type] = match
     let bytes = converted.get(sha)
     if (!bytes) {
       const blob = await resource(sha)
-      if (await digest(blob) !== sha) throw Error('Контрольная сумма приватного ресурса не совпадает.')
+      if ((await digest(blob)) !== sha)
+        throw Error('Контрольная сумма приватного ресурса не совпадает.')
       bytes = new Uint8Array(await blob.arrayBuffer())
       converted.set(sha, bytes)
     }

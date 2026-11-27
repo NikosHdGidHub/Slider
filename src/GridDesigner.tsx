@@ -403,8 +403,16 @@ export function GridDesigner({
         inspectorRequest={inspectorRequest}
         header={
           <>
-            {openSync && <button className="editor-sync" type="button" onClick={openSync}
-              aria-label={'Синхронизация: ' + syncLabel}>{syncLabel}</button>}
+            {openSync && (
+              <button
+                className="editor-sync"
+                type="button"
+                onClick={openSync}
+                aria-label={'Синхронизация: ' + syncLabel}
+              >
+                {syncLabel}
+              </button>
+            )}
             <IconButton label="В библиотеку" onClick={back}>
               <ArrowLeft />
             </IconButton>

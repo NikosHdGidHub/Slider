@@ -9,8 +9,14 @@ import { GridDesigner } from './GridDesigner'
 import { copyDeck, templateFrom } from './catalog'
 import { useCourses } from './courseSync'
 import { useCoursePreferences } from './coursePreferences'
+import { workingCardDeck } from './workingDocument'
 import { useWorkingSync } from './useWorkingSync'
-import { fetchWorking, openWorking, workingKey, workingMetadata } from './workingSync'
+import {
+  fetchWorking,
+  openWorking,
+  workingKey,
+  workingMetadata,
+} from './workingSync'
 import { PublishedLibrary, publicationTitle } from './PublishedLibrary'
 import { indexPublications, publicationDocument } from './publicationCatalog'
 import { WorkingSyncPanel, syncSummary } from './WorkingSyncPanel'
@@ -74,7 +80,12 @@ import { useLibrarySettings } from './Library'
 import { useStoredPreference } from './workspacePreferences'
 import { ImportPreview } from './ImportPreview'
 import { builtins, validateTemplate, type Template } from './catalog'
-import { getCatalog, loadCatalogRow, saveLocal, type CatalogRow } from './templateStore'
+import {
+  getCatalog,
+  loadCatalogRow,
+  saveLocal,
+  type CatalogRow,
+} from './templateStore'
 import { download } from './instructions'
 import { Editor } from './Editor'
 import { Viewer } from './Viewer'
@@ -119,6 +130,18 @@ function App() {
     [busy, setBusy] = useState(''),
     [value, setValue] = useState(''),
     [pw, password] = useState('')
+  const modalContainer = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!modal) return
+    const source =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    modalContainer.current?.querySelector<HTMLElement>('.dismiss')?.focus()
+    return () => {
+      if (source?.isConnected) source.focus()
+    }
+  }, [modal])
   const [publicError, pubError] = useState(''),
     [hash, setHash] = useState(location.hash),
     [publicDeck, setPublicDeck] = useState<Deck | null>(null)
@@ -156,11 +179,17 @@ function App() {
   const templateCourse = useRef<string | null>(null)
   const [publicationStamp, publicationChanged] = useState(0)
   const publications = useCoursePublications(
-    page === 'library' || page === 'published', online,
-    signedInOwner ? workingOwner : null, publicationStamp
+    page === 'library' || page === 'published' ? page : null,
+    online,
+    workingOwner,
+    !!signedInOwner,
+    publicationStamp
   )
   const publishedSettings = useLibrarySettings('published')
-  const publicLocation = useCoursePreferences('public:' + (workingOwner ?? 'guest'), publishedSettings)
+  const publicLocation = useCoursePreferences(
+    'public:' + (workingOwner ?? 'guest'),
+    publishedSettings
+  )
   useEffect(() => {
     if (courses.ready && courseLocation.id && !activeCourse)
       courseLocation.setLocation(null)
@@ -176,38 +205,58 @@ function App() {
     baseline: string
   } | null>(null)
 
-  const working = useWorkingSync(workingOwner, online, !!signedInOwner,
+  const working = useWorkingSync(
+    workingOwner,
+    online,
+    !!signedInOwner,
     doc ? 'lesson' : editingTemplate ? 'template' : undefined,
-    doc?.id ?? editingTemplate?.t.deck.id)
+    doc?.id ?? editingTemplate?.t.deck.id
+  )
   const sync = syncSummary(working, courses, online, !!signedInOwner, localMode)
   const libraryRows = useMemo(() => {
-    const rows = new Map<string, LessonRow>(list.map((entry) => [entry.deck.id.toLowerCase(), entry]))
+    const rows = new Map<string, LessonRow>(
+      list.map((entry) => [entry.deck.id.toLowerCase(), entry])
+    )
     const deleted = new Set<string>()
     for (const record of working.records) {
       if (record.kind !== 'lesson') continue
-      const row = rows.get(record.id), meta = record.meta
+      const row = rows.get(record.id),
+        meta = record.meta
       if (record.deleted || (meta?.deleted && !record.dirty)) {
         rows.delete(record.id)
         deleted.add(record.id)
-      } else if (row && record.conflict) rows.set(record.id, { ...row, syncConflict: true })
-      else if (!row && meta && !record.dirty) rows.set(record.id, {
-        deck: { ...newDeck(meta.title), id: meta.id }, revision: 0, updated: Date.parse(meta.updated),
-        slideCount: meta.slides, working: meta,
-      })
+      } else if (row && record.conflict)
+        rows.set(record.id, { ...row, syncConflict: true })
+      else if (!row && meta && !record.dirty)
+        rows.set(record.id, {
+          deck: workingCardDeck(meta.id, meta.title),
+          revision: 0,
+          updated: Date.parse(meta.updated),
+          slideCount: meta.slides,
+          working: meta,
+        })
     }
     for (const publication of publications.rows) {
       if (rows.has(publication.id) || deleted.has(publication.id)) continue
       rows.set(publication.id, {
-        deck: { ...newDeck(publicationTitle(publication)), id: publication.id },
-        revision: 0, updated: Date.parse(publication.updated), slideCount: publication.slides ?? 0, publication,
+        deck: workingCardDeck(publication.id, publicationTitle(publication)),
+        revision: 0,
+        updated: Date.parse(publication.updated),
+        slideCount: publication.slides ?? 0,
+        publication,
       })
     }
     return [...rows.values()]
   }, [list, working.records, publications.rows])
-  const activeSyncConflict = working.records.some((record) => record.conflict && (
-    (doc && workingKey(record.kind, record.id) === workingKey('lesson', doc.id)) ||
-    (editingTemplate && workingKey(record.kind, record.id) === workingKey('template', editingTemplate.t.deck.id))
-  ))
+  const activeSyncConflict = working.records.some(
+    (record) =>
+      record.conflict &&
+      ((doc &&
+        workingKey(record.kind, record.id) === workingKey('lesson', doc.id)) ||
+        (editingTemplate &&
+          workingKey(record.kind, record.id) ===
+            workingKey('template', editingTemplate.t.deck.id)))
+  )
   function retrySync() {
     working.retry()
     courses.retry()
@@ -251,7 +300,9 @@ function App() {
       ? page + '/' + catalogKind
       : page === 'library'
         ? page + '/' + courseLocation.key
-        : page === 'published' ? page + '/' + publicLocation.key : page
+        : page === 'published'
+          ? page + '/' + publicLocation.key
+          : page
   )
 
   function allowEditing() {
@@ -304,7 +355,9 @@ function App() {
     () =>
       inEditor
         ? collectStyles([
-            ...visibleRows.filter((row) => !('meta' in row && row.meta)).map((row) => row.template.deck),
+            ...visibleRows
+              .filter((row) => !('meta' in row && row.meta))
+              .map((row) => row.template.deck),
             ...(allowed ? list.map((entry) => entry.deck) : []),
           ])
         : undefined,
@@ -534,12 +587,21 @@ function App() {
     setStatus('Сохранение…')
 
     const expected = rev.current++
+    const savingOwner = workingOwner
 
     queue.current = queue.current.then(async () => {
       if (failure.current) return
 
       try {
-        await saveEntry(next, expected)
+        await saveEntry(
+          next,
+          expected,
+          false,
+          false,
+          undefined,
+          false,
+          savingOwner
+        )
 
         if (current.current === next) {
           setStatus('Сохранено')
@@ -711,6 +773,15 @@ function App() {
     navigate(editorOrigin.current)
     await refresh()
   }
+  async function viewPublication(id: string) {
+    if (online) return publicationDocument(id)
+    const cached = await readOfflinePresentation(id)
+    if (cached) return cached
+    throw Error(
+      'Сохраните эту публикацию для офлайн-показа при подключении к сети.'
+    )
+  }
+
   async function lessonBody(entry: LessonRow) {
     if (entry.working && workingOwner) {
       const result = await fetchWorking(workingOwner, 'lesson', entry.deck.id)
@@ -718,26 +789,35 @@ function App() {
         throw Error('Облачный черновик недоступен.')
       return result.document
     }
-    if (entry.publication) return publicationDocument(entry.deck.id)
+    if (entry.publication) return viewPublication(entry.deck.id)
     return entry.deck
   }
   async function savePublicationLocally(id: string): Promise<Entry> {
     if (!allowed) throw Error('Для сохранения методички необходимо войти.')
-    const existing = (await entries()).find((entry) => entry.deck.id.toLowerCase() === id)
+    const existing = (await entries()).find(
+      (entry) => entry.deck.id.toLowerCase() === id
+    )
     if (existing) return existing
-    const workingRow = working.records.find((row) => row.kind === 'lesson' && row.id === id)
+    const workingRow = working.records.find(
+      (row) => row.kind === 'lesson' && row.id === id
+    )
     let meta = workingRow?.meta
     if (workingOwner && online && signedInOwner && !working.checked && !meta) {
-      try { meta = await workingMetadata(workingOwner, 'lesson', id) }
-      catch (error) {
+      try {
+        meta = await workingMetadata(workingOwner, 'lesson', id)
+      } catch (error) {
         if (!errorText(error).includes('Примените cloud-sync.sql')) throw error
       }
     }
     if (workingOwner && meta) {
       if (meta.deleted || workingRow?.deleted)
-        throw Error('Рабочий черновик удалён. Восстановите его через панель синхронизации.')
+        throw Error(
+          'Рабочий черновик удалён. Восстановите его через панель синхронизации.'
+        )
       await openWorking(workingOwner, meta)
-      const cached = (await entries()).find((entry) => entry.deck.id.toLowerCase() === id)
+      const cached = (await entries()).find(
+        (entry) => entry.deck.id.toLowerCase() === id
+      )
       if (!cached) throw Error('Не удалось сохранить облачный черновик.')
       await refresh()
       return cached
@@ -792,7 +872,9 @@ function App() {
   async function importData(raw: string) {
     if (!allowEditing()) return
     const available = collectStyles([
-      ...visibleRows.filter((row) => !('meta' in row && row.meta)).map((row) => row.template.deck),
+      ...visibleRows
+        .filter((row) => !('meta' in row && row.meta))
+        .map((row) => row.template.deck),
       ...list.map((entry) => entry.deck),
     ]).fonts
     const d = validateDeck(raw, available)
@@ -916,8 +998,14 @@ function App() {
     )
   }
   async function remove(en: LessonRow, cloud = false) {
-    if (!confirm((cloud ? 'Удалить рабочий черновик «' : 'Удалить с устройства «') +
-      en.deck.title + '»? Публикация останется доступна.')) return
+    if (
+      !confirm(
+        (cloud ? 'Удалить рабочий черновик «' : 'Удалить с устройства «') +
+          en.deck.title +
+          '»? Публикация останется доступна.'
+      )
+    )
+      return
     await task('Удаление…', async () => {
       const row = en.working ? await savePublicationLocally(en.working.id) : en
       await saveEntry(row.deck, row.revision, true, false, undefined, cloud)
@@ -1017,14 +1105,21 @@ function App() {
           <span>Рабочее пространство</span>
           <ChevronRight size={14} />
           <b>{nav.find((n) => n[0] === page)?.[1]}</b>
-          <button className="device" onClick={() => dialog('working-sync')} aria-label={'Синхронизация: ' + sync.label}>
+          <button
+            className="device"
+            onClick={() => dialog('working-sync')}
+            aria-label={'Синхронизация: ' + sync.label}
+            title={sync.label}
+          >
             <sync.Icon size={15} /> {sync.label}
           </button>
         </header>
         <main
           className="library"
           ref={libraryContent}
-          data-library={['library', 'templates', 'published'].includes(page) || undefined}
+          data-library={
+            ['library', 'templates', 'published'].includes(page) || undefined
+          }
         >
           {!['library', 'templates', 'published'].includes(page) && (
             <div className="title-row">
@@ -1035,7 +1130,6 @@ function App() {
                     ? 'Мои файлы'
                     : 'Опубликованные'}
               </h1>
-
             </div>
           )}
           {phone && page === 'files' && (
@@ -1068,7 +1162,11 @@ function App() {
                   creationCourse.current = activeCourse?.id ?? null
                   need('import')
                 }}
-                view={(entry) => void task('Открываем методичку…', async () => setWatch(await lessonBody(entry)))}
+                view={(entry) =>
+                  void task('Открываем методичку…', async () =>
+                    setWatch(await lessonBody(entry))
+                  )
+                }
                 edit={(entry) => {
                   if (entry.revision) open(entry.deck, entry.revision)
                   else
@@ -1080,7 +1178,10 @@ function App() {
                 duplicate={(entry, course) =>
                   task('Создаём копию…', async () => {
                     const deck = await lessonBody(entry)
-                    await insert(copyDeck(deck, deck.title.slice(0, 990) + ' — копия'), course)
+                    await insert(
+                      copyDeck(deck, deck.title.slice(0, 990) + ' — копия'),
+                      course
+                    )
                   })
                 }
                 saveLocally={(entry) =>
@@ -1092,7 +1193,9 @@ function App() {
                 remove={remove}
                 cloud={!!workingOwner}
                 exportJSON={(entry) =>
-                  task('Подготовка JSON…', async () => exportDeck(await lessonBody(entry)))
+                  task('Подготовка JSON…', async () =>
+                    exportDeck(await lessonBody(entry))
+                  )
                 }
                 login={() => dialog('login')}
                 example={() => navigate('guide')}
@@ -1114,7 +1217,13 @@ function App() {
                 editable={!phone}
                 loading={catalogLoading}
                 error={catalogError}
-                connection={owner && !online ? 'offline' : owner && working.errors.length ? 'error' : undefined}
+                connection={
+                  owner && !online
+                    ? 'offline'
+                    : owner && working.errors.length
+                      ? 'error'
+                      : undefined
+                }
                 create={(deck) => insert(deck, templateCourse.current)}
                 edit={(t, row) => {
                   if (allowEditing()) {
@@ -1212,35 +1321,47 @@ function App() {
               retry={() => publicationChanged((stamp) => stamp + 1)}
               login={() => dialog('login')}
               receive={() => (location.hash = receiveHash)}
-              backfill={() => void task('Индексируем публикации…', async () => {
-                const failed = await indexPublications(adminId, publications.rows, (count) => setBusy('Обработано публикаций: ' + count))
-                publicationChanged((stamp) => stamp + 1)
-                notice(failed.length ? 'Не удалось индексировать публикаций: ' + failed.length : 'Каталог публикаций обновлён.')
-              })}
-              action={(action, id) => void task('Публикации…', async () => {
-                if (action === 'view') setWatch(await publicationDocument(id))
-                else if (action === 'copy') {
-                  await navigator.clipboard.writeText(link(id))
-                  notice('Ссылка скопирована.')
-                } else if (action === 'qr') {
-                  dialog('publication-qr')
-                  setValue(link(id))
-                } else if (action === 'edit') {
-                  const saved = await savePublicationLocally(id)
-                  open(saved.deck, saved.revision)
-                } else if (action === 'save') {
-                  await savePublicationLocally(id)
-                  notice('Рабочая копия доступна в «Моих методичках».')
-                } else if (action === 'export') {
-                  await exportDeck(await publicationDocument(id))
-                } else if (action === 'offline') {
-                  await prepareForOffline(await publicationDocument(id))
-                } else if (confirm('Снять методичку с публикации?')) {
-                  await unpublish(id)
-                  localStorage.removeItem(marker(id))
+              backfill={() =>
+                void task('Индексируем публикации…', async () => {
+                  const failed = await indexPublications(
+                    adminId,
+                    publications.rows,
+                    (count) => setBusy('Обработано публикаций: ' + count)
+                  )
                   publicationChanged((stamp) => stamp + 1)
-                }
-              })}
+                  notice(
+                    failed.length
+                      ? 'Не удалось индексировать публикаций: ' + failed.length
+                      : 'Каталог публикаций обновлён.'
+                  )
+                })
+              }
+              action={(action, id) =>
+                void task('Публикации…', async () => {
+                  if (action === 'view') setWatch(await viewPublication(id))
+                  else if (action === 'copy') {
+                    await navigator.clipboard.writeText(link(id))
+                    notice('Ссылка скопирована.')
+                  } else if (action === 'qr') {
+                    dialog('publication-qr')
+                    setValue(link(id))
+                  } else if (action === 'edit') {
+                    const saved = await savePublicationLocally(id)
+                    open(saved.deck, saved.revision)
+                  } else if (action === 'save') {
+                    await savePublicationLocally(id)
+                    notice('Рабочая копия доступна в «Моих методичках».')
+                  } else if (action === 'export') {
+                    await exportDeck(await publicationDocument(id))
+                  } else if (action === 'offline') {
+                    await prepareForOffline(await publicationDocument(id))
+                  } else if (confirm('Снять методичку с публикации?')) {
+                    await unpublish(id)
+                    localStorage.removeItem(marker(id))
+                    publicationChanged((stamp) => stamp + 1)
+                  }
+                })
+              }
             />
           )}
         </main>
@@ -1293,7 +1414,13 @@ function App() {
           key={editingTemplate.t.deck.id}
           libraryAvailable={owner && online}
           template={editingTemplate.t}
-          syncLabel={activeSyncConflict ? 'Конфликт шаблона' : working.presence ? 'Редактируется на другом устройстве' : sync.label}
+          syncLabel={
+            activeSyncConflict
+              ? 'Конфликт шаблона'
+              : working.presence
+                ? 'Редактируется на другом устройстве'
+                : sync.label
+          }
           openSync={() => dialog('working-sync')}
           set={templateHistory.set}
           history={templateHistory}
@@ -1316,7 +1443,9 @@ function App() {
           styleLibrary={styleLibrary}
           templates={visibleRows.map((r) => r.template)}
           resolveTemplate={async (template) => {
-            const row = catalog.find((r) => r.template.deck.id === template.deck.id)
+            const row = catalog.find(
+              (r) => r.template.deck.id === template.deck.id
+            )
             return row ? (await loadCatalogRow(row)).template : template
           }}
           description={editingTemplate.t.description}
@@ -1327,8 +1456,13 @@ function App() {
             templateHistory.update((t) => t && { ...t, deck: fn(t.deck) })
           }
           back={requestTemplateExit}
-          syncLabel={activeSyncConflict ? 'Конфликт шаблона' : working.presence
-            ? 'Редактируется на другом устройстве' : sync.label}
+          syncLabel={
+            activeSyncConflict
+              ? 'Конфликт шаблона'
+              : working.presence
+                ? 'Редактируется на другом устройстве'
+                : sync.label
+          }
           openSync={() => dialog('working-sync')}
           saveTemplate={() => task('Сохраняем шаблон…', saveTemplateAndExit)}
           view={() => setWatch(editingTemplate.t.deck)}
@@ -1370,14 +1504,21 @@ function App() {
           styleLibrary={styleLibrary}
           templates={visibleRows.map((r) => r.template)}
           resolveTemplate={async (template) => {
-            const row = catalog.find((r) => r.template.deck.id === template.deck.id)
+            const row = catalog.find(
+              (r) => r.template.deck.id === template.deck.id
+            )
             return row ? (await loadCatalogRow(row)).template : template
           }}
           deck={doc}
           change={(fn) => lessonHistory.update((d) => d && fn(d))}
           status={status}
-          syncLabel={activeSyncConflict ? 'Конфликт черновика' : working.presence
-            ? 'Редактируется на другом устройстве' : sync.label}
+          syncLabel={
+            activeSyncConflict
+              ? 'Конфликт черновика'
+              : working.presence
+                ? 'Редактируется на другом устройстве'
+                : sync.label
+          }
           openSync={() => dialog('working-sync')}
           libraryAvailable={owner && online}
           publishLabel={
@@ -1403,8 +1544,37 @@ function App() {
         <div className="overlay">
           <section
             className={
-              'dialog ' + (modal === 'preview' ? 'import-preview' : '')
+              'dialog ' +
+              (modal === 'preview'
+                ? 'import-preview'
+                : modal === 'working-sync'
+                  ? 'working-dialog'
+                  : '')
             }
+            ref={modalContainer}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.stopPropagation()
+                setModal('')
+                return
+              }
+              if (event.key !== 'Tab') return
+              const controls = [
+                ...event.currentTarget.querySelectorAll<HTMLElement>(
+                  'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]'
+                ),
+              ].filter((element) => element.getClientRects().length)
+              const first = controls[0],
+                last = controls.at(-1)
+              if (
+                (!event.shiftKey && document.activeElement === last) ||
+                (event.shiftKey && document.activeElement === first)
+              ) {
+                event.preventDefault()
+                const target = event.shiftKey ? last : first
+                target?.focus()
+              }
+            }}
             role="dialog"
             aria-modal="true"
             aria-labelledby="dialog-title"
@@ -1423,7 +1593,7 @@ function App() {
                 <Link2 />
               ) : modal === 'login' ? (
                 <UserRound />
-              ) : modal === 'sync' ? (
+              ) : modal === 'sync' || modal === 'working-sync' ? (
                 <RefreshCw />
               ) : (
                 <Layers3 />
@@ -1447,10 +1617,26 @@ function App() {
             </h2>
 
             {modal === 'working-sync' ? (
-              <WorkingSyncPanel owner={workingOwner} sync={working} courses={courses} online={online}
-                authorized={!!signedInOwner} local={localMode} inEditor={inEditor} retry={retrySync}
-                notice={notice} view={(deck) => { setModal(''); setWatch(deck) }}
-                openCourses={() => { setModal(''); navigate('library') }} login={() => dialog('login')} />
+              <WorkingSyncPanel
+                owner={workingOwner}
+                sync={working}
+                courses={courses}
+                online={online}
+                authorized={!!signedInOwner}
+                local={localMode}
+                inEditor={inEditor}
+                retry={retrySync}
+                notice={notice}
+                view={(deck) => {
+                  setModal('')
+                  setWatch(deck)
+                }}
+                openCourses={() => {
+                  setModal('')
+                  navigate('library')
+                }}
+                login={() => dialog('login')}
+              />
             ) : modal === 'publication-qr' ? (
               <QrImage address={value} label="QR-код публикации" />
             ) : modal === 'sync' ? (
@@ -1582,7 +1768,7 @@ function App() {
                         Опубликовать и выйти
                       </strong>
                       <small id="leave-publish-hint">
-                        Обновить облачную версию методички
+                        Обновить публичную версию методички
                       </small>
                     </span>
                     <ArrowUpRight size={18} />
@@ -1597,10 +1783,10 @@ function App() {
                     <FolderOpen size={21} />
                     <span className="leave-action-content">
                       <strong id="leave-local-label">
-                        Оставить локально и выйти
+                        Сохранить черновик и выйти
                       </strong>
                       <small id="leave-local-hint">
-                        Сохранить только на этом устройстве
+                        Сохранить рабочие изменения без обновления публикации
                       </small>
                     </span>
                   </button>

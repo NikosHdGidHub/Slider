@@ -599,10 +599,17 @@ export function Editor({
               )}
               <span>{status}</span>
             </small>
-            {openSync && <button className="editor-sync" type="button" onClick={openSync}
-              title={syncLabel} aria-label={'Синхронизация: ' + syncLabel}>
-              <Cloud size={16} /> <span>{syncLabel}</span>
-            </button>}
+            {openSync && (
+              <button
+                className="editor-sync"
+                type="button"
+                onClick={openSync}
+                title={syncLabel}
+                aria-label={'Синхронизация: ' + syncLabel}
+              >
+                <Cloud size={16} /> <span>{syncLabel}</span>
+              </button>
+            )}
             {!saveTemplate && (
               <button
                 className="primary"
@@ -767,13 +774,15 @@ export function Editor({
               slide={slide}
               templates={templates}
               resolveTemplate={resolveTemplate}
-              update={(next) => change((latest) => {
-                if (latest !== deck) {
-                  notice('Методичка изменилась. Примените шаблон ещё раз.')
-                  return latest
-                }
-                return next
-              })}
+              update={(next) =>
+                change((latest) => {
+                  if (latest !== deck) {
+                    notice('Методичка изменилась. Примените шаблон ещё раз.')
+                    return latest
+                  }
+                  return next
+                })
+              }
               select={select}
               selected={item?.locked ? '' : sel}
               notice={notice}
@@ -1031,10 +1040,14 @@ export function Editor({
                             )
                               return
                             try {
-                              const template = resolveTemplate ? await resolveTemplate(t) : t
+                              const template = resolveTemplate
+                                ? await resolveTemplate(t)
+                                : t
                               change((latest) => {
                                 if (latest !== deck) {
-                                  notice('Методичка изменилась. Примените компоновку ещё раз.')
+                                  notice(
+                                    'Методичка изменилась. Примените компоновку ещё раз.'
+                                  )
                                   return latest
                                 }
                                 return applyLayout(latest, slide.id, template)

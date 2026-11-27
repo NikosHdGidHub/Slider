@@ -88,7 +88,9 @@ export function PlacementPanel({
                 )
                   return
                 try {
-                  const template = resolveTemplate ? await resolveTemplate(t) : t
+                  const template = resolveTemplate
+                    ? await resolveTemplate(t)
+                    : t
                   const next = switchMaster(deck, template.deck)
                   update(validateDeck(next))
                   const n = next.slides.reduce(
@@ -141,8 +143,11 @@ export function PlacementPanel({
                   )
                     return
                   try {
-                    const template = t && resolveTemplate ? await resolveTemplate(t) : t
-                    update(validateDeck(setStructure(deck, slide, template?.deck)))
+                    const template =
+                      t && resolveTemplate ? await resolveTemplate(t) : t
+                    update(
+                      validateDeck(setStructure(deck, slide, template?.deck))
+                    )
                     select('')
                   } catch (err) {
                     notice((err as Error).message)

@@ -1,6 +1,12 @@
 import { download } from './instructions'
 import { unreadableDocuments } from './storage'
-import { useEffect, useRef, useState, type ReactNode, type HTMLAttributes } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type HTMLAttributes,
+} from 'react'
 import { ArrowDownUp, LayoutGrid, List, Search, X } from 'lucide-react'
 import { ActionMenu, type MenuItem } from './ActionMenu'
 import { IconButton } from './IconButton'
@@ -32,7 +38,8 @@ export function useLibrarySettings(
   scope: 'lessons' | 'published' | 'presentation' | 'layout'
 ) {
   const key = 'atlas.library.v1.' + scope
-  const sorts = scope === 'lessons' || scope === 'published' ? lessonSorts : templateSorts
+  const sorts =
+    scope === 'lessons' || scope === 'published' ? lessonSorts : templateSorts
   const [query, setQuery] = useState('')
   const [view, setView] = useStoredPreference<'gallery' | 'list'>(
     key + '.view',
@@ -47,16 +54,35 @@ export function useLibrarySettings(
   return { query, setQuery, view, setView, sort, setSort, sorts }
 }
 
+export function useLibraryPage(key: string, total: number, chunk = 60) {
+  const [sizes, setSizes] = useState<Record<string, number>>({})
+  const count = sizes[key] ?? chunk
+  return {
+    count,
+    next:
+      count < total
+        ? () => setSizes((previous) => ({ ...previous, [key]: count + chunk }))
+        : undefined,
+  }
+}
+
 export type LibrarySettings = ReturnType<typeof useLibrarySettings>
 
 export function normalizeLibraryQuery(text: string) {
-  return text.normalize('NFC').toLocaleLowerCase('ru').trim().replace(/\s+/g, ' ')
+  return text
+    .normalize('NFC')
+    .toLocaleLowerCase('ru')
+    .trim()
+    .replace(/\s+/g, ' ')
 }
 
-export function selectLibraryRows<T extends { deck: Pick<Deck, 'title'>; updated?: number; slideCount?: number }>(
-  rows: T[],
-  { query, sort }: LibrarySettings
-) {
+export function selectLibraryRows<
+  T extends {
+    deck: Pick<Deck, 'title'>
+    updated?: number
+    slideCount?: number
+  },
+>(rows: T[], { query, sort }: LibrarySettings) {
   const search = normalizeLibraryQuery(query.trim())
   return rows
     .filter(({ deck }) => normalizeLibraryQuery(deck.title).includes(search))
@@ -66,8 +92,12 @@ export function selectLibraryRows<T extends { deck: Pick<Deck, 'title'>; updated
       if (sort === 'name') return name
       if (sort === 'reverse') return -name
       if (sort === 'slides')
-        return (b.slideCount ?? ('slides' in b.deck ? (b.deck as Deck).slides.length : 0)) -
-          (a.slideCount ?? ('slides' in a.deck ? (a.deck as Deck).slides.length : 0)) || name
+        return (
+          (b.slideCount ??
+            ('slides' in b.deck ? (b.deck as Deck).slides.length : 0)) -
+            (a.slideCount ??
+              ('slides' in a.deck ? (a.deck as Deck).slides.length : 0)) || name
+        )
       const date = (b.updated ?? 0) - (a.updated ?? 0)
       return (sort === 'recent' ? date : -date) || name
     })
@@ -247,9 +277,12 @@ export function LibraryCard({
   const [seen, setSeen] = useState(typeof IntersectionObserver === 'undefined')
   useEffect(() => {
     if (!deck || seen || !thumbnailRef.current) return
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) setSeen(true)
-    }, { rootMargin: '160px' })
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setSeen(true)
+      },
+      { rootMargin: '160px' }
+    )
     observer.observe(thumbnailRef.current)
     return () => observer.disconnect()
   }, [deck, seen])
@@ -267,7 +300,8 @@ export function LibraryCard({
         aria-label={(preflight ? 'Предпросмотр ' : 'Открыть ') + title}
       >
         <span className="lib-thumbnail" ref={thumbnailRef} aria-hidden="true">
-          {thumbnail ?? (deck && seen && <Stage deck={deck} slide={deck.slides[0]} />)}
+          {thumbnail ??
+            (deck && seen && <Stage deck={deck} slide={deck.slides[0]} />)}
         </span>
         <span className="lib-card-title" title={title}>
           {number !== undefined && (

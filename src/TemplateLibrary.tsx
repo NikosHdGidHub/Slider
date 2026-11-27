@@ -30,6 +30,7 @@ import {
   LibraryState,
   LibraryToolbar,
   selectLibraryRows,
+  useLibraryPage,
   type LibrarySettings,
 } from './Library'
 import { Stage } from './Stage'
@@ -109,6 +110,10 @@ export function TemplateLibrary({
     .filter((row) => row.template.kind === kind)
     .map((row) => ({ deck: row.template.deck, row }))
   const visible = selectLibraryRows(forKind, settings)
+  const page = useLibraryPage(
+    [kind, settings.query, settings.sort].join('/'),
+    visible.length
+  )
 
   useLayoutEffect(() => {
     mounted.current = true
@@ -190,70 +195,122 @@ export function TemplateLibrary({
   function actions(row: CatalogRow): MenuItem[] {
     const { template, builtin } = row
     const { deck } = template
-    const withDocument = (work: (loaded: CatalogRow) => void | Promise<void>, update = false) =>
-      run(async () => work(await loadCatalogRow(row)), update)
+    const withDocument = (
+      work: (loaded: CatalogRow) => void | Promise<void>,
+      update = false
+    ) => run(async () => work(await loadCatalogRow(row)), update)
     const menu: MenuItem[] = [
       { label: 'Предпросмотр', icon: Eye, run: () => showPreview(row) },
     ]
     if (editable) {
-      if (!builtin) menu.push({
-        label: 'Редактировать', icon: Pencil,
-        run: () => withDocument((loaded) => edit(structuredClone(loaded.template), loaded)),
-      })
-      if (template.kind === 'presentation') menu.push({
-        label: 'Создать методичку', icon: Plus,
-        run: () => withDocument((loaded) => create(instantiate(loaded.template))),
-      })
+      if (!builtin)
+        menu.push({
+          label: 'Редактировать',
+          icon: Pencil,
+          run: () =>
+            withDocument((loaded) =>
+              edit(structuredClone(loaded.template), loaded)
+            ),
+        })
+      if (template.kind === 'presentation')
+        menu.push({
+          label: 'Создать методичку',
+          icon: Plus,
+          run: () =>
+            withDocument((loaded) => create(instantiate(loaded.template))),
+        })
       menu.push({
-        label: 'Создать копию', icon: Copy,
-        run: () => withDocument((loaded) => {
-          const title = deck.title.slice(0, 980) + ' — копия'
-          const copy = copyDeck(loaded.template.deck, title)
-          copy.master.name = title
-          return saveLocal({ ...loaded.template, deck: copy })
-        }, true),
+        label: 'Создать копию',
+        icon: Copy,
+        run: () =>
+          withDocument((loaded) => {
+            const title = deck.title.slice(0, 980) + ' — копия'
+            const copy = copyDeck(loaded.template.deck, title)
+            copy.master.name = title
+            return saveLocal({ ...loaded.template, deck: copy })
+          }, true),
       })
-      if (!builtin) menu.push({
-        label: 'Переименовать', icon: Pencil,
-        run: () => {
-          const title = prompt('Название шаблона', deck.title)?.trim()
-          if (title && title !== deck.title)
-            return withDocument((loaded) => {
-              const template = loaded.template
-              return saveLocal({
-                ...template, deck: { ...template.deck, title, master: { ...template.deck.master, name: title } },
-              }, loaded)
-            }, true)
-        },
-      })
+      if (!builtin)
+        menu.push({
+          label: 'Переименовать',
+          icon: Pencil,
+          run: () => {
+            const title = prompt('Название шаблона', deck.title)?.trim()
+            if (title && title !== deck.title)
+              return withDocument((loaded) => {
+                const template = loaded.template
+                return saveLocal(
+                  {
+                    ...template,
+                    deck: {
+                      ...template.deck,
+                      title,
+                      master: { ...template.deck.master, name: title },
+                    },
+                  },
+                  loaded
+                )
+              }, true)
+          },
+        })
     }
     if (template.kind === 'presentation')
       menu.push('separator', {
-        label: 'Инструкция ИИ для презентации', icon: FileText,
-        run: () => withDocument(async (loaded) => {
-          const text = await presentationInstructionsForTemplate(loaded.template)
-          if (mounted.current) download(presentationInstructionsName(deck.title), text, 'text/plain')
-        }),
+        label: 'Инструкция ИИ для презентации',
+        icon: FileText,
+        run: () =>
+          withDocument(async (loaded) => {
+            const text = await presentationInstructionsForTemplate(
+              loaded.template
+            )
+            if (mounted.current)
+              download(
+                presentationInstructionsName(deck.title),
+                text,
+                'text/plain'
+              )
+          }),
       })
     menu.push('separator', {
-      label: 'Экспортировать JSON', icon: Download,
-      run: () => withDocument((loaded) =>
-        download(deck.title.replace(/[\\/]/g, '_') + '.atlas.json', JSON.stringify(validateTemplate(loaded.template), null, 2))),
+      label: 'Экспортировать JSON',
+      icon: Download,
+      run: () =>
+        withDocument((loaded) =>
+          download(
+            deck.title.replace(/[\\/]/g, '_') + '.atlas.json',
+            JSON.stringify(validateTemplate(loaded.template), null, 2)
+          )
+        ),
     })
-    if (originals.has(deck.id)) menu.push({
-      label: 'Скачать исходный JSON до миграции', icon: Download,
-      run: async () => {
-        const raw = await originalDocument('template', deck.id)
-        if (raw) download('atlas-original-' + deck.id + '.atlas.json', JSON.stringify(raw, null, 2))
-      },
-    })
-    if (!builtin && editable) menu.push('separator', {
-      label: 'Удалить шаблон', icon: Trash2, danger: true,
-      run: () => {
-        if (confirm('Удалить шаблон «' + deck.title + '»? Созданные методички сохранятся.'))
-          return run(() => deleteTemplate(row), true)
-      },
-    })
+    if (originals.has(deck.id))
+      menu.push({
+        label: 'Скачать исходный JSON до миграции',
+        icon: Download,
+        run: async () => {
+          const raw = await originalDocument('template', deck.id)
+          if (raw)
+            download(
+              'atlas-original-' + deck.id + '.atlas.json',
+              JSON.stringify(raw, null, 2)
+            )
+        },
+      })
+    if (!builtin && editable)
+      menu.push('separator', {
+        label: 'Удалить шаблон',
+        icon: Trash2,
+        danger: true,
+        run: () => {
+          if (
+            confirm(
+              'Удалить шаблон «' +
+                deck.title +
+                '»? Созданные методички сохранятся.'
+            )
+          )
+            return run(() => deleteTemplate(row), true)
+        },
+      })
     return menu
   }
 
@@ -384,7 +441,7 @@ export function TemplateLibrary({
             columns={['Хранение', '']}
             templates
           >
-            {visible.map(({ deck, row }) => (
+            {visible.slice(0, page.count).map(({ deck, row }) => (
               <LibraryCard
                 key={deck.id}
                 deck={row.meta ? undefined : deck}
@@ -399,6 +456,11 @@ export function TemplateLibrary({
               />
             ))}
           </LibraryItems>
+          {page.next && (
+            <button className="secondary" onClick={page.next}>
+              Показать ещё
+            </button>
+          )}
         </>
       )}
       {editable && <MigrationFailures kind="template" />}

@@ -41,7 +41,11 @@ function Frame({
 }) {
   const Icon = phone ? Smartphone : Monitor
   return (
-    <main className="transfer-screen" aria-labelledby="transfer-title">
+    <main
+      className="transfer-screen"
+      data-phone={phone || undefined}
+      aria-labelledby="transfer-title"
+    >
       <section className="transfer-panel">
         <button className="transfer-back" onClick={close}>
           <ArrowLeft size={16} /> К публикациям
@@ -58,7 +62,13 @@ function Frame({
   )
 }
 
-export function QrImage({ address, label }: { address: string; label: string }) {
+export function QrImage({
+  address,
+  label,
+}: {
+  address: string
+  label: string
+}) {
   const [image, setImage] = useState('')
   const [error, setError] = useState(false)
   useEffect(() => {
@@ -363,15 +373,35 @@ export function SendLesson({
   const [course, filter] = useState('')
   const [limit, show] = useState(48)
   const parent = useMemo(() => memberships(courses), [courses])
-  const names = useMemo(() => new Map(courses.courses.map(({ id, title }) => [id, title])), [courses])
-  const lessons = useMemo(() => (details?.lessons ?? []).filter((lesson) => {
-    const belongs = parent.get(lesson.id)
-    return (!course || (course === 'none' ? !belongs : belongs === course)) &&
-      normalizeLibraryQuery(publicationTitle(lesson)).includes(normalizeLibraryQuery(query))
-  }).sort((a, b) => publicationTitle(a).localeCompare(publicationTitle(b), 'ru', { numeric: true })), [details, parent, course, query])
+  const names = useMemo(
+    () => new Map(courses.courses.map(({ id, title }) => [id, title])),
+    [courses]
+  )
+  const lessons = useMemo(
+    () =>
+      (details?.lessons ?? [])
+        .filter((lesson) => {
+          const belongs = parent.get(lesson.id)
+          return (
+            (!course || (course === 'none' ? !belongs : belongs === course)) &&
+            normalizeLibraryQuery(publicationTitle(lesson)).includes(
+              normalizeLibraryQuery(query)
+            )
+          )
+        })
+        .sort((a, b) =>
+          publicationTitle(a).localeCompare(publicationTitle(b), 'ru', {
+            numeric: true,
+          })
+        ),
+    [details, parent, course, query]
+  )
   const validSelection = lessons.some((lesson) => lesson.id === selected)
   useEffect(() => {
-    if (selected && !validSelection) { select(''); confirm(false) }
+    if (selected && !validSelection) {
+      select('')
+      confirm(false)
+    }
   }, [selected, validSelection])
   function resetList() {
     select('')
@@ -483,11 +513,7 @@ export function SendLesson({
 
   return (
     <Frame
-      title={
-        sent
-          ? 'Ссылка передана на компьютер'
-          : 'Передача методички'
-      }
+      title={sent ? 'Ссылка передана на компьютер' : 'Передача методички'}
       close={close}
       phone
     >
@@ -524,7 +550,9 @@ export function SendLesson({
           )}
           {details && !terminal && (
             <>
-              <p className="transfer-connected" role="status">Компьютер подключён и ожидает методичку</p>
+              <p className="transfer-connected" role="status">
+                Компьютер подключён и ожидает методичку
+              </p>
               <Code code={details.code} />
               {details.lessons.length ? (
                 <form
@@ -535,41 +563,92 @@ export function SendLesson({
                   }}
                 >
                   <div className="transfer-filters">
-                    <label>Поиск публикаций
-                      <input type="search" value={query} placeholder="Название методички" disabled={sending}
-                        onChange={(e) => { search(e.target.value); resetList() }} />
+                    <label>
+                      Поиск публикаций
+                      <input
+                        type="search"
+                        value={query}
+                        placeholder="Название методички"
+                        disabled={sending}
+                        onChange={(e) => {
+                          search(e.target.value)
+                          resetList()
+                        }}
+                      />
                     </label>
-                    <label>Фильтр по курсам
-                      <select value={course} disabled={sending} onChange={(e) => { filter(e.target.value); resetList() }}>
+                    <label>
+                      Фильтр по курсам
+                      <select
+                        value={course}
+                        disabled={sending}
+                        onChange={(e) => {
+                          filter(e.target.value)
+                          resetList()
+                        }}
+                      >
                         <option value="">Все курсы</option>
-                        {courses.courses.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+                        {courses.courses.map(({ id, title }) => (
+                          <option key={id} value={id}>
+                            {title}
+                          </option>
+                        ))}
                         <option value="none">Без курса</option>
                       </select>
                     </label>
                   </div>
-                  <p role="status">Доступно: {lessons.length} из {details.lessons.length}</p>
+                  <p role="status">
+                    Доступно: {lessons.length} из {details.lessons.length}
+                  </p>
                   <fieldset className="transfer-choices" disabled={sending}>
                     <legend>Опубликованные методички</legend>
                     {lessons.slice(0, limit).map((lesson) => (
                       <label key={lesson.id}>
-                        <input type="radio" name="publication" value={lesson.id}
-                          checked={selected === lesson.id} onChange={() => select(lesson.id)} />
-                        <span className="transfer-thumb" aria-hidden="true"><PublicationThumbnail row={lesson} /></span>
-                        <span className="transfer-choice-title">{publicationTitle(lesson)}
-                          <small>{names.get(parent.get(lesson.id) ?? '') ?? 'Без курса'}</small>
+                        <input
+                          type="radio"
+                          name="publication"
+                          value={lesson.id}
+                          checked={selected === lesson.id}
+                          onChange={() => select(lesson.id)}
+                        />
+                        <span className="transfer-thumb" aria-hidden="true">
+                          <PublicationThumbnail row={lesson} />
+                        </span>
+                        <span className="transfer-choice-title">
+                          {publicationTitle(lesson)}
+                          <small>
+                            {names.get(parent.get(lesson.id) ?? '') ??
+                              'Без курса'}
+                          </small>
                         </span>
                       </label>
                     ))}
-                    {!lessons.length && <p>По заданным условиям публикаций нет.</p>}
+                    {!lessons.length && (
+                      <p>По заданным условиям публикаций нет.</p>
+                    )}
                   </fieldset>
-                  {lessons.length > limit && <button className="secondary" type="button" onClick={() => show(limit + 48)}>Показать ещё</button>}
+                  {lessons.length > limit && (
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => show(limit + 48)}
+                    >
+                      Показать ещё
+                    </button>
+                  )}
                   <div className="transfer-send">
                     <label className="transfer-confirm">
-                      <input type="checkbox" checked={confirmed}
-                        onChange={(e) => confirm(e.currentTarget.checked)} disabled={sending} />
+                      <input
+                        type="checkbox"
+                        checked={confirmed}
+                        onChange={(e) => confirm(e.currentTarget.checked)}
+                        disabled={sending}
+                      />
                       Код совпадает с кодом на компьютере
                     </label>
-                    <button className="primary" disabled={!validSelection || !confirmed || sending}>
+                    <button
+                      className="primary"
+                      disabled={!validSelection || !confirmed || sending}
+                    >
                       {sending ? 'Передаём…' : 'Передать на компьютер'}
                     </button>
                   </div>

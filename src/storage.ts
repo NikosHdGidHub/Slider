@@ -1,5 +1,6 @@
 import { validateTemplate, type Template } from './catalog'
 import { validateDeck, type Deck } from './model'
+import type { PublishedRow } from './publicationCatalog'
 import { FORMAT_VERSION } from './schema'
 import {
   appendCourseCommands,
@@ -10,10 +11,19 @@ import {
 } from './courseModel'
 
 import {
-  workingDeck, type WorkingDocument, type WorkingKind, type WorkingRecord, type WorkingMeta,
+  workingDeck,
+  type WorkingDocument,
+  type WorkingKind,
+  type WorkingRecord,
+  type WorkingMeta,
 } from './workingDocument'
 
-export type Entry = { deck: Deck; updated: number; revision: number; scope?: string }
+export type Entry = {
+  deck: Deck
+  updated: number
+  revision: number
+  scope?: string
+}
 let workingOwner: string | null = null
 export function setWorkingOwner(owner: string | null) {
   workingOwner = owner
@@ -22,11 +32,14 @@ export function currentWorkingOwner() {
   return workingOwner
 }
 const workingChanges = new EventTarget()
-const workingChannel = typeof BroadcastChannel === 'function'
-  ? new BroadcastChannel('atlas-working-sync') : undefined
-if (workingChannel) workingChannel.onmessage = ({ data }) => {
-  if (typeof data === 'string') workingChanges.dispatchEvent(new Event(data))
-}
+const workingChannel =
+  typeof BroadcastChannel === 'function'
+    ? new BroadcastChannel('atlas-working-sync')
+    : undefined
+if (workingChannel)
+  workingChannel.onmessage = ({ data }) => {
+    if (typeof data === 'string') workingChanges.dispatchEvent(new Event(data))
+  }
 function reportWorkingChange(owner: string | null, notify = true) {
   if (!owner) return
   workingChanges.dispatchEvent(new Event(owner))
@@ -36,10 +49,16 @@ export function listenWorkingChanges(owner: string, callback: () => void) {
   workingChanges.addEventListener(owner, callback)
   return () => workingChanges.removeEventListener(owner, callback)
 }
-const docKey = (owner: string, kind: WorkingKind, id: string) => [owner, kind, id.toLowerCase()]
+const docKey = (owner: string, kind: WorkingKind, id: string) => [
+  owner,
+  kind,
+  id.toLowerCase(),
+]
 const ownerRange = (owner: string) => IDBKeyRange.bound([owner], [owner, []])
-const belongs = (record: { scope?: string } | undefined, owner: string | null) =>
-  !record?.scope || record.scope === owner
+const belongs = (
+  record: { scope?: string } | undefined,
+  owner: string | null
+) => !record?.scope || record.scope === owner
 
 const opened = new Promise<IDBDatabase>((resolve, reject) => {
   const request = indexedDB.open('atlas-lessons-v1', 5)
@@ -54,7 +73,12 @@ const opened = new Promise<IDBDatabase>((resolve, reject) => {
       })
     if (!request.result.objectStoreNames.contains('originalDocuments'))
       request.result.createObjectStore('originalDocuments')
-    for (const name of ['workingState', 'workingAssets', 'workingBackups'])
+    for (const name of [
+      'workingState',
+      'workingAssets',
+      'workingBackups',
+      'publicCatalog',
+    ])
       if (!request.result.objectStoreNames.contains(name))
         request.result.createObjectStore(name)
     if (!request.result.objectStoreNames.contains('libraryCourses'))
@@ -194,10 +218,10 @@ export async function saveEntry(
   remove = false,
   backupBeforeSync = false,
   placement?: { scope: string; course: string },
-  deleteCloud = false
+  deleteCloud = false,
+  owner = workingOwner
 ) {
   if (!remove) validateDeck(deck)
-  const owner = workingOwner
   const db = await opened
   return new Promise<void>((resolve, reject) => {
     const stores = ['lessons', 'originalDocuments', 'workingState']
@@ -206,7 +230,10 @@ export async function saveEntry(
       store = tx.objectStore('lessons')
     const read = store.get(deck.id)
     read.onsuccess = () => {
-      if (!belongs(read.result, owner) || (read.result?.revision ?? 0) !== revision) {
+      if (
+        !belongs(read.result, owner) ||
+        (read.result?.revision ?? 0) !== revision
+      ) {
         reject(
           new Error(
             'Версия на диске изменилась. Экспортируйте текущую работу и откройте библиотеку заново.'
@@ -219,7 +246,8 @@ export async function saveEntry(
         enqueueWorking(tx, owner, 'lesson', deck, remove)
       if (remove) {
         store.delete(deck.id)
-        if (owner && !deleteCloud) dropWorkingCache(tx, owner, 'lesson', deck.id)
+        if (owner && !deleteCloud)
+          dropWorkingCache(tx, owner, 'lesson', deck.id)
       } else {
         const previous = read.result?.deck
         if (previous) storeOriginal(tx, 'lesson', deck.id, previous)
@@ -229,7 +257,12 @@ export async function saveEntry(
             id: crypto.randomUUID(),
             title: previous.title.slice(0, 970) + ' — до синхронизации',
           }
-          store.add({ deck: backup, revision: 1, updated: Date.now(), scope: owner ?? undefined })
+          store.add({
+            deck: backup,
+            revision: 1,
+            updated: Date.now(),
+            scope: owner ?? undefined,
+          })
         } else if (
           deck.migrated === false &&
           previous &&
@@ -240,9 +273,19 @@ export async function saveEntry(
             id: crypto.randomUUID(),
             title: previous.title.slice(0, 990) + ' — до смены шаблона',
           }
-          store.add({ deck: backup, revision: 1, updated: Date.now(), scope: owner ?? undefined })
+          store.add({
+            deck: backup,
+            revision: 1,
+            updated: Date.now(),
+            scope: owner ?? undefined,
+          })
         }
-        store.put({ deck, revision: revision + 1, updated: Date.now(), scope: owner ?? undefined })
+        store.put({
+          deck,
+          revision: revision + 1,
+          updated: Date.now(),
+          scope: owner ?? undefined,
+        })
         if (placement) {
           writeCourseRecord(
             tx,
@@ -303,12 +346,18 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
   const owner = workingOwner
   const db = await opened
   return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(['templates', 'originalDocuments', 'workingState'], 'readwrite'),
+    const tx = db.transaction(
+        ['templates', 'originalDocuments', 'workingState'],
+        'readwrite'
+      ),
       store = tx.objectStore('templates'),
       id = entry.template.deck.id
     const q = store.get(id)
     q.onsuccess = () => {
-      if (!belongs(q.result, owner) || (q.result?.revision ?? 0) !== entry.revision) {
+      if (
+        !belongs(q.result, owner) ||
+        (q.result?.revision ?? 0) !== entry.revision
+      ) {
         reject(
           new Error(
             'Шаблон изменился в другой вкладке. Откройте библиотеку заново.'
@@ -317,12 +366,17 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
         tx.abort()
         return
       }
-      if (owner && (entry.dirty || remove)) enqueueWorking(tx, owner, 'template', entry.template, remove)
+      if (owner && (entry.dirty || remove))
+        enqueueWorking(tx, owner, 'template', entry.template, remove)
       if (remove) store.delete(id)
       else {
         if (q.result?.template)
           storeOriginal(tx, 'template', id, q.result.template)
-        store.put({ ...entry, revision: entry.revision + 1, scope: owner ?? undefined })
+        store.put({
+          ...entry,
+          revision: entry.revision + 1,
+          scope: owner ?? undefined,
+        })
       }
     }
     tx.oncomplete = () => {
@@ -415,17 +469,29 @@ export async function updateCourseRecord(
   })
 }
 
-function dropWorkingCache(tx: IDBTransaction, owner: string, kind: WorkingKind, id: string) {
+function dropWorkingCache(
+  tx: IDBTransaction,
+  owner: string,
+  kind: WorkingKind,
+  id: string
+) {
   const store = tx.objectStore('workingState')
   const key = docKey(owner, kind, id)
   const read = store.get(key)
   read.onsuccess = () => {
     // The device-only action must never discard an unconfirmed edit.
     if (read.result?.dirty) tx.abort()
+    else if (read.result) store.put({ ...read.result, localId: undefined }, key)
   }
 }
 
-function enqueueWorking(tx: IDBTransaction, owner: string, kind: WorkingKind, document: WorkingDocument, deleted: boolean) {
+function enqueueWorking(
+  tx: IDBTransaction,
+  owner: string,
+  kind: WorkingKind,
+  document: WorkingDocument,
+  deleted: boolean
+) {
   const store = tx.objectStore('workingState')
   const id = workingDeck(document).id.toLowerCase()
   const key = docKey(owner, kind, id)
@@ -433,9 +499,16 @@ function enqueueWorking(tx: IDBTransaction, owner: string, kind: WorkingKind, do
   read.onsuccess = () => {
     const before: WorkingRecord | undefined = read.result
     const next: WorkingRecord = {
-      ...before, kind, id, localId: workingDeck(document).id, dirty: true, deleted,
-      title: workingDeck(document).title, templateKind: 'deck' in document ? document.kind : undefined,
-      localUpdated: Date.now(), localSlides: workingDeck(document).slides.length,
+      ...before,
+      kind,
+      id,
+      localId: workingDeck(document).id,
+      dirty: true,
+      deleted,
+      title: workingDeck(document).title,
+      templateKind: 'deck' in document ? document.kind : undefined,
+      localUpdated: Date.now(),
+      localSlides: workingDeck(document).slides.length,
       base: before ? before.base : null,
       generation: (before?.generation ?? 0) + 1,
       previous: deleted ? document : undefined,
@@ -447,10 +520,15 @@ function enqueueWorking(tx: IDBTransaction, owner: string, kind: WorkingKind, do
 export async function registerWorking(owner: string) {
   const db = await opened
   return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(['lessons', 'templates', 'workingState', 'workingBackups'], 'readwrite')
+    const tx = db.transaction(
+      ['lessons', 'templates', 'workingState', 'workingBackups'],
+      'readwrite'
+    )
     const state = tx.objectStore('workingState')
     for (const kind of ['lesson', 'template'] as const) {
-      const collection = tx.objectStore(kind === 'lesson' ? 'lessons' : 'templates')
+      const collection = tx.objectStore(
+        kind === 'lesson' ? 'lessons' : 'templates'
+      )
       const documents = collection.getAll()
       documents.onsuccess = () => {
         for (const existing of documents.result) {
@@ -458,27 +536,41 @@ export async function registerWorking(owner: string) {
           const source = kind === 'lesson' ? existing.deck : existing.template
           let document: WorkingDocument
           try {
-            document = kind === 'lesson' ? validateDeck(source) : validateTemplate(source)
-          } catch { continue }
+            document =
+              kind === 'lesson'
+                ? validateDeck(source)
+                : validateTemplate(source)
+          } catch {
+            continue
+          }
           const id = workingDeck(document).id.toLowerCase()
           const key = docKey(owner, kind, id)
           const read = state.get(key)
           read.onsuccess = () => {
-            if (read.result) return
+            if (read.result && existing.scope) return
+            if (!existing.scope) collection.put({ ...existing, scope: owner })
+            if (read.result?.dirty) return
             const previous: WorkingRecord = {
-              id, kind, localId: workingDeck(document).id, title: workingDeck(document).title,
+              id,
+              kind,
+              localId: workingDeck(document).id,
+              title: workingDeck(document).title,
               templateKind: 'deck' in document ? document.kind : undefined,
-              localUpdated: existing.updated, localSlides: workingDeck(document).slides.length,
-              base: existing.cloudRevision || null, generation: 1,
-              dirty: true, deleted: false,
+              localUpdated: existing.updated,
+              localSlides: workingDeck(document).slides.length,
+              base: existing.cloudRevision || null,
+              generation: 1,
+              dirty: true,
+              deleted: false,
             }
             state.put(previous, key)
-            if (!existing.scope) collection.put({ ...existing, scope: owner })
           }
         }
       }
     }
-    const backups = tx.objectStore('workingBackups').openCursor(ownerRange(owner))
+    const backups = tx
+      .objectStore('workingBackups')
+      .openCursor(ownerRange(owner))
     backups.onsuccess = () => {
       const cursor = backups.result
       if (!cursor) return
@@ -486,59 +578,110 @@ export async function registerWorking(owner: string) {
       cursor.continue()
     }
     tx.oncomplete = () => resolve()
-    tx.onabort = () => reject(tx.error ?? Error('Не удалось подготовить локальную библиотеку.'))
+    tx.onabort = () =>
+      reject(tx.error ?? Error('Не удалось подготовить локальную библиотеку.'))
+  })
+}
+
+export async function addWorkingMetadata(owner: string, rows: WorkingRecord[]) {
+  if (!rows.length) return
+  const db = await opened
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('workingState', 'readwrite')
+    const store = tx.objectStore('workingState')
+    for (const row of rows) {
+      const key = docKey(owner, row.kind, row.id)
+      const read = store.getKey(key)
+      read.onsuccess = () => {
+        if (read.result === undefined) store.add(row, key)
+      }
+    }
+    tx.oncomplete = () => resolve()
+    tx.onabort = () =>
+      reject(tx.error ?? Error('Не удалось сохранить каталог черновиков.'))
   })
 }
 
 export async function workingRecords(owner: string): Promise<WorkingRecord[]> {
   const db = await opened
   return new Promise((resolve, reject) => {
-    const read = db.transaction('workingState').objectStore('workingState').getAll(ownerRange(owner))
+    const read = db
+      .transaction('workingState')
+      .objectStore('workingState')
+      .getAll(ownerRange(owner))
     read.onsuccess = () => resolve(read.result)
     read.onerror = () => reject(read.error)
   })
 }
 
-export async function localWorkingDocument(owner: string, state: WorkingRecord): Promise<WorkingDocument | undefined> {
+export async function localWorkingDocument(
+  owner: string,
+  state: WorkingRecord
+): Promise<WorkingDocument | undefined> {
   if (state.deleted) return state.previous
   const db = await opened
   return new Promise((resolve, reject) => {
     const table = state.kind === 'lesson' ? 'lessons' : 'templates'
-    const read = db.transaction(table).objectStore(table).get(state.localId ?? state.id)
+    const read = db
+      .transaction(table)
+      .objectStore(table)
+      .get(state.localId ?? state.id)
     read.onsuccess = () => {
       const row = read.result
       if (!row || !belongs(row, owner)) return resolve(undefined)
       try {
-        resolve(row.deck ? validateDeck(row.deck) : validateTemplate(row.template))
-      } catch (error) { reject(error) }
+        resolve(
+          row.deck ? validateDeck(row.deck) : validateTemplate(row.template)
+        )
+      } catch (error) {
+        reject(error)
+      }
     }
     read.onerror = () => reject(read.error)
   })
 }
 
 export async function updateWorking(
-  owner: string, kind: WorkingKind, id: string,
+  owner: string,
+  kind: WorkingKind,
+  id: string,
   update: (before: WorkingRecord | undefined) => WorkingRecord | undefined,
-  replacement?: { document?: WorkingDocument; backup?: WorkingDocument; original?: unknown; preserve?: boolean }
+  replacement?: {
+    document?: WorkingDocument
+    backup?: WorkingDocument
+    original?: unknown
+    preserve?: boolean
+    copy?: WorkingDocument
+  }
 ) {
   const db = await opened
   return new Promise<boolean>((resolve, reject) => {
     const table = kind === 'lesson' ? 'lessons' : 'templates'
-    const tx = db.transaction(['workingState', table, 'workingBackups', 'originalDocuments'], 'readwrite')
+    const tx = db.transaction(
+      ['workingState', table, 'workingBackups', 'originalDocuments'],
+      'readwrite'
+    )
     const state = tx.objectStore('workingState')
     const key = docKey(owner, kind, id)
     let changed = false
     const read = state.get(key)
     read.onsuccess = () => {
       let next: WorkingRecord | undefined
-      try { next = update(read.result) } catch (error) { reject(error); tx.abort(); return }
+      try {
+        next = update(read.result)
+      } catch (error) {
+        reject(error)
+        tx.abort()
+        return
+      }
       if (!next || next === read.result) return
       state.put(next, key)
       changed = true
       if (!replacement) return
       const documents = tx.objectStore(table)
       const document = replacement.document
-      const docId = read.result?.localId ?? (document ? workingDeck(document).id : id)
+      const docId =
+        read.result?.localId ?? (document ? workingDeck(document).id : id)
       const previous = documents.get(docId)
       previous.onsuccess = () => {
         if (!belongs(previous.result, owner)) {
@@ -550,26 +693,55 @@ export async function updateWorking(
             { document: replacement.backup, until: Date.now() + 7 * 86400000 },
             [...key, crypto.randomUUID()]
           )
+        if (replacement.copy) {
+          const copy = replacement.copy
+          const data =
+            'deck' in copy
+              ? { template: copy, cloudRevision: 0, dirty: true }
+              : { deck: copy, updated: Date.now() }
+          documents.add({ ...data, scope: owner, revision: 1 })
+          enqueueWorking(tx, owner, kind, copy, false)
+        }
         if (replacement.preserve) return
-        if (replacement.original) storeOriginal(tx, kind, id, replacement.original)
+        if (replacement.original)
+          storeOriginal(tx, kind, id, replacement.original)
         if (!document) {
           documents.delete(docId)
           return
         }
         if (docId !== workingDeck(document).id) documents.delete(docId)
-        const data = 'deck' in document
-          ? { template: document, cloudRevision: next.base, dirty: next.dirty }
-          : { deck: document, updated: new Date(next.meta?.updated ?? Date.now()).getTime() }
-        documents.put({ ...data, scope: owner, revision: (previous.result?.revision ?? 0) + 1 })
+        const data =
+          'deck' in document
+            ? {
+                template: document,
+                cloudRevision: next.base,
+                dirty: next.dirty,
+              }
+            : {
+                deck: document,
+                updated: new Date(next.meta?.updated ?? Date.now()).getTime(),
+              }
+        documents.put({
+          ...data,
+          scope: owner,
+          revision: (previous.result?.revision ?? 0) + 1,
+        })
       }
     }
     tx.oncomplete = () => resolve(changed)
-    tx.onabort = () => reject(tx.error ?? Error('Локальная копия изменилась. Повторите попытку.'))
+    tx.onabort = () =>
+      reject(
+        tx.error ?? Error('Локальная копия изменилась. Повторите попытку.')
+      )
   })
 }
 
 type Asset = { blob: Blob; uploaded: boolean }
-export async function workingAsset(owner: string, sha: string, write?: Asset): Promise<Asset | undefined> {
+export async function workingAsset(
+  owner: string,
+  sha: string,
+  write?: Asset
+): Promise<Asset | undefined> {
   const db = await opened
   return new Promise((resolve, reject) => {
     const tx = db.transaction('workingAssets', write ? 'readwrite' : 'readonly')
@@ -577,18 +749,44 @@ export async function workingAsset(owner: string, sha: string, write?: Asset): P
     const key = [owner, sha]
     const request = store.get(key)
     request.onsuccess = () => {
-      if (write && (!request.result || (write.uploaded && !request.result.uploaded))) store.put(write, key)
+      if (
+        write &&
+        (!request.result || (write.uploaded && !request.result.uploaded))
+      )
+        store.put(write, key)
     }
     tx.oncomplete = () => resolve(write ?? request.result)
-    tx.onabort = () => reject(tx.error ?? Error('Не удалось сохранить приватный ресурс.'))
+    tx.onabort = () =>
+      reject(tx.error ?? Error('Не удалось сохранить приватный ресурс.'))
   })
 }
 
 export async function workingBackups(owner: string) {
   const db = await opened
-  return new Promise<{ document: WorkingDocument; until: number }[]>((resolve, reject) => {
-    const q = db.transaction('workingBackups').objectStore('workingBackups').getAll(ownerRange(owner))
-    q.onsuccess = () => resolve(q.result.filter((row) => row.until > Date.now()))
-    q.onerror = () => reject(q.error)
+  return new Promise<{ document: WorkingDocument; until: number }[]>(
+    (resolve, reject) => {
+      const q = db
+        .transaction('workingBackups')
+        .objectStore('workingBackups')
+        .getAll(ownerRange(owner))
+      q.onsuccess = () =>
+        resolve(q.result.filter((row) => row.until > Date.now()))
+      q.onerror = () => reject(q.error)
+    }
+  )
+}
+
+export async function savedPublicCatalog(
+  owner: string,
+  write?: PublishedRow[]
+) {
+  const db = await opened
+  return new Promise<PublishedRow[]>((resolve, reject) => {
+    const tx = db.transaction('publicCatalog', write ? 'readwrite' : 'readonly')
+    const store = tx.objectStore('publicCatalog')
+    const req = write ? store.put(write, owner) : store.get(owner)
+    tx.oncomplete = () => resolve(write ?? req.result ?? [])
+    tx.onabort = () =>
+      reject(tx.error ?? Error('Не удалось открыть каталог на устройстве.'))
   })
 }

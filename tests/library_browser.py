@@ -483,10 +483,11 @@ def cloud(context, url, catalog, decks):
     old['deck']['title']='CLOUD_VERSION_CANARY'
     old['deck']['master']['name']=old['deck']['title']
     old['description']='Облачный оригинал'
-    sync=catalog['roles']
-    table={t['deck']['id']:{'id':t['deck']['id'],'document':t,'revision':1} for t in [old,sync]}
-    loads=[]
+    from working_api import WorkingAPI
     publications={}
+    working=WorkingAPI(publications)
+    working.seed(old,'template',2)
+    working.seed(catalog['roles'],'template')
 
     def endpoint(route):
         request=route.request
@@ -500,14 +501,10 @@ def cloud(context, url, catalog, decks):
             return emit({'access_token':access,'refresh_token':'fixture-refresh','token_type':'bearer','expires_in':3600,'user':user})
         if path=='/auth/v1/user':
             return emit(user)
-        if path=='/rest/v1/atlas_templates':
-            if request.method=='GET':
-                loads.append(path)
-                return emit(list(table.values()))
-            if request.method=='POST':
-                entry=request.post_data_json
-                table[entry['id']]=entry
-                return emit({'id':entry['id']},201)
+        if working.route(route, emit):
+            return
+        if path=='/rest/v1/rpc/atlas_get_courses':
+            return emit({'revision':0,'courses':[],'lessons':{}})
         if path=='/storage/v1/object/list/presentations':
             return emit([{'name':k+'.json'} for k in publications])
         if path.startswith('/storage/v1/object/public/presentations/'):
@@ -536,17 +533,19 @@ def cloud(context, url, catalog, decks):
     page.reload()
     button(page,'Шаблоны').click()
     expect(page.get_by_text('Есть локальные изменения')).to_be_visible()
-    expect(page.get_by_text('На устройстве и в облаке')).to_be_visible()
-    expect(page.get_by_text('Встроенный',exact=True)).to_be_visible()
-    capture(page,'13-template-statuses')
-    count=len(loads)
-    _, text=download(page,lambda: choose(page,dirty['deck']['title'],'Инструкция ИИ для презентации'))
-    assert 'LOCAL_ONLY_CANARY' in text and 'CLOUD_VERSION_CANARY' not in text and len(loads)==count
-    _, text=download(page,lambda: choose(page,external['deck']['title'],'Инструкция ИИ для презентации'))
-    assert external_url not in text and 'data:image/png;base64,' in text and len(loads)==count
-    choose(page,visible['deck']['title'],'Сохранить в облаке')
     expect(page.locator('.lib-card').filter(has_text=visible['deck']['title']).get_by_text('На устройстве и в облаке')).to_be_visible()
-    assert visible['deck']['id'] in table
+    expect(page.get_by_role('button',name='Синхронизация: Обнаружен конфликт')).to_be_visible()
+    capture(page,'13-template-statuses')
+    count=len(working.document_reads)
+    _, text=download(page,lambda: choose(page,dirty['deck']['title'],'Инструкция ИИ для презентации'))
+    assert 'LOCAL_ONLY_CANARY' in text and 'CLOUD_VERSION_CANARY' not in text and len(working.document_reads)==count
+    _, text=download(page,lambda: choose(page,external['deck']['title'],'Инструкция ИИ для презентации'))
+    assert external_url not in text and 'data:image/png;base64,' in text and len(working.document_reads)==count
+    button(page,'Действия: '+visible['deck']['title']).click()
+    expect(menu(page,'Сохранить в облаке')).to_have_count(0)
+    page.keyboard.press('Escape')
+    expect(page.locator('.lib-card').filter(has_text=visible['deck']['title']).get_by_text('На устройстве и в облаке')).to_be_visible()
+    assert ('template',visible['deck']['id']) in working.documents
     button(page,'Мои методички').click()
     choose(page,decks[0]['title'],'Удалить с устройства')
     expect(button(page,'Открыть '+decks[0]['title'])).to_have_count(1)
@@ -555,7 +554,7 @@ def cloud(context, url, catalog, decks):
     expect(menu(page,'Удалить с устройства')).to_have_count(0)
     page.keyboard.press('Escape')
     button(page,'Опубликованные').click()
-    expect(page.locator('.pub').filter(has_text=decks[0]['title'])).to_be_visible()
+    expect(button(page,'Открыть '+decks[0]['title'])).to_be_visible()
     assert decks[0]['id'] in publications
 
 
@@ -590,7 +589,7 @@ def main():
                 print('PASS: desktop and handset libraries, menus, editor, projector, offline use and generated JSON imports',flush=True)
             if args.cloud_dist:
                 cloud(browser.new_context(viewport={'width':1440,'height':900}),base+'/cloud/',data,decks)
-                print('PASS: cloud statuses, template upload, instruction from local revision, publication after local deletion',flush=True)
+                print('PASS: cloud statuses, automatic template upload, instruction from local revision, publication after local deletion',flush=True)
         finally:
             browser.close()
             server.shutdown()

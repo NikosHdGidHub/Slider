@@ -28,6 +28,7 @@ import {
   LibraryToolbar,
   normalizeLibraryQuery,
   selectLibraryRows,
+  useLibraryPage,
   type LibrarySettings,
 } from './Library'
 import type { WorkingMeta } from './workingDocument'
@@ -149,6 +150,10 @@ export function LessonLibrary(props: Props) {
           query || pickingForCourse || !parent.has(entry.deck.id.toLowerCase())
       )
   const visible = selectLibraryRows(all, settings)
+  const page = useLibraryPage(
+    [id, query, settings.sort].join('/'),
+    visible.length
+  )
   const folders = !course
     ? state.courses.filter((c) =>
         normalizeLibraryQuery(c.title).includes(query)
@@ -629,7 +634,10 @@ export function LessonLibrary(props: Props) {
           )}
           {visible.length > 0 ? (
             <LibraryItems settings={settings} columns={['Слайды', 'Изменено']}>
-              {visible.map((entry) => {
+              {(ordering || selecting
+                ? visible
+                : visible.slice(0, page.count)
+              ).map((entry) => {
                 const { deck, revision } = entry
                 const lessonId = deck.id.toLowerCase()
                 const inside = parent.get(lessonId)
@@ -696,21 +704,36 @@ export function LessonLibrary(props: Props) {
                   })
                 if (props.cloud && (revision || entry.working))
                   actions.push({
-                    label: 'Удалить рабочий черновик', icon: Trash2,
-                    danger: true, run: () => remove(entry, true),
+                    label: 'Удалить рабочий черновик',
+                    icon: Trash2,
+                    danger: true,
+                    run: () => remove(entry, true),
                   })
                 return (
                   <LibraryCard
                     key={deck.id}
                     deck={entry.working || entry.publication ? undefined : deck}
                     name={deck.title}
-                    thumbnail={entry.publication?.thumbnail
-                      ? <img src={entry.publication.thumbnail} loading="lazy" decoding="async" alt="" />
-                      : entry.working || entry.publication ? <Globe2 size={27} /> : undefined}
+                    thumbnail={
+                      entry.publication?.thumbnail ? (
+                        <img
+                          src={entry.publication.thumbnail}
+                          loading="lazy"
+                          decoding="async"
+                          alt=""
+                        />
+                      ) : entry.working || entry.publication ? (
+                        <Globe2 size={27} />
+                      ) : undefined
+                    }
                     first={
                       <>
-                        {entry.slideCount === 0 ? '—' : countSlides(entry.slideCount ?? deck.slides.length)}
-                        {entry.syncConflict && <span className="course-publication">Конфликт</span>}
+                        {entry.slideCount === 0
+                          ? '—'
+                          : countSlides(entry.slideCount ?? deck.slides.length)}
+                        {entry.syncConflict && (
+                          <span className="course-publication">Конфликт</span>
+                        )}
                         {!!revision && (
                           <Monitor
                             className="course-publication"
@@ -777,6 +800,11 @@ export function LessonLibrary(props: Props) {
                   />
                 )
               })}
+              {!ordering && !selecting && page.next && (
+                <button className="secondary" onClick={page.next}>
+                  Показать ещё
+                </button>
+              )}
             </LibraryItems>
           ) : query ? (
             !folders.length && (

@@ -5,6 +5,7 @@ import { adminId, isProjectStorageUrl, publishDocument, withStorageLock } from '
 import { recordPublication } from './publicationCatalog'
 import { uploadImage } from './resources'
 import { imageAddress } from './storage'
+import { referencedFonts } from './textFonts'
 import { validateDeck, type Deck } from './model'
 export async function publish(deck: Deck, approve: () => Promise<boolean>) {
   return withStorageLock(async (bucket) => {
@@ -48,6 +49,8 @@ export async function publish(deck: Deck, approve: () => Promise<boolean>) {
       for (const item of slide.items)
         if (item.type === 'image') item.src = await resolve(item.src)
     }
+    const fonts = referencedFonts(copy)
+    copy.resources.fonts = copy.resources.fonts.filter((font) => fonts.has(font.id))
     const document = validateDeck(copy)
     await publishDocument(copy.id, document, bucket)
     // The publication is usable while a failed index write awaits repair.
@@ -76,6 +79,8 @@ export async function fingerprint(deck: Deck) {
     for (const item of slide.items)
       if (item.type === 'image') item.src = await identity(item.src)
   }
+  const fonts = referencedFonts(copy)
+  copy.resources.fonts = copy.resources.fonts.filter((font) => fonts.has(font.id))
   delete copy.migrated
   const canonical = JSON.stringify(copy, (_, value) =>
     value && typeof value === 'object' && !Array.isArray(value)

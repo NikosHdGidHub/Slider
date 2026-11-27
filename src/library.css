@@ -981,3 +981,37 @@
 @media (max-width: 1024px) {
   .editor-sync span { display: none; }
 }
+
+.lib-thumbnail > svg:only-child {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  color: #486454;
+}
+
+.course-folder .lib-thumbnail > svg:only-child {
+  color: inherit;
+}
+
+.working-dialog {
+  width: min(560px, 92vw);
+}
+
+.working-actions {
+  justify-content: start;
+}
+
+.working-actions > button {
+  font-size: .85rem;
+  padding-inline: 10px;
+}
+
+@media (max-width: 560px) {
+  .published-library .lib-heading {
+    flex-wrap: wrap;
+  }
+  .published-library .lib-heading > button {
+    justify-content: center;
+    padding-inline: 11px;
+  }
+}
