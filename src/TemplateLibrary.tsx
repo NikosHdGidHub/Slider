@@ -295,20 +295,37 @@ export function TemplateLibrary({
             )
         },
       })
-    if (!builtin && editable)
+    if (!builtin && editable && row.entry)
       menu.push('separator', {
-        label: 'Удалить шаблон',
+        label: 'Удалить с устройства',
         icon: Trash2,
         danger: true,
         run: () => {
           if (
             confirm(
-              'Удалить шаблон «' +
+              'Удалить локальную копию шаблона «' +
                 deck.title +
-                '»? Созданные методички сохранятся.'
+                '»? Облачная копия сохранится, если она существует.'
             )
           )
-            return run(() => deleteTemplate(row), true)
+            return run(() => deleteTemplate(row, false), true)
+        },
+      })
+
+    if (!builtin && editable && row.remote)
+      menu.push({
+        label: 'Удалить из облака',
+        icon: Trash2,
+        danger: true,
+        run: () => {
+          if (
+            confirm(
+              'Удалить облачную копию шаблона «' +
+                deck.title +
+                '»? Локальные копии сохранятся.'
+            )
+          )
+            return run(() => deleteTemplate(row, true), true)
         },
       })
     return menu

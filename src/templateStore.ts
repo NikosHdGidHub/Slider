@@ -8,7 +8,7 @@ import {
   type TemplateEntry,
 } from './storage'
 import { workingCardDeck, type WorkingMeta } from './workingDocument'
-import { openWorking } from './workingSync'
+import { openWorking, removeWorkingCloud } from './workingSync'
 
 export interface CatalogRow {
   template: Template
@@ -95,9 +95,20 @@ export async function saveLocal(template: Template, row?: CatalogRow) {
   })
 }
 
-export async function deleteTemplate(row: CatalogRow) {
-  const loaded = await loadCatalogRow(row)
-  if (!loaded.entry || loaded.builtin)
-    throw new Error('Встроенный шаблон защищён.')
-  await writeTemplate(loaded.entry, true)
+export async function deleteTemplate(row: CatalogRow, cloud = false) {
+  if (row.builtin) throw Error('Встроенный шаблон защищён.')
+
+  if (cloud) {
+    const owner = currentWorkingOwner()
+
+    if (!owner) throw Error('Необходимо войти в аккаунт.')
+
+    await removeWorkingCloud(owner, 'template', row.template.deck.id)
+
+    return
+  }
+
+  if (!row.entry) throw Error('Локальная копия отсутствует.')
+
+  await writeTemplate(row.entry, true)
 }

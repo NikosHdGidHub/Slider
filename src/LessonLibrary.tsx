@@ -68,6 +68,7 @@ export type LessonRow = Entry & {
   working?: WorkingMeta
   publication?: PublishedRow
   syncConflict?: boolean
+  cloudMeta?: WorkingMeta
 }
 
 interface Props {
@@ -702,9 +703,9 @@ export function LessonLibrary(props: Props) {
                     danger: true,
                     run: () => remove(entry),
                   })
-                if (props.cloud && (revision || entry.working))
+                if (props.cloud && entry.cloudMeta && !entry.cloudMeta.deleted)
                   actions.push({
-                    label: 'Удалить рабочий черновик',
+                    label: 'Удалить из облака',
                     icon: Trash2,
                     danger: true,
                     run: () => remove(entry, true),

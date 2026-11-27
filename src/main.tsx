@@ -16,6 +16,7 @@ import {
   openWorking,
   workingKey,
   workingMetadata,
+  removeWorkingCloud,
 } from './workingSync'
 import { PublishedLibrary, publicationTitle } from './PublishedLibrary'
 import { indexPublications, publicationDocument } from './publicationCatalog'
@@ -230,18 +231,26 @@ function App() {
       if (record.kind !== 'lesson') continue
       const row = rows.get(record.id),
         meta = record.meta
+      if (row) {
+        rows.set(record.id, {
+          ...row,
+          cloudMeta: meta && !meta.deleted ? meta : undefined,
+          syncConflict: !!record.conflict,
+        })
+
+        continue
+      }
       if (!row && (record.deleted || meta?.deleted)) {
         rows.delete(record.id)
         deleted.add(record.id)
-      } else if (row && record.conflict)
-        rows.set(record.id, { ...row, syncConflict: true })
-      else if (!row && meta && !meta.deleted && !record.dirty)
+      } else if (!row && meta && !meta.deleted && !record.dirty)
         rows.set(record.id, {
           deck: workingCardDeck(meta.id, meta.title),
           revision: 0,
           updated: Date.parse(meta.updated),
           slideCount: meta.slides,
           working: meta,
+          cloudMeta: meta,
         })
     }
     for (const publication of publications.rows) {
@@ -1004,17 +1013,37 @@ function App() {
     )
   }
   async function remove(en: LessonRow, cloud = false) {
-    if (
-      !confirm(
-        (cloud ? 'Удалить рабочий черновик «' : 'Удалить с устройства «') +
-          en.deck.title +
-          '»? Публикация останется доступна.'
-      )
-    )
-      return
+    const title = en.deck.title
+
+    const message = cloud
+      ? 'Удалить облачную копию «' +
+        title +
+        '»?\n\n' +
+        'Локальные копии и публикация сохранятся.'
+      : 'Удалить локальную копию «' +
+        title +
+        '»?\n\n' +
+        'Облачная копия и публикация, если они существуют, сохранятся.'
+
+    if (!confirm(message)) return
+
     await task('Удаление…', async () => {
-      const row = en.working ? await savePublicationLocally(en.working.id) : en
-      await saveEntry(row.deck, row.revision, true, false, undefined, cloud)
+      if (cloud) {
+        if (!workingOwner) throw Error('Необходимо войти в аккаунт.')
+
+        await removeWorkingCloud(workingOwner, 'lesson', en.deck.id)
+
+        working.retry()
+
+        notice('Облачная копия удалена.')
+      } else {
+        if (!en.revision) throw Error('Локальная копия отсутствует.')
+
+        await saveEntry(en.deck, en.revision, true, false, undefined, false)
+
+        notice('Локальная копия удалена.')
+      }
+
       await refresh()
     })
   }

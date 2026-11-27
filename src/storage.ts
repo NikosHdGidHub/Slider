@@ -366,10 +366,14 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
         tx.abort()
         return
       }
-      if (owner && (entry.dirty || remove))
-        enqueueWorking(tx, owner, 'template', entry.template, remove)
-      if (remove) store.delete(id)
-      else {
+      if (owner && !remove && entry.dirty)
+        enqueueWorking(tx, owner, 'template', entry.template, false)
+
+      if (remove) {
+        store.delete(id)
+
+        if (owner) dropWorkingCache(tx, owner, 'template', id)
+      } else {
         if (q.result?.template)
           storeOriginal(tx, 'template', id, q.result.template)
         store.put({
@@ -478,10 +482,35 @@ function dropWorkingCache(
   const store = tx.objectStore('workingState')
   const key = docKey(owner, kind, id)
   const read = store.get(key)
+
   read.onsuccess = () => {
-    // The device-only action must never discard an unconfirmed edit.
-    if (read.result?.dirty) tx.abort()
-    else if (read.result) store.put({ ...read.result, localId: undefined }, key)
+    const current: WorkingRecord | undefined = read.result
+
+    if (!current) return
+
+    // Never discard unconfirmed local changes.
+    if (
+      current.dirty ||
+      current.attempt ||
+      current.conflict ||
+      current.createCloud
+    ) {
+      tx.abort()
+      return
+    }
+
+    const hasCloud = !!current.meta && !current.meta.deleted
+
+    store.put(
+      {
+        ...current,
+        localId: undefined,
+        dirty: false,
+        deleted: !hasCloud,
+        generation: current.generation + 1,
+      },
+      key
+    )
   }
 }
 

@@ -352,6 +352,61 @@ export async function requestCloudCreation(
 
   if (!changed) throw Error('Документ изменился. Повторите действие.')
 }
+export async function removeWorkingCloud(
+  owner: string,
+  kind: WorkingKind,
+  id: string
+) {
+  id = id.toLowerCase()
+
+  if (!navigator.onLine)
+    throw Error('Для удаления из облака необходим интернет.')
+
+  const row = (await workingRecords(owner)).find(
+    (item) => item.id === id && item.kind === kind
+  )
+
+  if (!row) throw Error('Документ не найден.')
+
+  if (row.dirty || row.attempt || row.conflict || row.createCloud)
+    throw Error('Сначала завершите синхронизацию или разрешите конфликт.')
+
+  const remote = await workingMetadata(owner, kind, id)
+
+  if (!remote || remote.deleted) {
+    await detachWorkingCloud(owner, row, remote)
+    return
+  }
+
+  if (row.meta?.revision !== remote.revision)
+    throw Error(
+      'Облачная версия изменилась. Обновите библиотеку и повторите действие.'
+    )
+
+  const reply = await rpc<{
+    accepted: boolean
+    meta: WorkingMeta | null
+  }>('atlas_working_save', {
+    expected_owner: owner,
+    doc_kind: kind,
+    doc_id: id,
+    expected_revision: remote.revision,
+    mutation: crypto.randomUUID(),
+    payload: {
+      title: remote.title,
+      templateKind: remote.templateKind,
+    },
+    payload_hash: remote.hash ?? '0'.repeat(64),
+    refs: [],
+    remove_doc: true,
+    create_doc: false,
+  })
+
+  if (!reply.accepted || !reply.meta?.deleted)
+    throw Error('Не удалось удалить облачную копию. Обновите библиотеку.')
+
+  await detachWorkingCloud(owner, row, reply.meta)
+}
 async function detachWorkingCloud(
   owner: string,
   row: WorkingRecord,
@@ -518,7 +573,14 @@ export async function resolveWorking(
           generation: current.generation + 1,
         }
       const next = clean(shown, current.generation + 1, localId)
-      return restore ? { ...next, dirty: true, deleted: false } : next
+      return restore
+        ? {
+            ...next,
+            dirty: true,
+            deleted: false,
+            createCloud: true,
+          }
+        : next
     },
     keepLocal
       ? { preserve: true, backup: remote.document ?? undefined }
