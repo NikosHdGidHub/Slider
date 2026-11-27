@@ -17,6 +17,7 @@ import {
   type WorkingRecord,
   type WorkingMeta,
 } from './workingDocument'
+import { prepareDocumentImages } from './media'
 
 export type Entry = {
   deck: Deck
@@ -221,7 +222,11 @@ export async function saveEntry(
   deleteCloud = false,
   owner = workingOwner
 ) {
-  if (!remove) validateDeck(deck)
+  if (!remove) {
+    deck = await prepareDocumentImages(deck)
+    validateDeck(deck)
+  }
+
   const db = await opened
   return new Promise<void>((resolve, reject) => {
     const stores = ['lessons', 'originalDocuments', 'workingState']
@@ -344,6 +349,17 @@ export function localTemplates() {
 }
 export async function writeTemplate(entry: TemplateEntry, remove = false) {
   const owner = workingOwner
+
+  if (!remove) {
+    entry = {
+      ...entry,
+      template: validateTemplate({
+        ...entry.template,
+        deck: await prepareDocumentImages(entry.template.deck),
+      }),
+    }
+  }
+
   const db = await opened
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(

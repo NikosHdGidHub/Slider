@@ -68,3 +68,29 @@ test('permanent external references and canonical key order are preserved', asyn
   assert.equal(one.assets.size, 0)
   assert.equal(one.document.slides[0].background, original.slides[0].background)
 })
+test('identical images in different lessons share the same resource identity', async () => {
+  const first = newDeck('Методичка 1')
+  const second = newDeck('Методичка 2')
+
+  first.slides[0].background = image
+  second.slides[0].background = image
+
+  const packedFirst = await packWorking('lesson', first)
+
+  const packedSecond = await packWorking('lesson', second)
+
+  assert.notEqual(first.id, second.id)
+
+  assert.equal(packedFirst.assets.size, 1)
+  assert.equal(packedSecond.assets.size, 1)
+
+  assert.deepEqual(
+    [...packedFirst.assets.keys()],
+    [...packedSecond.assets.keys()]
+  )
+
+  assert.equal(
+    packedFirst.document.slides[0].background,
+    packedSecond.document.slides[0].background
+  )
+})

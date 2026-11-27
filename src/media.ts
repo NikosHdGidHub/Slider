@@ -191,3 +191,16 @@ export async function embedImages(
   }
   return copy
 }
+export async function prepareDocumentImages(deck: Deck): Promise<Deck> {
+  const hasExternalImages = mediaSlides(deck).some(
+    (slide) =>
+      (!!slide.background && !slide.background.startsWith('data:')) ||
+      slide.items.some(
+        (item) => item.type === 'image' && !item.src.startsWith('data:')
+      )
+  )
+
+  if (!hasExternalImages) return validateDeck(deck)
+
+  return embedImages(deck)
+}

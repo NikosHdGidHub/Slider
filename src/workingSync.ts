@@ -19,7 +19,20 @@ import {
   type WorkingMeta,
   type WorkingRecord,
 } from './workingDocument'
+import { prepareDocumentImages } from './media'
 
+async function prepareWorkingImages(
+  document: WorkingDocument
+): Promise<WorkingDocument> {
+  if ('deck' in document) {
+    return {
+      ...document,
+      deck: await prepareDocumentImages(document.deck),
+    }
+  }
+
+  return prepareDocumentImages(document)
+}
 const bucket = 'atlas-private-resources'
 const initialized = new Map<string, Promise<void>>()
 export const workingKey = (kind: WorkingKind, id: string) =>
@@ -92,6 +105,22 @@ async function uploadAsset(owner: string, sha: string, force = false) {
   const asset = await workingAsset(owner, sha)
   if (!asset) throw Error('Приватный ресурс отсутствует на устройстве.')
   if (asset.uploaded && !force) return
+  if (!force) {
+    const path = owner + '/' + sha
+
+    const { data: existing } = await client.storage.from(bucket).info(path)
+
+    if (existing) {
+      await downloadAsset(owner, sha)
+
+      await workingAsset(owner, sha, {
+        ...asset,
+        uploaded: true,
+      })
+
+      return
+    }
+  }
   const { error } = await client.storage
     .from(bucket)
     .upload(owner + '/' + sha, asset.blob, {
@@ -151,7 +180,9 @@ async function adopt(
     : await fetchWorking(owner, meta.kind, meta.id)
   if (remote && (remote.meta.revision !== meta.revision || !remote.document))
     throw Error('Облачный документ снова изменился. Повторите синхронизацию.')
-  const document = remote?.document ?? undefined
+  const document = remote?.document
+    ? await prepareWorkingImages(remote.document)
+    : undefined
   return updateWorking(
     owner,
     meta.kind,
@@ -183,7 +214,9 @@ async function runRecord(
   if (!attempt) {
     const local = await localWorkingDocument(owner, row)
     if (!local) throw Error('Черновик для отправки недоступен на устройстве.')
-    const packed = await packWorking(row.kind, local)
+    const preparedDocument = await prepareWorkingImages(local)
+
+    const packed = await packWorking(row.kind, preparedDocument)
     const matches =
       remote &&
       !remote.deleted &&
