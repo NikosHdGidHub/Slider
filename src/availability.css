@@ -1,0 +1,333 @@
+/* Общий компонент управления доступностью */
+
+.availability-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+}
+
+.availability-indicators {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.availability-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 30px;
+  color: inherit;
+  border-radius: 5px;
+}
+
+.availability-indicator[data-tone='active'] {
+  color: #299768;
+}
+
+.availability-indicator[data-tone='inactive'] {
+  opacity: 0.35;
+}
+
+.availability-indicator[data-tone='unknown'] {
+  opacity: 0.65;
+}
+
+.availability-indicator[data-tone='pending'] {
+  color: #4681d5;
+}
+
+.availability-indicator[data-tone='warning'] {
+  color: #d29725;
+}
+
+.availability-indicator[data-tone='error'] {
+  color: #d65454;
+}
+
+/* Основная кнопка */
+
+.availability-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+
+  min-height: 34px;
+  padding: 6px 10px;
+
+  border: 1px solid rgba(128, 128, 128, 0.28);
+  border-radius: 7px;
+
+  background: transparent;
+  color: inherit;
+
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+
+  cursor: pointer;
+}
+
+.availability-trigger:hover,
+.availability-trigger[aria-expanded='true'] {
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.availability-trigger svg {
+  flex-shrink: 0;
+}
+
+.availability-chevron-open {
+  transform: rotate(180deg);
+}
+
+/* Выпадающая панель */
+
+.availability-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 100px);
+
+  overflow-y: auto;
+  box-sizing: border-box;
+
+  padding: 8px;
+
+  z-index: 300;
+
+  background: Canvas;
+  color: CanvasText;
+
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 12px;
+
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.1),
+    0 18px 45px rgba(0, 0, 0, 0.08);
+}
+
+.availability-heading {
+  padding: 10px 12px 12px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+/* Строки управления */
+
+.availability-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  width: 100%;
+  min-height: 65px;
+
+  padding: 11px 12px;
+  box-sizing: border-box;
+
+  border: 0;
+  border-radius: 8px;
+
+  background: transparent;
+  color: inherit;
+
+  text-align: left;
+  cursor: pointer;
+}
+
+.availability-option:hover:not(:disabled) {
+  background: rgba(128, 128, 128, 0.09);
+}
+
+.availability-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.availability-option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.availability-option-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 4px;
+
+  min-width: 0;
+  white-space: normal;
+}
+
+.availability-option-text strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.availability-option-text small {
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.7;
+}
+
+/* Переключатель */
+
+.availability-switch {
+  display: inline-flex;
+  align-items: center;
+
+  width: 38px;
+  height: 22px;
+  padding: 3px;
+  box-sizing: border-box;
+
+  flex-shrink: 0;
+
+  background: #a0a0a0;
+  border-radius: 999px;
+
+  transition: background 160ms ease;
+}
+
+.availability-switch > span {
+  display: block;
+  width: 16px;
+  height: 16px;
+
+  border-radius: 50%;
+  background: #fff;
+
+  transform: translateX(0);
+  transition: transform 160ms ease;
+
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+
+.availability-switch[data-enabled='true'] {
+  background: #299768;
+}
+
+.availability-switch[data-enabled='true'] > span {
+  transform: translateX(16px);
+}
+
+.availability-switch[data-unknown='true'] {
+  opacity: 0.45;
+}
+
+/* Дополнительные действия */
+
+.availability-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+
+  width: 100%;
+  min-height: 38px;
+
+  margin-top: 5px;
+  padding: 9px 12px;
+
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 7px;
+
+  background: transparent;
+  color: inherit;
+
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.availability-action:hover:not(:disabled) {
+  background: rgba(128, 128, 128, 0.1);
+}
+
+.availability-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.availability-action.conflict {
+  color: #b77c15;
+  border-color: rgba(210, 151, 37, 0.4);
+}
+
+.availability-note,
+.availability-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 10px 12px;
+
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.7;
+}
+
+.availability-control button:focus-visible,
+.availability-indicator:focus-visible {
+  outline: 2px solid #4681d5;
+  outline-offset: 2px;
+}
+
+/* Анимация выполнения операции */
+
+.availability-spinning {
+  animation: availability-spin 1s linear infinite;
+}
+
+@keyframes availability-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Компактная панель редактора */
+
+@media (max-width: 1200px) {
+  .availability-control {
+    gap: 6px;
+  }
+
+  .availability-indicators {
+    gap: 3px;
+  }
+
+  .availability-trigger {
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .availability-trigger > span {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .availability-switch,
+  .availability-switch > span {
+    transition: none;
+  }
+
+  .availability-spinning {
+    animation: none;
+  }
+}
