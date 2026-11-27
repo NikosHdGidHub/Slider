@@ -159,6 +159,10 @@ function App() {
     importer = useRef<HTMLInputElement>(null)
   const allowed = localMode || owner
   const workingOwner = owner ? adminId : null
+
+  const workingOwnerRef = useRef(workingOwner)
+  workingOwnerRef.current = workingOwner
+  const editorOwnerRef = useRef<string | null>(null)
   setWorkingOwner(workingOwner)
   const phone = isPhone()
   const editorOrigin = useRef('library')
@@ -628,6 +632,7 @@ function App() {
   }, [documentId, online, owner])
   function open(d: Deck, revision: number) {
     if (!allowEditing()) return
+    editorOwnerRef.current = workingOwnerRef.current
     if (!current.current) editorOrigin.current = page
     setEditorSession((value) => value + 1)
     openedPublication.current = localStorage.getItem(marker(d.id)) || ''
@@ -642,15 +647,28 @@ function App() {
   }
 
   function persist(next: Deck) {
+    if (failure.current) {
+      setStatus('Ошибка записи')
+      return
+    }
     setStatus('Сохранение…')
-
-    const expected = rev.current++
-    const savingOwner = workingOwner
-
+    const savingOwner = editorOwnerRef.current
     queue.current = queue.current.then(async () => {
-      if (failure.current) return
+      if (failure.current) {
+        setStatus('Ошибка записи')
+        return
+      }
+
+      const expected = rev.current
 
       try {
+        if (savingOwner !== workingOwnerRef.current) {
+          throw Error(
+            'Изменился сеанс авторизации. ' +
+              'Экспортируйте методичку и откройте её заново.'
+          )
+        }
+
         await saveEntry(
           next,
           expected,
@@ -660,7 +678,7 @@ function App() {
           false,
           savingOwner
         )
-
+        rev.current = expected + 1
         if (current.current === next) {
           setStatus('Сохранено')
         }
@@ -697,10 +715,12 @@ function App() {
     setDoc(next)
 
     if (dragPointer.current !== null) {
-      // Пока кнопка мыши удерживается, запись в IndexedDB
-      // не выполняется. Храним только последнее состояние.
       pendingSave.current = next
-      setStatus('Есть несохранённые изменения')
+
+      setStatus(
+        failure.current ? 'Ошибка записи' : 'Есть несохранённые изменения'
+      )
+
       return
     }
 

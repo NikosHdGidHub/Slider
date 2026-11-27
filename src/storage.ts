@@ -322,12 +322,45 @@ export async function saveEntry(
       request.onerror = () => reject(request.error)
     })
 
-    if (
-      !previousRow ||
-      !belongs(previousRow, owner) ||
-      previousRow.revision !== revision
-    ) {
-      throw Error('Версия документа изменилась.')
+    if (!previousRow) {
+      throw Error('Локальная методичка не найдена.')
+    }
+
+    if (!belongs(previousRow, owner)) {
+      console.error('[Atlas] Document owner mismatch', {
+        documentId: deck.id,
+        storedScope: previousRow.scope,
+        requestedOwner: owner,
+        currentOwner: workingOwner,
+        expectedRevision: revision,
+        actualRevision: previousRow.revision,
+      })
+
+      throw Error(
+        'Изменился владелец методички. ' +
+          'В базе: ' +
+          (previousRow.scope ?? 'local') +
+          '. При сохранении: ' +
+          (owner ?? 'local') +
+          '. Текущий: ' +
+          (workingOwner ?? 'local')
+      )
+    }
+
+    if (previousRow.revision !== revision) {
+      console.error('[Atlas] Local revision mismatch', {
+        id: deck.id,
+        expected: revision,
+        actual: previousRow.revision,
+      })
+
+      throw Error(
+        'Версия документа изменилась. ' +
+          'Ожидалась: ' +
+          revision +
+          ', в IndexedDB: ' +
+          previousRow.revision
+      )
     }
 
     const previous = previousRow.packed?.document ?? previousRow.deck
@@ -509,7 +542,13 @@ export async function writeTemplate(entry: TemplateEntry, remove = false) {
   const db = await opened
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(
-        ['templates', 'originalDocuments', 'workingState', 'workingAssets'],
+        [
+          'lessons',
+          'templates',
+          'workingState',
+          'workingBackups',
+          'workingAssets',
+        ],
         'readwrite'
       ),
       store = tx.objectStore('templates'),
