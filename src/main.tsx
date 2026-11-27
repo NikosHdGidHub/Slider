@@ -14,6 +14,7 @@ import { useWorkingSync } from './useWorkingSync'
 import {
   fetchWorking,
   openWorking,
+  openWorkingTransient,
   workingKey,
   workingMetadata,
   removeWorkingCloud,
@@ -643,7 +644,11 @@ function App() {
     if (!prev) return
 
     const next = fn(prev)
+
     if (next === prev) return
+
+    if (rev.current === 0 && JSON.stringify(next) === JSON.stringify(prev))
+      return
 
     // Сразу обновляем состояние документа и изображение на экране.
     current.current = next
@@ -738,7 +743,14 @@ function App() {
 
   async function saveTemplateAndExit() {
     if (!editingTemplate) return
-
+    if (
+      !templateDirty &&
+      editingTemplate.row?.meta &&
+      !editingTemplate.row?.entry
+    ) {
+      closeTemplateEditor()
+      return
+    }
     const t = validateTemplate(structuredClone(editingTemplate.t))
 
     if (t.format === FORMAT_VERSION) {
@@ -1203,12 +1215,30 @@ function App() {
                   )
                 }
                 edit={(entry) => {
-                  if (entry.revision) open(entry.deck, entry.revision)
-                  else
-                    void task('Открываем методичку…', async () => {
-                      const saved = await savePublicationLocally(entry.deck.id)
-                      open(saved.deck, saved.revision)
-                    })
+                  if (entry.revision) {
+                    open(entry.deck, entry.revision)
+                    return
+                  }
+
+                  void task('Открываем методичку…', async () => {
+                    if (entry.working && workingOwner) {
+                      const document = await openWorkingTransient(
+                        workingOwner,
+                        'lesson',
+                        entry.deck.id
+                      )
+
+                      if ('deck' in document)
+                        throw Error('Ожидалась методичка, а не шаблон.')
+
+                      open(document, 0)
+                      return
+                    }
+
+                    const saved = await savePublicationLocally(entry.deck.id)
+
+                    open(saved.deck, saved.revision)
+                  })
                 }}
                 duplicate={(entry, course) =>
                   task('Создаём копию…', async () => {
@@ -1546,7 +1576,11 @@ function App() {
           }}
           deck={doc}
           change={(fn) => lessonHistory.update((d) => d && fn(d))}
-          status={status}
+          status={
+            rev.current === 0 && status === 'Сохранено'
+              ? 'Открыто из облака'
+              : status
+          }
           syncLabel={
             activeSyncConflict
               ? 'Конфликт черновика'

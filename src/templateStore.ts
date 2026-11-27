@@ -8,7 +8,11 @@ import {
   type TemplateEntry,
 } from './storage'
 import { workingCardDeck, type WorkingMeta } from './workingDocument'
-import { openWorking, removeWorkingCloud } from './workingSync'
+import {
+  openWorking,
+  openWorkingTransient,
+  removeWorkingCloud,
+} from './workingSync'
 
 export interface CatalogRow {
   template: Template
@@ -74,17 +78,38 @@ export async function getCatalog(allowed: boolean) {
 }
 
 export async function loadCatalogRow(row: CatalogRow): Promise<CatalogRow> {
-  if (!row.meta) return row
-  const owner = currentWorkingOwner()
-  if (!owner) throw Error('Для открытия шаблона войдите как преподаватель.')
-  await openWorking(owner, row.meta)
-  const entry = (await localTemplates()).find(
-    (item) => item.template.deck.id.toLowerCase() === row.meta?.id
-  )
-  if (!entry) throw Error('Не удалось открыть шаблон на устройстве.')
-  return { template: entry.template, entry, remote: row.meta.revision }
-}
+  if (!row.meta || row.entry) return row
 
+  const owner = currentWorkingOwner()
+
+  if (!owner) throw Error('Для открытия шаблона войдите как преподаватель.')
+
+  const document = await openWorkingTransient(owner, 'template', row.meta.id)
+
+  if (!('deck' in document)) throw Error('Ожидался шаблон, а не методичка.')
+
+  return {
+    ...row,
+    template: document,
+  }
+}
+export async function saveTemplateLocally(row: CatalogRow) {
+  if (row.builtin) throw Error('Встроенный шаблон уже доступен.')
+
+  if (row.entry) return
+
+  const owner = currentWorkingOwner()
+
+  if (!owner || !row.meta) throw Error('Облачный шаблон недоступен.')
+
+  await openWorking(owner, row.meta)
+
+  const entry = (await localTemplates()).find(
+    (item) => item.template.deck.id.toLowerCase() === row.meta?.id.toLowerCase()
+  )
+
+  if (!entry) throw Error('Не удалось сохранить шаблон на устройстве.')
+}
 export async function saveLocal(template: Template, row?: CatalogRow) {
   if (row?.builtin) throw new Error('Для встроенного шаблона создайте копию.')
   await writeTemplate({

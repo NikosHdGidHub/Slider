@@ -71,7 +71,7 @@ function clean(
   }
 }
 
-async function downloadAsset(owner: string, sha: string) {
+async function downloadAsset(owner: string, sha: string, cache = true) {
   if (!client) throw Error('Облако не настроено.')
   const { data, error } = await client.storage
     .from(bucket)
@@ -80,7 +80,11 @@ async function downloadAsset(owner: string, sha: string) {
     throw Error(error?.message ?? 'Приватный ресурс недоступен.')
   if ((await digest(data)) !== sha)
     throw Error('Получен повреждённый приватный ресурс.')
-  await workingAsset(owner, sha, { blob: data, uploaded: true })
+  if (cache)
+    await workingAsset(owner, sha, {
+      blob: data,
+      uploaded: true,
+    })
   return data
 }
 async function uploadAsset(owner: string, sha: string, force = false) {
@@ -118,7 +122,8 @@ export async function workingMetadata(
 export async function fetchWorking(
   owner: string,
   kind: WorkingKind,
-  id: string
+  id: string,
+  cacheAssets = true
 ) {
   const reply = await readWorking(owner, kind, id)
   if (!reply) throw Error('Облачный документ не найден.')
@@ -129,7 +134,8 @@ export async function fetchWorking(
       reply.meta,
       source,
       async (sha) =>
-        (await workingAsset(owner, sha))?.blob ?? downloadAsset(owner, sha)
+        (await workingAsset(owner, sha))?.blob ??
+        downloadAsset(owner, sha, cacheAssets)
     ))
   return { ...reply, document, source }
 }
@@ -512,7 +518,55 @@ export async function syncWorking(
     )
   return failures
 }
+export async function openWorkingTransient(
+  owner: string,
+  kind: WorkingKind,
+  id: string
+): Promise<WorkingDocument> {
+  id = id.toLowerCase()
 
+  const existing = (await workingRecords(owner)).find(
+    (row) => row.id === id && row.kind === kind
+  )
+
+  if (existing?.localId)
+    throw Error(
+      'На устройстве уже существует локальная копия. Обновите библиотеку.'
+    )
+
+  if (
+    existing?.dirty ||
+    existing?.attempt ||
+    existing?.conflict ||
+    existing?.createCloud
+  )
+    throw Error('Сначала завершите незаконченные операции с документом.')
+
+  const remote = await fetchWorking(owner, kind, id, false)
+
+  if (!remote.document || remote.meta.deleted)
+    throw Error('Облачный документ недоступен.')
+
+  const changed = await updateWorking(owner, kind, id, (current) => {
+    if (
+      current?.generation !== existing?.generation ||
+      current?.localId ||
+      current?.dirty ||
+      current?.attempt ||
+      current?.conflict ||
+      current?.createCloud ||
+      (current?.base ?? 0) > remote.meta.revision
+    )
+      return current
+
+    return clean(remote.meta, current?.generation ?? 0)
+  })
+
+  if (!changed)
+    throw Error('Состояние документа изменилось. Повторите открытие.')
+
+  return remote.document
+}
 export async function openWorking(owner: string, meta: WorkingMeta) {
   const existing = (await workingRecords(owner)).find(
     (row) => row.id === meta.id && row.kind === meta.kind

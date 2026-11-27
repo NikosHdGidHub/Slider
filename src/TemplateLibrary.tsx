@@ -48,6 +48,7 @@ import {
   saveLocal,
   loadCatalogRow,
   type CatalogRow,
+  saveTemplateLocally,
 } from './templateStore'
 import {
   download,
@@ -294,6 +295,12 @@ export function TemplateLibrary({
               JSON.stringify(raw, null, 2)
             )
         },
+      })
+    if (!builtin && row.meta && !row.entry)
+      menu.push({
+        label: 'Сохранить на устройство',
+        icon: Laptop,
+        run: () => run(() => saveTemplateLocally(row), true),
       })
     if (!builtin && editable && row.entry)
       menu.push('separator', {
