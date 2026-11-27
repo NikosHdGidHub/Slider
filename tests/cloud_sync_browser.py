@@ -207,6 +207,13 @@ def run(browser, base, persistent=None, zoom=None):
     button(panel, 'Закрыть').click()
     expect(button(b, 'Открыть ' + copy_title)).to_be_visible()
 
+    panel = sync_panel(b)
+    button(panel, 'Временные резервные копии').click()
+    button(panel, 'Восстановить копию «Локальное изменение»').click()
+    expect(b.get_by_text('Резервная копия восстановлена как отдельный документ.', exact=True)).to_be_visible()
+    button(panel, 'Закрыть').click()
+    expect(button(b, 'Открыть Локальное изменение — из резервной копии')).to_be_visible()
+
     api.missing = True
     refresh(b)
     expect(b.get_by_role('button', name='Синхронизация: Ошибка синхронизации')).to_be_visible()

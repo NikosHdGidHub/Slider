@@ -7,7 +7,9 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import type { CourseLibrary } from './courseSync'
-import { localWorkingDocument, workingBackups } from './storage'
+import { localWorkingDocument, saveEntry, workingBackups } from './storage'
+import { copyDeck } from './catalog'
+import { saveLocal } from './templateStore'
 import { workingDeck, type WorkingRecord } from './workingDocument'
 import { fetchWorking, resolveWorking } from './workingSync'
 import type { useWorkingSync } from './useWorkingSync'
@@ -68,6 +70,9 @@ export function WorkingSyncPanel({
   login: () => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [backups, showBackups] =
+    useState<Awaited<ReturnType<typeof workingBackups>>>()
+
   const [detail, select] = useState<string>()
   const conflicts = sync.records.filter((row) => row.conflict)
   const trash = sync.records.filter(
@@ -140,8 +145,8 @@ export function WorkingSyncPanel({
         ))}
       </dl>
       <p>
-        Ожидают отправки: {pending.length - conflicts.length + courses.pending} · Конфликты:{' '}
-        {conflicts.length + Number(courses.conflict)}
+        Ожидают отправки: {pending.length - conflicts.length + courses.pending}{' '}
+        · Конфликты: {conflicts.length + Number(courses.conflict)}
       </p>
       {sync.lastSuccess && (
         <p>
@@ -304,25 +309,69 @@ export function WorkingSyncPanel({
         </div>
       )}
       {owner && (
-        <button
-          className="secondary"
-          disabled={busy}
-          onClick={() =>
-            void run(async () => {
-              const backups = await workingBackups(owner)
-              if (!backups.length)
-                return notice(
-                  'Временных резервных копий на этом устройстве пока нет.'
-                )
-              download(
-                'atlas-sync-backups.json',
-                JSON.stringify(backups, null, 2)
+        <>
+          <button
+            className="secondary"
+            aria-expanded={!!backups}
+            disabled={busy}
+            onClick={() =>
+              void run(async () =>
+                showBackups(backups ? undefined : await workingBackups(owner))
               )
-            })
-          }
-        >
-          Экспорт временных резервных копий
-        </button>
+            }
+          >
+            Временные резервные копии
+          </button>
+          {backups && (
+            <div className="working-item">
+              {!backups.length && (
+                <p>На этом устройстве нет действующих резервных копий.</p>
+              )}
+              {backups.map(({ document, until }, index) => {
+                const original = workingDeck(document)
+                return (
+                  <button
+                    className="secondary"
+                    key={original.id + '/' + index}
+                    disabled={busy || inEditor}
+                    onClick={() =>
+                      void run(async () => {
+                        if (until <= Date.now())
+                          throw Error('Срок хранения резервной копии истёк.')
+                        const deck = copyDeck(
+                          original,
+                          original.title.slice(0, 970) + ' — из резервной копии'
+                        )
+                        if ('deck' in document)
+                          await saveLocal({ ...document, deck })
+                        else await saveEntry(deck, 0)
+                        retry()
+                        notice(
+                          'Резервная копия восстановлена как отдельный документ.'
+                        )
+                      })
+                    }
+                  >
+                    Восстановить копию «{original.title}»
+                  </button>
+                )
+              })}
+              {backups.length > 0 && (
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    download(
+                      'atlas-sync-backups.json',
+                      JSON.stringify(backups, null, 2)
+                    )
+                  }
+                >
+                  Экспортировать резервные копии JSON
+                </button>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
