@@ -8,7 +8,7 @@ import {
 } from './cloud'
 import { validateDeck } from './model'
 import { optimize } from './media'
-import { workingAsset } from './storage'
+import { currentWorkingOwner, retainLibraryImage } from './storage'
 export type Resource = {
   sha: string | null
   name: string
@@ -323,10 +323,111 @@ export async function saveWorkingImageLocally(
 ) {
   const blob = await readWorkingImage(owner, row)
 
-  await workingAsset(owner, row.sha, {
-    blob,
-    uploaded: true,
-    retained: true,
-    createdAt: Date.now(),
+  await retainLibraryImage(owner, row.sha, blob, undefined, true)
+}
+
+export type LegacyResourceUse = ResourceDocument & { urls: string[] }
+
+export async function legacyResourceUses(
+  owner: string
+): Promise<LegacyResourceUse[]> {
+  const { data, error } = await db()
+    .rpc('atlas_legacy_resource_uses', { expected_owner: owner })
+    .abortSignal(AbortSignal.timeout(30000))
+  if (error) throw Error(error.message)
+  if (!Array.isArray(data))
+    throw Error('Не удалось проверить ссылки старых документов.')
+  return data as LegacyResourceUse[]
+}
+
+// No public URL for a private object. Reuse the exact source bytes.
+export async function readLibraryLegacyImage(row: Resource): Promise<Blob> {
+  if (
+    row.bucket !== 'images' ||
+    !['image/png', 'image/jpeg', 'image/webp'].includes(row.mime)
+  )
+    throw Error('Неподдерживаемое изображение.')
+  const blob = await downloadFile(row)
+  if (row.sha && (await digest(blob)) !== row.sha)
+    throw Error('Контрольная сумма изображения не совпадает.')
+  return new Blob([blob], { type: row.mime })
+}
+
+export async function saveLegacyImageLocally(
+  owner: string | null,
+  row: Resource
+) {
+  const blob = await readLibraryLegacyImage(row)
+  await retainLibraryImage(owner, await digest(blob), blob, row.name)
+}
+
+// Standalone upload is private, independent of the existence of any methodical document.
+export async function uploadLibraryImage(
+  owner: string,
+  blob: Blob,
+  name?: string
+) {
+  if (owner !== currentWorkingOwner()) throw Error('Изменился аккаунт.')
+  const sha = await digest(blob)
+  await retainLibraryImage(owner, sha, blob, name)
+  const path = owner + '/' + sha
+  const api = db().storage.from('atlas-private-resources')
+  const { data: existing } = await api.info(path)
+  if (!existing) {
+    const { error } = await api.upload(path, blob, {
+      upsert: false,
+      contentType: blob.type,
+      cacheControl: '0',
+    })
+    if (error) {
+      // A competing upload may already have succeeded; only verified bytes count.
+      const { data, error: check } = await api.download(path)
+      if (check || !data || (await digest(data)) !== sha)
+        throw Error(error.message)
+    }
+  }
+  const { data, error } = await api.download(path)
+  if (error || !data || (await digest(data)) !== sha)
+    throw Error('Облачный ресурс не подтверждён.')
+  await retainLibraryImage(owner, sha, blob, name, true)
+}
+
+// A reservation stays in place after any ambiguous failure; no automatic expiry.
+// The storage lease serializes publication changes and private deletion requests.
+export async function removePrivateResource(
+  owner: string,
+  row: WorkingResource,
+  checkPublic: () => Promise<void>
+) {
+  if (
+    owner !== currentWorkingOwner() ||
+    row.bucket !== 'atlas-private-resources' ||
+    row.path !== owner + '/' + row.sha ||
+    !/^[0-9a-f]{64}$/.test(row.sha)
+  )
+    throw Error('Некорректный ресурс или аккаунт.')
+  return withStorageLock(async (writer, token) => {
+    await checkPublic()
+    if (owner !== currentWorkingOwner()) throw Error('Изменился аккаунт.')
+    const args = {
+      expected_owner: owner,
+      resource_sha: row.sha,
+      delete_token: token,
+    }
+    const reserve = await db().rpc('atlas_resource_delete_begin', args)
+    if (reserve.error) throw Error(reserve.error.message)
+    if (reserve.data !== true)
+      throw Error('Резервирование удаления не подтверждено.')
+    const result = await writer(row.bucket).remove([row.path])
+    checkStorageWrite(
+      result.error,
+      'Не удалось удалить приватный ресурс. Резервирование сохранено.'
+    )
+    const finish = await db().rpc('atlas_resource_delete_finish', args)
+    if (finish.error || finish.data !== true)
+      throw Error(
+        finish.error?.message ??
+          'Удаление не подтверждено. Резервирование сохранено.'
+      )
   })
 }

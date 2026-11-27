@@ -20,6 +20,7 @@ import {
   type WorkingRecord,
 } from './workingDocument'
 import { prepareDocumentImages } from './media'
+import { digest } from './digest'
 
 export type Entry = {
   deck: Deck
@@ -782,7 +783,13 @@ export async function registerWorking(owner: string) {
   const db = await opened
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(
-      ['lessons', 'templates', 'workingState', 'workingBackups'],
+      [
+        'lessons',
+        'templates',
+        'workingState',
+        'workingBackups',
+        'workingAssets',
+      ],
       'readwrite'
     )
     const state = tx.objectStore('workingState')
@@ -1090,10 +1097,10 @@ function retainAsset(
   request.onsuccess = () => {
     const existing: Asset | undefined = request.result
 
-    if (existing?.retained) return
+    if (existing?.retained && existing.blob.type === blob.type) return
 
     const next: Asset = {
-      blob: existing?.blob ?? blob,
+      blob,
 
       uploaded: existing?.uploaded ?? false,
 
@@ -1287,4 +1294,171 @@ export async function localAssets(owner = workingOwner): Promise<LocalAsset[]> {
     tx.onabort = () =>
       reject(tx.error ?? Error('Не удалось прочитать библиотеку изображений.'))
   })
+}
+
+// Explicit library import: verify bytes and preserve the owner-specific record.
+export async function retainLibraryImage(
+  owner: string | null,
+  sha: string,
+  blob: Blob,
+  name?: string,
+  uploaded = false
+) {
+  if (!/^[0-9a-f]{64}$/.test(sha) || (await digest(blob)) !== sha)
+    throw Error('Контрольная сумма изображения не совпадает.')
+  if (
+    !['image/png', 'image/jpeg', 'image/webp'].includes(blob.type) ||
+    !blob.size ||
+    blob.size > 16 * 1024 * 1024
+  )
+    throw Error('Недопустимый формат или размер изображения.')
+  if (owner !== workingOwner) throw Error('Изменился аккаунт.')
+  const db = await opened
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('workingAssets', 'readwrite')
+    const store = tx.objectStore('workingAssets')
+    const key = [assetScope(owner), sha]
+    const request = store.get(key)
+    request.onsuccess = () => {
+      if (owner !== workingOwner) {
+        tx.abort()
+        return
+      }
+      const existing: Asset | undefined = request.result
+      store.put(
+        {
+          ...existing,
+          blob,
+          retained: true,
+          uploaded: !!existing?.uploaded || uploaded,
+          name:
+            existing?.name ??
+            name ??
+            'Изображение-' + sha.slice(0, 12) + '.' + assetExtension(blob.type),
+          createdAt: existing?.createdAt ?? Date.now(),
+        } satisfies Asset,
+        key
+      )
+    }
+    tx.oncomplete = () => resolve()
+    tx.onabort = () =>
+      reject(tx.error ?? Error('Не удалось сохранить изображение.'))
+  })
+  reportWorkingChange(owner)
+}
+
+// Inspect raw snapshots in the same IDB transaction as deletion. Old inline
+// JSON is deliberately handled conservatively; historical originals are unscoped.
+function referencesAsset(
+  value: unknown,
+  sha: string,
+  bytes: Uint8Array
+): boolean {
+  if (typeof value === 'string') {
+    if (value.includes(sha)) return true
+    if (!/^data:image\//i.test(value)) return false
+    const match = /^data:image\/[^;,]+;base64,([\s\S]*)$/i.exec(value)
+    if (!match) return true // unknown image encoding: fail closed
+    try {
+      const binary = atob(match[1])
+      if (binary.length !== bytes.length) return false
+      for (let i = 0; i < bytes.length; i++)
+        if (binary.charCodeAt(i) !== bytes[i]) return false
+      return true
+    } catch {
+      return true
+    }
+  }
+  if (!value || typeof value !== 'object') return false
+  return Object.values(value).some((v) => referencesAsset(v, sha, bytes))
+}
+
+export async function removeLocalLibraryImage(
+  owner: string | null,
+  sha: string
+) {
+  if (owner !== workingOwner || !/^[0-9a-f]{64}$/.test(sha))
+    throw Error('Изменился аккаунт или неверный идентификатор ресурса.')
+  const scope = assetScope(owner)
+  const asset = await workingAsset(scope, sha)
+  if (!asset?.retained)
+    throw Error('Изображение отсутствует в локальной библиотеке.')
+  if ((await digest(asset.blob)) !== sha)
+    throw Error('Локальный ресурс повреждён.')
+  const bytes = new Uint8Array(await asset.blob.arrayBuffer())
+  const db = await opened
+  const stores = [
+    'lessons',
+    'templates',
+    'workingState',
+    'workingBackups',
+    'originalDocuments',
+    'workingAssets',
+  ]
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(stores, 'readwrite')
+    let reason = 'Не удалось проверить использование изображения.'
+    let left = stores.length
+    const fail = (message: string) => {
+      reason = message
+      tx.abort()
+    }
+    const done = () => {
+      if (--left !== 0) return
+      if (owner !== workingOwner) {
+        fail('Изменился аккаунт.')
+        return
+      }
+      tx.objectStore('workingAssets').delete([scope, sha])
+    }
+    for (const table of stores) {
+      const store = tx.objectStore(table)
+      if (table === 'workingAssets') {
+        const q = store.get([scope, sha])
+        q.onsuccess = () => {
+          if (!q.result?.retained) {
+            fail('Изображение уже изменилось.')
+            return
+          }
+          done()
+        }
+        continue
+      }
+      // originalDocuments is not owner-scoped; don't guess which account owns it.
+      const q =
+        table === 'workingState' || table === 'workingBackups'
+          ? owner
+            ? store.getAll(ownerRange(owner))
+            : undefined
+          : store.getAll()
+      if (!q) {
+        done()
+        continue
+      }
+      q.onsuccess = () => {
+        try {
+          for (const row of q.result) {
+            if (
+              (table === 'lessons' || table === 'templates') &&
+              !belongs(row, owner)
+            )
+              continue
+            if (table === 'workingBackups' && row.until <= Date.now()) continue
+            if (referencesAsset(row, sha, bytes)) {
+              fail(
+                'Изображение используется документом, резервной копией, исходным JSON или операцией синхронизации.'
+              )
+              return
+            }
+          }
+          done()
+        } catch {
+          fail('Не удалось проверить все локальные ссылки. Удаление отменено.')
+        }
+      }
+    }
+    tx.oncomplete = () => resolve()
+    tx.onabort = () => reject(tx.error ?? Error(reason))
+  })
+  reportWorkingChange(owner)
 }

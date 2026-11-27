@@ -2133,7 +2133,7 @@ function App() {
       ) : editingTemplate?.t.format === FORMAT_VERSION && allowed && !phone ? (
         <GridDesigner
           key={editingTemplate.t.deck.id}
-          libraryAvailable={owner && online}
+          libraryAvailable={allowed}
           template={editingTemplate.t}
           availability={availability}
           set={templateHistory.set}
@@ -2144,7 +2144,7 @@ function App() {
         />
       ) : editingTemplate && allowed && !phone ? (
         <Editor
-          libraryAvailable={owner && online}
+          libraryAvailable={allowed}
           key={editingTemplate.t.deck.id}
           history={templateHistory}
           gridTemplateKind={
@@ -2223,7 +2223,7 @@ function App() {
               ? 'Открыто из облака'
               : status
           }
-          libraryAvailable={owner && online}
+          libraryAvailable={allowed}
           availability={availability}
           back={() => requestExit()}
           view={() => setWatch(doc)}

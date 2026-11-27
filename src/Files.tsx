@@ -13,7 +13,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { digest } from './digest'
-import { imageSources, publicationUsage, removeUnusedFile } from './fileUsage'
+import { publicationUsage, removeUnusedFile } from './fileUsage'
 import { originalImage } from './media'
 import {
   resources,
@@ -26,15 +26,8 @@ import {
   resourceKey,
   type Resource,
 } from './resources'
-import type { Entry } from './storage'
-
-type LocalImage = {
-  sha: string
-  src: string
-  size: number
-  format: string
-  lessons: Entry[]
-}
+import { currentWorkingOwner, type Entry } from './storage'
+import { ResourceGallery, ResourcePicker } from './ResourceGallery'
 
 const formatOf = (mime: string) =>
   ({
@@ -57,37 +50,6 @@ const messageOf = (error: unknown) =>
     ? String(error.message)
     : 'Не удалось выполнить операцию.'
 
-async function localImages(entries: Entry[]) {
-  const photos = new Map<string, LocalImage>()
-  const hashes = new Map<string, string>()
-  let hasLinks = false
-  for (const lesson of entries) {
-    for (const src of new Set(imageSources(lesson.deck))) {
-      if (!src.startsWith('data:')) {
-        hasLinks = true
-        continue
-      }
-      let sha = hashes.get(src)
-      if (!sha) {
-        const blob = await (await fetch(src)).blob()
-        sha = await digest(blob)
-        hashes.set(src, sha)
-        if (!photos.has(sha))
-          photos.set(sha, {
-            sha,
-            src,
-            size: blob.size,
-            format: formatOf(blob.type),
-            lessons: [],
-          })
-      }
-      const found = photos.get(sha)!
-      if (!found.lessons.includes(lesson)) found.lessons.push(lesson)
-    }
-  }
-  return { images: [...photos.values()], hasLinks }
-}
-
 function EmptyFiles({
   title,
   children,
@@ -101,105 +63,6 @@ function EmptyFiles({
       <strong>{title}</strong>
       {children}
     </div>
-  )
-}
-
-function LocalFiles({
-  entries,
-  openLesson,
-}: {
-  entries: Entry[]
-  openLesson: (entry: Entry) => void
-}) {
-  const [result, setResult] =
-    useState<Awaited<ReturnType<typeof localImages>>>()
-  const [error, setError] = useState('')
-  const [query, setQuery] = useState('')
-  useEffect(() => {
-    let active = true
-    setResult(undefined)
-    setError('')
-    localImages(entries)
-      .then((value) => {
-        if (active) setResult(value)
-      })
-      .catch((error) => {
-        if (active) setError(messageOf(error))
-      })
-    return () => {
-      active = false
-    }
-  }, [entries])
-  const images =
-    result?.images.map((image, index) => ({
-      ...image,
-      name: 'Изображение ' + (index + 1),
-    })) ?? []
-  const visible = images.filter((image) =>
-    [
-      image.name,
-      image.format,
-      ...image.lessons.map((entry) => entry.deck.title),
-    ].some((name) => name.toLowerCase().includes(query.trim().toLowerCase()))
-  )
-  return (
-    <>
-      <div className="files-bar">
-        <SearchBox
-          query={query}
-          onChange={setQuery}
-          placeholder="Поиск по методичке или формату"
-        />
-      </div>
-      {error ? (
-        <p role="alert">{error}</p>
-      ) : !result ? (
-        <p role="status">Читаем локальные методички…</p>
-      ) : !images.length ? (
-        <EmptyFiles title="На этом устройстве пока нет изображений в методичках">
-          <p>
-            Изображения появятся здесь после добавления в локальную методичку.
-          </p>
-        </EmptyFiles>
-      ) : !visible.length ? (
-        <EmptyFiles title="По вашему запросу ничего не найдено" />
-      ) : (
-        <div className="file-grid">
-          {visible.map((image) => (
-            <article key={image.sha} className="file-card">
-              <div className="file-thumb">
-                <img src={image.src} alt="" loading="lazy" />
-              </div>
-              <div className="file-body">
-                <h2>{image.name}</h2>
-                <p className="file-meta">
-                  {image.format} · {shortSize(image.size)}
-                </p>
-                <details className="file-links">
-                  <summary>Методички ({image.lessons.length})</summary>
-                  {image.lessons.map((entry) => (
-                    <button
-                      className="file-link"
-                      key={entry.deck.id}
-                      onClick={() => openLesson(entry)}
-                    >
-                      {entry.deck.title}
-                    </button>
-                  ))}
-                </details>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-      {result?.hasLinks && (
-        <p className="files-note">
-          Некоторые методички ссылаются на изображения в интернете. Чтобы
-          сохранить их на устройстве, выберите «Подготовить к офлайн-показу» в
-          редакторе.
-        </p>
-      )}
-    </>
   )
 }
 
@@ -260,7 +123,13 @@ export function FileLibrary({
       </div>
       {tab === 'local' ? (
         allowed ? (
-          <LocalFiles entries={entries} openLesson={openLesson} />
+          <ResourceGallery
+            key={currentWorkingOwner() ?? 'local'}
+            mode="local"
+            owner={currentWorkingOwner()}
+            lessonEntries={entries}
+            openLesson={openLesson}
+          />
         ) : (
           <EmptyFiles title="Войдите, чтобы открыть файлы своих методичек">
             <button className="secondary" onClick={login}>
@@ -288,7 +157,7 @@ export function FileLibrary({
   )
 }
 
-export function Files({
+function CloudFiles({
   pick,
   openJSON,
 }: {
@@ -350,7 +219,10 @@ export function Files({
   const visible =
     rows?.filter(
       (row) =>
-        (!pick || row.bucket === 'images') &&
+        !(
+          row.bucket === 'images' &&
+          ['image/png', 'image/jpeg', 'image/webp'].includes(row.mime)
+        ) &&
         (!folder || row.folder === folder) &&
         row.mime.startsWith(kind) &&
         row.name.toLowerCase().includes(query.trim().toLowerCase())
@@ -435,7 +307,7 @@ export function Files({
                 ref={upload}
                 type="file"
                 multiple
-                accept=".png,.jpg,.jpeg,.webp,.svg,.pdf,.pptx,.json"
+                accept=".pdf,.pptx,.json"
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? [])
                   e.target.value = ''
@@ -444,6 +316,10 @@ export function Files({
                     const errors: string[] = []
                     for (const file of files) {
                       try {
+                        if (!/\.(pdf|pptx|json)$/i.test(file.name))
+                          throw Error(
+                            'Изображения загружайте через приватную библиотеку.'
+                          )
                         await storeFile(file, file.name, folder)
                       } catch (error) {
                         errors.push(file.name + ' — ' + messageOf(error))
@@ -473,15 +349,36 @@ export function Files({
             чтобы повторить проверку.
           </p>
         )}
+        {rows && (!kind || kind === 'image/') && (
+          <ResourceGallery
+            mode="cloud"
+            owner={currentWorkingOwner()}
+            legacyRows={rows}
+            publicationRefs={usage}
+            query={query}
+            folder={folder}
+            onReload={load}
+            folders={options}
+          />
+        )}
         {rows &&
+          kind !== 'image/' &&
           (!visible.length ? (
             <EmptyFiles
               title={
-                rows.some((row) => !pick || row.bucket === 'images')
+                rows.some(
+                  (row) =>
+                    !(
+                      row.bucket === 'images' &&
+                      ['image/png', 'image/jpeg', 'image/webp'].includes(
+                        row.mime
+                      )
+                    )
+                )
                   ? 'По вашему запросу ничего не найдено'
                   : pick
                     ? 'В облаке пока нет изображений'
-                    : 'В облаке пока нет файлов'
+                    : 'Нет других файлов (PDF, PPTX, JSON)'
               }
             >
               {!pick && !rows.length && uploadButton}
@@ -738,7 +635,7 @@ function CloudFileCard({
                     ))}
                   </select>
                 </label>
-                {usageKnown && !refs.length && (
+                {usageKnown && !refs.length && row.bucket !== 'images' && (
                   <button className="file-delete" onClick={onRequestDelete}>
                     Удалить из облака
                   </button>
@@ -749,5 +646,19 @@ function CloudFileCard({
         )}
       </div>
     </article>
+  )
+}
+
+export function Files({
+  pick,
+  openJSON,
+}: {
+  pick?: (image: Awaited<ReturnType<typeof originalImage>>) => void
+  openJSON?: (text: string) => Promise<void>
+}) {
+  return pick ? (
+    <ResourcePicker pick={pick} />
+  ) : (
+    <CloudFiles openJSON={openJSON} />
   )
 }

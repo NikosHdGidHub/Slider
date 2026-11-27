@@ -104,13 +104,13 @@ async function uploadAsset(owner: string, sha: string, force = false) {
   if (!client) throw Error('Облако не настроено.')
   const asset = await workingAsset(owner, sha)
   if (!asset) throw Error('Приватный ресурс отсутствует на устройстве.')
-  if (asset.uploaded && !force) return
-  if (!force) {
+  {
     const path = owner + '/' + sha
 
     const { data: existing } = await client.storage.from(bucket).info(path)
 
     if (existing) {
+      if (asset.uploaded && !force) return
       await downloadAsset(owner, sha)
 
       await workingAsset(owner, sha, {
@@ -125,6 +125,7 @@ async function uploadAsset(owner: string, sha: string, force = false) {
     .from(bucket)
     .upload(owner + '/' + sha, asset.blob, {
       upsert: false,
+      contentType: asset.blob.type,
       cacheControl: '0',
     })
   if (error) {

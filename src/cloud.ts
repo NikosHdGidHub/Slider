@@ -89,7 +89,7 @@ export function checkStorageWrite(
 }
 
 export async function withStorageLock<T>(
-  action: (bucket: StorageWriter) => Promise<T>
+  action: (bucket: StorageWriter, token: string) => Promise<T>
 ): Promise<T> {
   if (!client) throw Error('Подключите Supabase.')
   const token = crypto.randomUUID()
@@ -112,10 +112,12 @@ export async function withStorageLock<T>(
     )
   let release = true
   try {
-    return await action((bucket) =>
-      storage()
-        .from(bucket)
-        .setHeader('x-client-info', 'atlas-storage/' + token)
+    return await action(
+      (bucket) =>
+        storage()
+          .from(bucket)
+          .setHeader('x-client-info', 'atlas-storage/' + token),
+      token
     )
   } catch (error) {
     release = !(error instanceof UnconfirmedStorageWrite)

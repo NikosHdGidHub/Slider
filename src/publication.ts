@@ -1,7 +1,12 @@
 import { storageReference } from './fileUsage'
 import { digest } from './digest'
 import { mediaSlides } from './grid.ts'
-import { adminId, isProjectStorageUrl, publishDocument, withStorageLock } from './cloud'
+import {
+  adminId,
+  isProjectStorageUrl,
+  publishDocument,
+  withStorageLock,
+} from './cloud'
 import { recordPublication } from './publicationCatalog'
 import { uploadImage } from './resources'
 import { imageAddress } from './storage'
@@ -21,6 +26,10 @@ export async function publish(deck: Deck, approve: () => Promise<boolean>) {
         await imageAddress(await digest(blob), url)
       }
       const reference = storageReference(url)
+      if (reference?.startsWith('atlas-private-resources/'))
+        throw Error(
+          'Приватное изображение необходимо встроить перед публикацией.'
+        )
       if (reference && isProjectStorageUrl(url)) {
         const separator = reference.indexOf('/')
         const { error } = await bucket(reference.slice(0, separator)).info(
@@ -50,7 +59,9 @@ export async function publish(deck: Deck, approve: () => Promise<boolean>) {
         if (item.type === 'image') item.src = await resolve(item.src)
     }
     const fonts = referencedFonts(copy)
-    copy.resources.fonts = copy.resources.fonts.filter((font) => fonts.has(font.id))
+    copy.resources.fonts = copy.resources.fonts.filter((font) =>
+      fonts.has(font.id)
+    )
     const document = validateDeck(copy)
     await publishDocument(copy.id, document, bucket)
     // The publication is usable while a failed index write awaits repair.
@@ -80,7 +91,9 @@ export async function fingerprint(deck: Deck) {
       if (item.type === 'image') item.src = await identity(item.src)
   }
   const fonts = referencedFonts(copy)
-  copy.resources.fonts = copy.resources.fonts.filter((font) => fonts.has(font.id))
+  copy.resources.fonts = copy.resources.fonts.filter((font) =>
+    fonts.has(font.id)
+  )
   delete copy.migrated
   const canonical = JSON.stringify(copy, (_, value) =>
     value && typeof value === 'object' && !Array.isArray(value)

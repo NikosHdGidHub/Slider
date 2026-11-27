@@ -11,6 +11,7 @@ import {
   localTemplates,
   workingBackups,
   workingRecords,
+  unreadableDocuments,
 } from './storage'
 import { workingDeck } from './workingDocument'
 import { validateDeck, type Deck } from './model'
@@ -27,7 +28,7 @@ export function storageReference(src: string) {
   if (!src.startsWith('https:')) return
   const path = new URL(src).pathname
   const match =
-    /^\/storage\/v1\/(?:object|render\/image)\/(?:(?:public|authenticated|sign)\/)?(images|atlas-private)\/(.+)$/.exec(
+    /^\/storage\/v1\/(?:object|render\/image)\/(?:(?:public|authenticated|sign)\/)?(images|atlas-private|atlas-private-resources)\/(.+)$/.exec(
       path
     )
   if (match) return match[1] + '/' + decodeURIComponent(match[2])
@@ -51,6 +52,10 @@ export async function publicationUsage() {
 }
 
 export function removeUnusedFile(row: Resource) {
+  if (row.bucket === 'images')
+    throw Error(
+      'Удаление исторических публичных изображений недоступно до миграции старых ссылок.'
+    )
   if (row.bucket === 'atlas-private-resources') {
     throw Error('Удаление приватных ресурсов ' + 'пока недоступно.')
   }
@@ -97,4 +102,40 @@ export function removeUnusedFile(row: Resource) {
       throw Error('Файл используется в облачном черновике или шаблоне.')
     await purgeFile(row, bucket)
   })
+}
+
+// The server checks working refs and reservations; publications are checked
+// under the existing storage lease (also used by publish/unpublish).
+export async function assertPrivatePublicationUnused(row: {
+  bucket: string
+  path: string
+}) {
+  const usage = await publicationUsage()
+  if (usage.has(resourceKey(row)))
+    throw Error('Изображение используется в публикации.')
+  const [lessons, templates, backups, pending] = await Promise.all([
+    entries(),
+    localTemplates(),
+    workingBackups(adminId),
+    workingRecords(adminId),
+  ])
+  if (
+    unreadableDocuments('lesson').length ||
+    unreadableDocuments('template').length
+  )
+    throw Error('Есть непрочитанные локальные документы. Удаление отменено.')
+  const local = [
+    ...lessons.map((e) => e.deck),
+    ...templates.map((e) => e.template.deck),
+    ...backups.map((e) => workingDeck(e.document)),
+    ...pending.flatMap((e) => (e.previous ? [workingDeck(e.previous)] : [])),
+  ]
+  if (
+    local.some((deck) =>
+      Array.from(imageSources(deck)).some(
+        (src) => storageReference(src) === resourceKey(row)
+      )
+    )
+  )
+    throw Error('Локальный документ зависит от облачной ссылки на изображение.')
 }
