@@ -18,6 +18,7 @@ import {
   workingKey,
   workingMetadata,
   removeWorkingCloud,
+  requestCloudCreation,
 } from './workingSync'
 import { PublishedLibrary, publicationTitle } from './PublishedLibrary'
 import { indexPublications, publicationDocument } from './publicationCatalog'
@@ -71,6 +72,8 @@ import {
   saveOriginal,
   setWorkingOwner,
   type Entry,
+  writeTemplate,
+  workingRecords,
 } from './storage'
 import { FileLibrary } from './Files'
 import { publish, fingerprint } from './publication'
@@ -86,6 +89,7 @@ import {
   getCatalog,
   loadCatalogRow,
   saveLocal,
+  saveTemplateLocally,
   type CatalogRow,
 } from './templateStore'
 import { download } from './instructions'
@@ -102,6 +106,7 @@ import {
   readOfflinePresentation,
 } from './offlinePresentations'
 import './style.css'
+import { AvailabilityProps } from './AvailabilityControl'
 
 registerShell()
 const localMode =
@@ -283,6 +288,14 @@ function App() {
   const templateDirty =
     editingTemplate !== null &&
     JSON.stringify(editingTemplate.t) !== editingTemplate.baseline
+  const activeKind = doc ? 'lesson' : editingTemplate ? 'template' : undefined
+
+  const activeId = doc?.id ?? editingTemplate?.t.deck.id
+
+  const activeRecord = working.records.find(
+    (record) =>
+      record.kind === activeKind && record.id === activeId?.toLowerCase()
+  )
   const templateHistory = useHistory(
     editingTemplate?.t,
     (t) => {
@@ -524,6 +537,7 @@ function App() {
       null
     )
   const openedPublication = useRef('')
+  const [publicationVerified, setPublicationVerified] = useState(false)
   const afterExit = useRef<null | (() => Promise<void>)>(null)
   const marker = (id: string) => ownerKey + '-published-' + id
   useEffect(() => {
@@ -570,6 +584,34 @@ function App() {
     return fingerprint(remote)
   }
   const documentId = doc?.id
+
+  useEffect(() => {
+    setPublicationVerified(false)
+
+    if (!documentId || !online || !owner) return
+
+    let live = true
+
+    const observed = openedPublication.current
+
+    publishedHash(documentId)
+      .then((hash) => {
+        if (live && observed === openedPublication.current) {
+          setBaseline(hash)
+          setPublicationVerified(true)
+        }
+      })
+      .catch((error) => {
+        if (live) {
+          setPublicationVerified(false)
+          notice(errorText(error))
+        }
+      })
+
+    return () => {
+      live = false
+    }
+  }, [documentId, online, owner])
   useEffect(() => {
     if (!documentId || !online || !owner) return
     let live = true
@@ -591,6 +633,7 @@ function App() {
     setEditorSession((value) => value + 1)
     openedPublication.current = localStorage.getItem(marker(d.id)) || ''
     setBaseline(openedPublication.current)
+    setPublicationVerified(false)
     current.current = d
     rev.current = revision
     queue.current = Promise.resolve()
@@ -740,7 +783,38 @@ function App() {
 
     setModal('leave-template')
   }
+  async function persistActiveTemplate() {
+    const editor = editingTemplate
 
+    if (!editor) throw Error('Шаблон не открыт.')
+
+    const template = validateTemplate(structuredClone(editor.t))
+
+    if (template.format === FORMAT_VERSION)
+      template.deck.master.name = template.deck.title
+
+    await saveLocal(template, editor.row)
+
+    const result = await refreshCatalog()
+
+    const row = result.rows.find(
+      (item) => item.template.deck.id === template.deck.id
+    )
+
+    if (!row?.entry) throw Error('Не удалось получить сохранённый шаблон.')
+
+    setEditingTemplate((current) => {
+      if (!current || current.t.deck.id !== template.deck.id) return current
+
+      return {
+        ...current,
+        row,
+        baseline: JSON.stringify(editor.t),
+      }
+    })
+
+    return row.entry
+  }
   async function saveTemplateAndExit() {
     if (!editingTemplate) return
     if (
@@ -1013,6 +1087,7 @@ function App() {
           localStorage.setItem(marker(d.id), hash)
           openedPublication.current = hash
           setBaseline(hash)
+          setPublicationVerified(true)
           publicationChanged((stamp) => stamp + 1)
           if (exitAfter && current.current === d) {
             await closeEditor()
@@ -1024,6 +1099,349 @@ function App() {
       }
     )
   }
+  async function toggleActiveLocal(enabled: boolean) {
+    if (doc) {
+      const draft = current.current
+
+      if (!draft) throw Error('Методичка не открыта.')
+
+      dragPointer.current = null
+      flushPendingSave()
+
+      await queue.current
+
+      if (failure.current) throw failure.current
+
+      if (current.current !== draft)
+        throw Error('Методичка изменилась. Повторите действие.')
+
+      if (enabled) {
+        if (rev.current === 0) {
+          persist(draft)
+          await queue.current
+
+          if (failure.current) throw failure.current
+        }
+
+        await refresh()
+
+        notice('Методичка сохранена на устройстве.')
+        return
+      }
+
+      if (
+        !confirm(
+          'Удалить методичку с этого устройства?\n\n' +
+            'Редактор будет закрыт. Облачная копия ' +
+            'и публикация сохранятся, если они существуют.'
+        )
+      )
+        return
+
+      await saveEntry(draft, rev.current, true, false, undefined, false)
+
+      current.current = null
+      pendingSave.current = null
+
+      setDoc(null)
+      setModal('')
+
+      navigate(editorOrigin.current)
+
+      await refresh()
+
+      notice('Локальная копия удалена.')
+      return
+    }
+
+    if (editingTemplate) {
+      const editor = editingTemplate
+
+      if (enabled) {
+        if (editor.row?.meta && !templateDirty) {
+          await saveTemplateLocally(editor.row)
+
+          const result = await refreshCatalog()
+
+          const row = result.rows.find(
+            (item) => item.template.deck.id === editor.t.deck.id
+          )
+
+          if (!row?.entry) throw Error('Локальная копия шаблона не найдена.')
+
+          setEditingTemplate((current) =>
+            current?.t.deck.id === editor.t.deck.id
+              ? { ...current, row }
+              : current
+          )
+        } else {
+          await persistActiveTemplate()
+        }
+
+        notice('Шаблон сохранён на устройстве.')
+        return
+      }
+
+      if (templateDirty) throw Error('Сначала сохраните изменения шаблона.')
+
+      if (!editor.row?.entry) throw Error('Локальная копия отсутствует.')
+
+      if (
+        !confirm(
+          'Удалить шаблон с устройства?\n\n' +
+            'Редактор будет закрыт. Облачная копия ' +
+            'сохранится, если она существует.'
+        )
+      )
+        return
+
+      await writeTemplate(editor.row.entry, true)
+
+      closeTemplateEditor()
+
+      await refreshCatalog()
+
+      navigate('templates')
+
+      notice('Локальная копия шаблона удалена.')
+    }
+  }
+  async function toggleActiveCloud(enabled: boolean) {
+    if (!workingOwner || !signedInOwner || !online)
+      throw Error('Необходимо войти в аккаунт и подключиться к интернету.')
+
+    const kind = activeKind
+    const id = activeId
+
+    if (!kind || !id) throw Error('Документ не открыт.')
+
+    if (!enabled) {
+      if (
+        !confirm(
+          'Удалить рабочую копию из облака?\n\n' +
+            'Локальные копии на устройствах ' +
+            'и публикация сохранятся.'
+        )
+      )
+        return
+
+      if (kind === 'template' && templateDirty)
+        throw Error('Сначала сохраните изменения шаблона.')
+
+      if (kind === 'lesson') {
+        flushPendingSave()
+        await queue.current
+
+        if (failure.current) throw failure.current
+      }
+
+      // Если это единственная рабочая копия,
+      // после удаления закрываем редактор.
+      const records = await workingRecords(workingOwner)
+
+      const record = records.find(
+        (item) => item.kind === kind && item.id === id.toLowerCase()
+      )
+
+      await removeWorkingCloud(workingOwner, kind, id)
+
+      if (!record?.localId) {
+        if (kind === 'lesson') {
+          current.current = null
+          setDoc(null)
+          navigate(editorOrigin.current)
+        } else {
+          closeTemplateEditor()
+          navigate('templates')
+        }
+      }
+
+      working.retry()
+
+      await refresh()
+      await refreshCatalog()
+
+      notice('Рабочая облачная копия удалена.')
+      return
+    }
+
+    // Включение облачного хранения.
+    // Сначала гарантируем наличие локального JSON.
+
+    if (kind === 'lesson') {
+      await toggleActiveLocal(true)
+    } else {
+      await persistActiveTemplate()
+    }
+
+    await requestCloudCreation(workingOwner, kind, id)
+
+    working.retry()
+
+    notice('Документ поставлен в очередь загрузки в облако.')
+  }
+  async function toggleActivePublication(enabled: boolean) {
+    const draft = current.current
+
+    if (!draft) throw Error('Методичка не открыта.')
+
+    if (!owner || !signedInOwner || !online)
+      throw Error('Для публикации необходимо подключение к облаку.')
+
+    flushPendingSave()
+    await queue.current
+
+    if (failure.current) throw failure.current
+
+    if (enabled) {
+      if (
+        !confirm(
+          'Опубликовать текущую методичку?\n\n' +
+            'Она будет доступна по публичной ссылке.'
+        )
+      )
+        return
+
+      await act('publish')
+      return
+    }
+
+    if (
+      !confirm(
+        'Снять методичку с публикации?\n\n' +
+          'Публичная ссылка перестанет работать. ' +
+          'Рабочие копии сохранятся.'
+      )
+    )
+      return
+
+    // Не удаляем публикацию, которую другой
+    // компьютер успел обновить после проверки.
+    const latestHash = await publishedHash(draft.id)
+
+    if (latestHash !== baseline)
+      throw Error('Публикация изменилась. Повторно откройте методичку.')
+
+    await unpublish(draft.id)
+
+    localStorage.removeItem(marker(draft.id))
+
+    openedPublication.current = ''
+
+    setBaseline('')
+    setPublicationVerified(true)
+
+    publicationChanged((stamp) => stamp + 1)
+
+    notice('Методичка снята с публикации.')
+  }
+  async function resolveActiveConflict() {
+    if (
+      !confirm(
+        'Для разрешения конфликта необходимо ' +
+          'сохранить работу и закрыть редактор. Продолжить?'
+      )
+    )
+      return
+
+    if (doc) {
+      dragPointer.current = null
+      flushPendingSave()
+
+      await queue.current
+
+      if (failure.current) throw failure.current
+
+      current.current = null
+
+      setDoc(null)
+
+      navigate(editorOrigin.current)
+
+      await refresh()
+    }
+
+    if (editingTemplate) {
+      if (templateDirty) await persistActiveTemplate()
+
+      closeTemplateEditor()
+
+      navigate('templates')
+    }
+
+    working.retry()
+
+    dialog('working-sync')
+  }
+  const availability: AvailabilityProps | undefined =
+    activeId && activeKind
+      ? {
+          state: {
+            local: doc
+              ? rev.current > 0 &&
+                (status === 'Сохранено' || !!activeRecord?.localId)
+              : !!editingTemplate?.row?.entry,
+
+            cloud: !client
+              ? false
+              : activeRecord?.meta
+                ? !activeRecord.meta.deleted
+                : working.checked && !working.errors.length
+                  ? false
+                  : null,
+
+            published: doc
+              ? publicationVerified && online
+                ? !!baseline
+                : null
+              : undefined,
+
+            publicationOutdated:
+              !!doc &&
+              publicationVerified &&
+              !!baseline &&
+              signature?.doc === doc &&
+              signature.hash !== baseline,
+
+            pending: !!activeRecord?.dirty,
+
+            syncing: working.syncing && !!activeRecord?.dirty,
+
+            conflict: !!activeRecord?.conflict,
+
+            offline: !online,
+
+            error: !!activeRecord?.dirty && working.errors.length > 0,
+
+            localSaving:
+              !!doc &&
+              (status === 'Сохранение…' ||
+                status === 'Есть несохранённые изменения'),
+
+            localError: !!doc && status.startsWith('Ошибка'),
+          },
+
+          disabled: !!busy,
+
+          cloudDisabled: !workingOwner || !signedInOwner,
+
+          onLocal: toggleActiveLocal,
+
+          onCloud: toggleActiveCloud,
+
+          onPublished: doc ? toggleActivePublication : undefined,
+
+          onSync: () => {
+            working.retry()
+          },
+
+          onConflict: resolveActiveConflict,
+
+          onUpdatePublication: doc ? () => act('publish') : undefined,
+
+          onError: notice,
+        }
+      : undefined
   async function remove(en: LessonRow, cloud = false) {
     const title = en.deck.title
 
@@ -1479,14 +1897,7 @@ function App() {
           key={editingTemplate.t.deck.id}
           libraryAvailable={owner && online}
           template={editingTemplate.t}
-          syncLabel={
-            activeSyncConflict
-              ? 'Конфликт шаблона'
-              : working.presence
-                ? 'Редактируется на другом устройстве'
-                : sync.label
-          }
-          openSync={() => dialog('working-sync')}
+          availability={availability}
           set={templateHistory.set}
           history={templateHistory}
           notice={notice}
@@ -1521,14 +1932,7 @@ function App() {
             templateHistory.update((t) => t && { ...t, deck: fn(t.deck) })
           }
           back={requestTemplateExit}
-          syncLabel={
-            activeSyncConflict
-              ? 'Конфликт шаблона'
-              : working.presence
-                ? 'Редактируется на другом устройстве'
-                : sync.label
-          }
-          openSync={() => dialog('working-sync')}
+          availability={availability}
           saveTemplate={() => task('Сохраняем шаблон…', saveTemplateAndExit)}
           view={() => setWatch(editingTemplate.t.deck)}
           exportTemplate={() =>
@@ -1581,25 +1985,8 @@ function App() {
               ? 'Открыто из облака'
               : status
           }
-          syncLabel={
-            activeSyncConflict
-              ? 'Конфликт черновика'
-              : working.presence
-                ? 'Редактируется на другом устройстве'
-                : sync.label
-          }
-          openSync={() => dialog('working-sync')}
           libraryAvailable={owner && online}
-          publishLabel={
-            same
-              ? 'Опубликовано'
-              : newerPublication
-                ? 'Публикация изменилась'
-                : baseline
-                  ? 'Обновить публикацию'
-                  : 'Опубликовать'
-          }
-          canPublish={canPublish}
+          availability={availability}
           back={() => requestExit()}
           view={() => setWatch(doc)}
           action={(id) =>

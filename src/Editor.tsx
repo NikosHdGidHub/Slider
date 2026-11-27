@@ -33,10 +33,6 @@ import {
   Save,
   Type,
   Play,
-  Check,
-  Cloud,
-  CircleAlert,
-  LoaderCircle,
   FileDown,
   HardDriveDownload,
   Palette,
@@ -69,12 +65,14 @@ import {
 } from './model'
 import { Files } from './Files'
 import { optimize, checkImageBudget } from './media'
+import { AvailabilityControl, AvailabilityProps } from './AvailabilityControl'
 
 type Props = {
   publishLabel?: string
   canPublish?: boolean
   libraryAvailable?: boolean
   history: HistoryControls
+  availability?: AvailabilityProps
   deck: Deck
   initialSlideId?: string
   styleLibrary?: StyleLibrary
@@ -102,13 +100,12 @@ export function Editor({
   initialSlideId,
   publishLabel,
   canPublish,
+  availability,
   libraryAvailable,
   saveAs,
   styleLibrary,
   templates = [],
   resolveTemplate,
-  syncLabel,
-  openSync,
   saveTemplate,
   exportTemplate,
   headerTools,
@@ -589,26 +586,12 @@ export function Editor({
                   change((d) => ({ ...d, title: 'Без названия' }))
               }}
             />
-            <small className="edit-status" role="status" title={status}>
-              {status.startsWith('Ошибка') ? (
-                <CircleAlert size={15} />
-              ) : status === 'Сохранение…' ? (
-                <LoaderCircle size={15} />
-              ) : (
-                <Check size={15} />
-              )}
-              <span>{status}</span>
-            </small>
-            {openSync && (
-              <button
-                className="editor-sync"
-                type="button"
-                onClick={openSync}
-                title={syncLabel}
-                aria-label={'Синхронизация: ' + syncLabel}
-              >
-                <Cloud size={16} /> <span>{syncLabel}</span>
-              </button>
+            {availability ? (
+              <AvailabilityControl {...availability} />
+            ) : (
+              <small className="edit-status" role="status" title={status}>
+                {status}
+              </small>
             )}
             {!saveTemplate && (
               <button
@@ -622,28 +605,15 @@ export function Editor({
               </button>
             )}
 
-            {publishLabel && (
+            {!availability && publishLabel && (
               <button
-                className={
-                  publishLabel === 'Синхронизовать'
-                    ? canPublish
-                      ? 'secondary sync-attention'
-                      : 'secondary'
-                    : publishLabel === 'Опубликовать' ||
-                        publishLabel === 'Обновить публикацию'
-                      ? 'primary'
-                      : 'secondary'
-                }
+                className="primary"
                 disabled={!canPublish}
                 title={publishLabel}
                 aria-label={publishLabel}
                 onClick={() => action('publish')}
               >
-                {publishLabel === 'Синхронизовать' ? (
-                  <RefreshCw size={16} />
-                ) : (
-                  <CloudUpload size={16} />
-                )}
+                <CloudUpload size={16} />
                 <span>{publishLabel}</span>
               </button>
             )}

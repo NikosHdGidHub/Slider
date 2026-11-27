@@ -9,6 +9,10 @@ import {
   Save,
   SplitSquareHorizontal,
 } from 'lucide-react'
+import {
+  AvailabilityControl,
+  type AvailabilityProps,
+} from './AvailabilityControl'
 import { CanvasViewport } from './CanvasViewport'
 import {
   HistoryButtons,
@@ -111,8 +115,7 @@ function Padding({
 }
 export function GridDesigner({
   libraryAvailable,
-  syncLabel,
-  openSync,
+  availability,
   template,
   set,
   history,
@@ -121,8 +124,7 @@ export function GridDesigner({
   notice,
 }: {
   libraryAvailable?: boolean
-  syncLabel?: string
-  openSync?: () => void
+  availability?: AvailabilityProps
   template: Template
   history: HistoryControls
   set: (t: Template) => void
@@ -377,8 +379,7 @@ export function GridDesigner({
         history={history}
         change={(update) => set({ ...template, deck: update(deck) })}
         status="Редактор оформления"
-        syncLabel={syncLabel}
-        openSync={openSync}
+        availability={availability}
         exitLabel="К сетке шаблона"
         back={() => setObjects(false)}
         headerTools={
@@ -403,16 +404,6 @@ export function GridDesigner({
         inspectorRequest={inspectorRequest}
         header={
           <>
-            {openSync && (
-              <button
-                className="editor-sync"
-                type="button"
-                onClick={openSync}
-                aria-label={'Синхронизация: ' + syncLabel}
-              >
-                {syncLabel}
-              </button>
-            )}
             <IconButton label="В библиотеку" onClick={back}>
               <ArrowLeft />
             </IconButton>
@@ -431,9 +422,13 @@ export function GridDesigner({
                 })
               }
             />
-            <small className="edit-status" role="status">
-              {structural ? 'Шаблон компоновки' : 'Главный шаблон'}
-            </small>
+            {availability ? (
+              <AvailabilityControl {...availability} />
+            ) : (
+              <small className="edit-status" role="status">
+                {structural ? 'Шаблон компоновки' : 'Главный шаблон'}
+              </small>
+            )}
             <IconButton
               label="Оформление и объекты"
               onClick={() => {

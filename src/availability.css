@@ -331,3 +331,20 @@
     animation: none;
   }
 }
+.edit-head {
+  position: relative;
+  overflow: visible;
+}
+
+.edit-head .availability-control {
+  flex-shrink: 0;
+}
+
+.edit-head .availability-panel {
+  z-index: 500;
+}
+
+.edit-head .availability-option,
+.edit-head .availability-action {
+  white-space: normal;
+}
