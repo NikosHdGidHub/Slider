@@ -51,6 +51,9 @@ export async function publicationUsage() {
 }
 
 export function removeUnusedFile(row: Resource) {
+  if (row.bucket === 'atlas-private-resources') {
+    throw Error('Удаление приватных ресурсов ' + 'пока недоступно.')
+  }
   return withStorageLock(async (bucket) => {
     const usage = await publicationUsage()
     if (usage.has(resourceKey(row)))
@@ -60,12 +63,13 @@ export function removeUnusedFile(row: Resource) {
     const references = await client!.rpc('atlas_working_resource_urls', {
       expected_owner: adminId,
     })
-    if (
-      references.error &&
-      references.error.code !== 'PGRST202' &&
-      references.error.code !== '42883'
-    )
-      throw Error('Не удалось проверить ссылки в облачных черновиках.')
+    if (references.error || !Array.isArray(references.data)) {
+      throw Error(
+        'Не удалось проверить использование ' +
+          'файла в облачных документах. ' +
+          'Удаление отменено.'
+      )
+    }
     const [lessons, templates, backups, pending] = await Promise.all([
       entries(),
       localTemplates(),

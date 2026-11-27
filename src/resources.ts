@@ -8,7 +8,7 @@ import {
 } from './cloud'
 import { validateDeck } from './model'
 import { optimize } from './media'
-
+import { workingAsset } from './storage'
 export type Resource = {
   sha: string | null
   name: string
@@ -18,6 +18,24 @@ export type Resource = {
   created_at: string
   bucket: string
   path: string
+}
+export type ResourceDocument = {
+  id: string
+  title: string
+  kind: 'lesson' | 'template'
+  deleted: string | null
+}
+
+export type WorkingResource = {
+  sha: string
+  bucket: string
+  path: string
+  mime: string
+  size: number | null
+  created_at: string
+
+  documents: ResourceDocument[]
+  trash: ResourceDocument[]
 }
 const types: Record<string, string> = {
   png: 'image/png',
@@ -45,6 +63,40 @@ export async function resources(): Promise<Resource[]> {
     rows.push(...data)
     if (data.length < 100) return rows
   }
+}
+export async function workingResources(
+  owner: string
+): Promise<WorkingResource[]> {
+  const { data, error } = await db()
+    .rpc('atlas_resource_library', {
+      expected_owner: owner,
+    })
+    .abortSignal(AbortSignal.timeout(20000))
+
+  if (error) {
+    if (error.code === 'PGRST202' || error.code === '42883') {
+      throw Error(
+        'Облачная библиотека ресурсов ' +
+          'не настроена. Примените ' +
+          'resource-library.sql.'
+      )
+    }
+
+    throw Error(error.message)
+  }
+
+  if (!Array.isArray(data)) {
+    throw Error('Получен некорректный каталог ресурсов.')
+  }
+
+  return data as WorkingResource[]
+}
+export async function workingImages(owner: string): Promise<WorkingResource[]> {
+  const rows = await workingResources(owner)
+
+  const supported = new Set(['image/png', 'image/jpeg', 'image/webp'])
+
+  return rows.filter((row) => supported.has(row.mime))
 }
 export function imageUrl(row: Resource) {
   return db().storage.from(row.bucket).getPublicUrl(row.path).data.publicUrl
@@ -225,4 +277,56 @@ export async function uploadImage(
   if (!extension)
     throw new Error('Загрузите растровое изображение PNG, WebP или JPEG.')
   return imageUrl(await storeFile(blob, 'Изображение.' + extension, '', writer))
+}
+export async function readWorkingImage(
+  owner: string,
+  row: WorkingResource
+): Promise<Blob> {
+  if (
+    row.bucket !== 'atlas-private-resources' ||
+    row.path !== owner + '/' + row.sha ||
+    !/^[0-9a-f]{64}$/.test(row.sha)
+  ) {
+    throw Error('Некорректный путь облачного ресурса.')
+  }
+
+  const supported = new Set(['image/png', 'image/jpeg', 'image/webp'])
+
+  if (!supported.has(row.mime)) {
+    throw Error('Формат изображения не поддерживается.')
+  }
+
+  const { data, error } = await db()
+    .storage.from(row.bucket)
+    .download(
+      row.path,
+      {},
+      {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(30000),
+      }
+    )
+
+  if (error || !data) {
+    throw Error(error?.message ?? 'Облачное изображение недоступно.')
+  }
+
+  if ((await digest(data)) !== row.sha) {
+    throw Error('Контрольная сумма изображения ' + 'не совпадает.')
+  }
+
+  return new Blob([data], { type: row.mime })
+}
+export async function saveWorkingImageLocally(
+  owner: string,
+  row: WorkingResource
+) {
+  const blob = await readWorkingImage(owner, row)
+
+  await workingAsset(owner, row.sha, {
+    blob,
+    uploaded: true,
+    retained: true,
+    createdAt: Date.now(),
+  })
 }
