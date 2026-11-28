@@ -487,9 +487,15 @@ h1 {
   text-overflow: ellipsis;
   white-space: nowrap;
   font: 12px system-ui;
-  background: #edf7f3;
+  background: #c9d6d2;
   color: #294a40;
   padding: 2px;
+  opacity: 0.45;
+  transition: opacity 150ms ease;
+}
+.grid-cell:hover span,
+.grid-cell.selected span {
+  opacity: 0.8;
 }
 .grid-cell.selected {
   outline: 3px solid #2d8168;
@@ -1146,20 +1152,21 @@ h1 {
 .transfer-filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-  gap: .75rem;
+  gap: 0.75rem;
 }
 
 .transfer-filters label {
   display: grid;
-  gap: .3rem;
+  gap: 0.3rem;
   min-width: 0;
 }
 
-.transfer-filters input, .transfer-filters select {
+.transfer-filters input,
+.transfer-filters select {
   min-width: 0;
   width: 100%;
   min-height: 44px;
-  padding: .45rem .65rem;
+  padding: 0.45rem 0.65rem;
 }
 
 .transfer-thumb {
@@ -1179,20 +1186,30 @@ h1 {
   object-fit: cover;
 }
 
-.transfer-choice-title { min-width: 0; }
-.transfer-choice-title small { display: block; color: #486151; }
-.transfer-connected { color: #386a51; }
+.transfer-choice-title {
+  min-width: 0;
+}
+.transfer-choice-title small {
+  display: block;
+  color: #486151;
+}
+.transfer-connected {
+  color: #386a51;
+}
 
 .transfer-send {
   position: sticky;
   bottom: 0;
-  padding: .5rem 0 max(.75rem, env(safe-area-inset-bottom));
+  padding: 0.5rem 0 max(0.75rem, env(safe-area-inset-bottom));
   background: #fff;
   border-top: 1px solid #d8e2d8;
   z-index: 1;
 }
 
-.transfer-send > button { width: 100%; justify-content: center; }
+.transfer-send > button {
+  width: 100%;
+  justify-content: center;
+}
 
 @media (max-width: 520px) {
   .transfer-screen[data-phone] {

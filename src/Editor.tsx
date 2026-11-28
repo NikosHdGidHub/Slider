@@ -1,4 +1,6 @@
 import { CanvasViewport } from './CanvasViewport'
+import { TextStyleManager } from './TextStyleManager'
+import { CellAppearance } from './CellAppearance'
 import {
   HistoryButtons,
   IconButton,
@@ -16,6 +18,8 @@ import {
   applyKind,
   inheritedBackground,
   freezeDecoration,
+  validateGrid,
+  type Cell,
 } from './grid'
 import { shapes } from './schema'
 import { useEffect, useRef, useState } from 'react'
@@ -35,16 +39,9 @@ import {
   Play,
   FileDown,
   HardDriveDownload,
-  Palette,
 } from 'lucide-react'
 import type { StyleLibrary } from './styleLibrary'
-import {
-  TextPanel,
-  ShapePanel,
-  GeometryPanel,
-  StylesPanel,
-  Num,
-} from './Properties'
+import { TextPanel, ShapePanel, GeometryPanel, Num } from './Properties'
 import { applyLayout, type Template } from './catalog'
 import { importSVG } from './vectorImport'
 import { Stage } from './Stage'
@@ -75,6 +72,8 @@ type Props = {
   availability?: AvailabilityProps
   deck: Deck
   initialSlideId?: string
+  initialSlotId?: string
+  allowBleed?: boolean
   styleLibrary?: StyleLibrary
   templates?: Template[]
   resolveTemplate?: (t: Template) => Promise<Template>
@@ -98,6 +97,8 @@ type Props = {
 export function Editor({
   deck,
   initialSlideId,
+  initialSlotId,
+  allowBleed,
   publishLabel,
   canPublish,
   availability,
@@ -124,7 +125,11 @@ export function Editor({
   const clipboard = useRef<Item[]>([])
   const [sid, choose] = useState(initialSlideId ?? deck.slides[0].id),
     [sel, select] = useState('')
-  const [selectedSlot, setSelectedSlot] = useState('')
+  const [selectedSlot, setSelectedSlot] = useState(initialSlotId ?? '')
+  const [styleManager, setStyleManager] = useState(false)
+  const freeDecoration =
+    !!saveTemplate &&
+    (gridTemplateKind === 'presentation' || allowBleed === true)
   const [edit, setEdit] = useState<
     (TextEditStart & { id: string; slideId: string; source?: Item }) | null
   >(null)
@@ -152,6 +157,40 @@ export function Editor({
   const itemCell = item?.fixed
     ? undefined
     : locations.find((v) => v.id === item?.slot)?.cell
+  const cellSlot = locations.find(
+    (v) => v.id === (selectedSlot || (item && !item.fixed ? target(item) : ''))
+  )
+  const realCellSlot =
+    (cellSlot?.id === 'free'
+      ? locations.find((v) => v.id === 'm/' + cellSlot.cell.id)
+      : cellSlot) ??
+    locations.find((v) => v.id.startsWith('s/')) ??
+    locations.find((v) => v.id.startsWith('m/'))
+  function updateCell(fields: Partial<Cell>) {
+    if (!realCellSlot || !saveTemplate) return
+    const id = realCellSlot.id
+    change((d) => {
+      const next = structuredClone(d)
+      const page = next.slides.find((s) => s.id === slide.id)
+      if (!page) return d
+      const grid = id.startsWith('s/')
+        ? page.structure
+        : next.master.schemes[page.kind ?? 'normal']
+      if (!grid) return d
+      const c = grid.cells.find((c) => c.id === id.slice(2))
+      if (!c) return d
+      Object.assign(c, fields)
+      if (fields.fill === undefined && Object.hasOwn(fields, 'fill'))
+        delete c.fill
+      try {
+        validateGrid(grid, id.startsWith('s/'))
+      } catch (error) {
+        notice((error as Error).message)
+        return d
+      }
+      return next
+    })
+  }
   const textEdit = edit?.slideId === slide.id ? edit : null
   const draft =
     textEdit?.source && !slide.items.some((o) => o.id === textEdit.id)
@@ -201,6 +240,19 @@ export function Editor({
     const available = slots(deck.master, s),
       used = new Set(s.items.map(target))
     return added.map((o) => {
+      // In the presentation design editor, new objects are decorations unless
+      // the user explicitly selected a compatible content slot.
+      if (
+        freeDecoration &&
+        !available.some(
+          (v) =>
+            v.id === chosenSlot.current &&
+            v.id !== 'free' &&
+            acceptsItem(v.cell, o) &&
+            (v.cell.type === 'free' || !used.has(v.id))
+        )
+      )
+        return { ...o, fixed: true, role: 'decoration' as const }
       const match =
         available.find(
           (v) =>
@@ -245,7 +297,7 @@ export function Editor({
     function key(e: KeyboardEvent) {
       if (
         (e.target as HTMLElement).closest(
-          'input,textarea,select,[contenteditable],[data-text-controls]'
+          'input,textarea,select,[contenteditable],[data-text-controls],.text-style-manager'
         )
       )
         return
@@ -549,6 +601,17 @@ export function Editor({
   return (
     <>
       {context.menu}
+      {styleManager && (
+        <TextStyleManager
+          deck={deck}
+          slide={slide}
+          initialStyleId={selectedStyleId}
+          library={styleLibrary}
+          change={change}
+          close={() => setStyleManager(false)}
+          notice={notice}
+        />
+      )}
       {picker && (
         <div className="overlay">
           <section
@@ -669,6 +732,8 @@ export function Editor({
                 onClick={() => {
                   choose(s.id)
                   select('')
+                  setSelectedSlot('')
+                  chosenSlot.current = ''
                 }}
               >
                 <b>{i + 1}</b>
@@ -724,6 +789,15 @@ export function Editor({
               </IconButton>
             </div>
             <HistoryButtons history={history} />
+            <IconButton
+              label="Текстовые стили"
+              onClick={() => {
+                setEdit(null)
+                setStyleManager(true)
+              }}
+            >
+              <Type />
+            </IconButton>
           </>
         }
         notes={
@@ -795,343 +869,364 @@ export function Editor({
                 ))}
               </PropertySection>
             </>
-            {!item && activeSlot && isTextType(activeSlot.cell.type) && (
-              <PropertySection
-                id="slot-source"
-                title="Содержание ячейки"
-                initial
-              >
-                <p>
-                  {sourceText(activeSlot.cell) || 'Пустое исходное значение'}
-                </p>
-                <button onClick={() => editSource(activeSlot.id)}>
-                  Редактировать на холсте
-                </button>
-              </PropertySection>
-            )}
-            {item && !editable(item) ? (
-              <small>
-                {item.locked ? 'Слой заблокирован' : 'Слой закреплён в шаблоне'}
-              </small>
-            ) : item ? (
-              <>
-                {item.type === 'image' && (
-                  <PropertySection
-                    id="image-crop"
-                    title="Кадрирование изображения"
-                    initial
-                  >
+            <section
+              className="inspector-level"
+              aria-label="Область редактирования"
+            >
+              <h3>Область редактирования</h3>
+              <PropertySection id="slide" title="Свойства слайда" initial>
+                {describe && (
+                  <label>
+                    Описание шаблона
+                    <textarea
+                      maxLength={2000}
+                      value={description}
+                      onChange={(e) => describe(e.target.value)}
+                    />
+                  </label>
+                )}
+                {!gridTemplateKind && (
+                  <label>
+                    Роль слайда
+                    <select
+                      value={slide.kind ?? 'normal'}
+                      onChange={(e) =>
+                        modify((s) =>
+                          applyKind(
+                            deck.master,
+                            s,
+                            e.target.value as NonNullable<Slide['kind']>
+                          )
+                        )
+                      }
+                    >
+                      <option value="normal">Обычный</option>
+                      <option value="title">Титульный</option>
+                      <option value="end">Завершающий</option>
+                    </select>
+                  </label>
+                )}
+                {!slide.structure &&
+                  deck.master.name === 'По умолчанию' &&
+                  (slide.kind ?? 'normal') === 'normal' && (
                     <label>
-                      Заполнение ячейки
+                      Компоновка
                       <select
-                        value={item.imageFit ?? 'contain'}
-                        onChange={(e) =>
-                          patch(item.id, {
-                            imageFit: e.target.value as Item['imageFit'],
-                          })
-                        }
+                        aria-label="Применить компоновку"
+                        value=""
+                        onChange={async (e) => {
+                          const t = templates.find(
+                            (t) => t.deck.id === e.target.value
+                          )
+                          if (!t) return
+                          if (
+                            slide.items.some((o) => o.role !== 'decoration') &&
+                            !confirm(
+                              'Перенести прежнее содержимое в неразмещённые объекты и применить компоновку?'
+                            )
+                          )
+                            return
+                          try {
+                            const template = resolveTemplate
+                              ? await resolveTemplate(t)
+                              : t
+                            change((latest) => {
+                              if (latest !== deck) {
+                                notice(
+                                  'Методичка изменилась. Примените компоновку ещё раз.'
+                                )
+                                return latest
+                              }
+                              return applyLayout(latest, slide.id, template)
+                            })
+                          } catch (err) {
+                            notice((err as Error).message)
+                          }
+                        }}
                       >
-                        <option value="contain">Вписать целиком</option>
-                        <option value="cover">Заполнить с обрезкой</option>
+                        <option value="">Выберите компоновку</option>
+                        {templates
+                          .filter((t) => t.kind === 'layout' && !t.format)
+                          .map((t) => (
+                            <option key={t.deck.id} value={t.deck.id}>
+                              {t.deck.title}
+                            </option>
+                          ))}
                       </select>
                     </label>
-                    {item.imageFit === 'cover' &&
-                      (['focusX', 'focusY'] as const).map((k, i) => (
-                        <label key={k}>
-                          {i ? 'Фокус по вертикали' : 'Фокус по горизонтали'}
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            value={item[k] ?? 50}
-                            onChange={(e) =>
-                              patch(item.id, { [k]: +e.target.value })
-                            }
-                          />
-                        </label>
-                      ))}
-                  </PropertySection>
+                  )}
+                {(deck.migrated ||
+                  (saveTemplate &&
+                    !deck.slides.some((s) => s.structure) &&
+                    deck.master.name === 'По умолчанию')) && (
+                  <details>
+                    <summary>Область прежней компоновки</summary>
+                    {(['x', 'y', 'w', 'h'] as const).map((k) => (
+                      <Num
+                        key={k}
+                        label={k}
+                        value={
+                          (slide.area ?? { x: 0, y: 0, w: 1280, h: 720 })[k]
+                        }
+                        min={k === 'x' || k === 'y' ? 0 : 1}
+                        max={k === 'x' || k === 'w' ? 1280 : 720}
+                        change={(v) =>
+                          modify((s) => ({
+                            ...s,
+                            area: {
+                              x: 0,
+                              y: 0,
+                              w: 1280,
+                              h: 720,
+                              ...s.area,
+                              [k]: v,
+                            },
+                          }))
+                        }
+                      />
+                    ))}
+                  </details>
                 )}
-                {item.type === 'shape' && (
-                  <ShapePanel item={item} patch={(v) => patch(item.id, v)} />
-                )}
-                {item.type !== 'image' && (
-                  <TextPanel
-                    key={item.id}
+              </PropertySection>
+              {gridTemplateKind !== 'layout' && (
+                <PropertySection id="slide-background" title="Фон" initial>
+                  <Background
+                    libraryAvailable={libraryAvailable}
                     deck={deck}
-                    item={item}
-                    cell={itemCell}
-                    editOnCanvas={
-                      target(item) === 'tray' || item.hidden
-                        ? undefined
-                        : () => editText(item.id)
+                    key={slide.id}
+                    slide={slide}
+                    notice={notice}
+                    update={(next) =>
+                      modify(() => ({ ...next, ownBackground: true }))
                     }
-                    reset={
-                      isTextType(itemCell?.type)
-                        ? () => {
-                            setSelectedSlot(target(item))
-                            removeItem()
-                            select('')
-                          }
-                        : undefined
-                    }
-                    patch={(v) => patch(item.id, v)}
-                  />
-                )}
-                {(saveTemplate ||
-                  slots(deck.master, slide).find((v) => v.id === target(item))
-                    ?.cell.type === 'free') && (
-                  <GeometryPanel
-                    item={item}
-                    canPin={gridTemplateKind === 'presentation'}
-                    patch={(v) => {
-                      if (
-                        gridTemplateKind === 'presentation' &&
-                        v.fixed === true
-                      ) {
-                        patch(item.id, {
-                          ...freezeDecoration(item, locations),
-                          role: item.role,
-                        })
-                      } else if (item.fixed && v.fixed === false) {
-                        const free = slots(deck.master, slide).find(
-                          (p) => p.cell.type === 'free'
+                    reset={() =>
+                      modify((s) =>
+                        inheritedBackground(
+                          s,
+                          deck.master.art?.[s.kind ?? 'normal']
                         )
-                        patch(item.id, {
-                          fixed: undefined,
-                          slot: free?.id ?? 'tray',
-                          ...(free
-                            ? {
-                                x: (item.x - free.box.x) / free.scale,
-                                y: (item.y - free.box.y) / free.scale,
-                                w: item.w / free.scale,
-                                h: item.h / free.scale,
-                                contentScale:
-                                  (item.contentScale ?? 1) / free.scale,
-                              }
-                            : {}),
-                        })
-                      } else patch(item.id, v)
-                    }}
+                      )
+                    }
                   />
-                )}
+                  {!saveTemplate && (
+                    <button
+                      onClick={() =>
+                        change((d) => {
+                          const kind = slide.kind ?? 'normal',
+                            base = d.master.art?.[kind] ?? {
+                              ...newSlide(),
+                              kind,
+                            }
+                          const sample = inheritedBackground(base, slide)
+                          return {
+                            ...d,
+                            master: {
+                              ...d.master,
+                              art: { ...d.master.art, [kind]: sample },
+                            },
+                            slides: d.slides.map((s) =>
+                              (s.kind ?? 'normal') === kind &&
+                              (s.id === slide.id || !s.ownBackground)
+                                ? inheritedBackground(s, sample)
+                                : s
+                            ),
+                          }
+                        })
+                      }
+                    >
+                      Применить фон к схеме этой методички
+                    </button>
+                  )}
+                </PropertySection>
+              )}
+              {saveTemplate && realCellSlot && (
+                <>
+                  <label>
+                    Редактируемая ячейка
+                    <select
+                      value={realCellSlot.id}
+                      onChange={(e) => setSelectedSlot(e.target.value)}
+                    >
+                      {locations
+                        .filter(
+                          (v) => v.id.startsWith('m/') || v.id.startsWith('s/')
+                        )
+                        .map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.id.startsWith('m/') ? 'Схема' : 'Компоновка'} ·{' '}
+                            {v.cell.row + 1} × {v.cell.col + 1} · {v.cell.type}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <CellAppearance
+                    cell={realCellSlot.cell}
+                    change={updateCell}
+                  />
+                </>
+              )}
+            </section>
+            <section className="inspector-level" aria-label="Выбранный объект">
+              <h3>Выбранный объект</h3>
+              {!item && activeSlot && isTextType(activeSlot.cell.type) && (
                 <PropertySection
-                  id="object-order"
-                  title="Порядок и удаление объекта"
+                  id="slot-source"
+                  title="Содержание ячейки"
                   initial
                 >
-                  <div className="field-pair">
-                    {[-1, 1].map((delta) => (
-                      <button
-                        key={delta}
-                        disabled={
-                          !slide.items[slide.items.indexOf(item) + delta]
-                        }
-                        onClick={() =>
-                          modify((s) => {
-                            const items = s.items.slice(),
-                              i = items.findIndex((o) => o.id === sel)
-                            ;[items[i], items[i + delta]] = [
-                              items[i + delta],
-                              items[i],
-                            ]
-                            return { ...s, items }
-                          })
-                        }
-                      >
-                        {delta < 0 ? 'Слой ниже' : 'Слой выше'}
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={removeItem}>
-                    <Trash2 />
-                    Удалить объект
+                  <p>
+                    {sourceText(activeSlot.cell) || 'Пустое исходное значение'}
+                  </p>
+                  <button onClick={() => editSource(activeSlot.id)}>
+                    Редактировать на холсте
                   </button>
                 </PropertySection>
-                <button onClick={() => select('')}>
-                  <Palette />
-                  Свойства слайда
-                </button>
-              </>
-            ) : (
-              <>
-                <PropertySection id="slide" title="Свойства слайда" initial>
-                  {describe && (
-                    <label>
-                      Описание шаблона
-                      <textarea
-                        maxLength={2000}
-                        value={description}
-                        onChange={(e) => describe(e.target.value)}
-                      />
-                    </label>
-                  )}
-                  {!gridTemplateKind && (
-                    <label>
-                      Роль слайда
-                      <select
-                        value={slide.kind ?? 'normal'}
-                        onChange={(e) =>
-                          modify((s) =>
-                            applyKind(
-                              deck.master,
-                              s,
-                              e.target.value as NonNullable<Slide['kind']>
-                            )
-                          )
-                        }
-                      >
-                        <option value="normal">Обычный</option>
-                        <option value="title">Титульный</option>
-                        <option value="end">Завершающий</option>
-                      </select>
-                    </label>
-                  )}
-                  {!slide.structure &&
-                    deck.master.name === 'По умолчанию' &&
-                    (slide.kind ?? 'normal') === 'normal' && (
+              )}
+              {item && !editable(item) ? (
+                <small>
+                  {item.locked
+                    ? 'Слой заблокирован'
+                    : 'Слой закреплён в шаблоне'}
+                </small>
+              ) : item ? (
+                <>
+                  {item.type === 'image' && (
+                    <PropertySection
+                      id="image-crop"
+                      title="Кадрирование изображения"
+                      initial
+                    >
                       <label>
-                        Компоновка
+                        Заполнение ячейки
                         <select
-                          aria-label="Применить компоновку"
-                          value=""
-                          onChange={async (e) => {
-                            const t = templates.find(
-                              (t) => t.deck.id === e.target.value
-                            )
-                            if (!t) return
-                            if (
-                              slide.items.some(
-                                (o) => o.role !== 'decoration'
-                              ) &&
-                              !confirm(
-                                'Перенести прежнее содержимое в неразмещённые объекты и применить компоновку?'
-                              )
-                            )
-                              return
-                            try {
-                              const template = resolveTemplate
-                                ? await resolveTemplate(t)
-                                : t
-                              change((latest) => {
-                                if (latest !== deck) {
-                                  notice(
-                                    'Методичка изменилась. Примените компоновку ещё раз.'
-                                  )
-                                  return latest
-                                }
-                                return applyLayout(latest, slide.id, template)
-                              })
-                            } catch (err) {
-                              notice((err as Error).message)
-                            }
-                          }}
+                          value={item.imageFit ?? 'contain'}
+                          onChange={(e) =>
+                            patch(item.id, {
+                              imageFit: e.target.value as Item['imageFit'],
+                            })
+                          }
                         >
-                          <option value="">Выберите компоновку</option>
-                          {templates
-                            .filter((t) => t.kind === 'layout' && !t.format)
-                            .map((t) => (
-                              <option key={t.deck.id} value={t.deck.id}>
-                                {t.deck.title}
-                              </option>
-                            ))}
+                          <option value="contain">Вписать целиком</option>
+                          <option value="cover">Заполнить с обрезкой</option>
                         </select>
                       </label>
-                    )}
-                  {(deck.migrated ||
-                    (saveTemplate &&
-                      !deck.slides.some((s) => s.structure) &&
-                      deck.master.name === 'По умолчанию')) && (
-                    <details>
-                      <summary>Область прежней компоновки</summary>
-                      {(['x', 'y', 'w', 'h'] as const).map((k) => (
-                        <Num
-                          key={k}
-                          label={k}
-                          value={
-                            (slide.area ?? { x: 0, y: 0, w: 1280, h: 720 })[k]
-                          }
-                          min={k === 'x' || k === 'y' ? 0 : 1}
-                          max={k === 'x' || k === 'w' ? 1280 : 720}
-                          change={(v) =>
-                            modify((s) => ({
-                              ...s,
-                              area: {
-                                x: 0,
-                                y: 0,
-                                w: 1280,
-                                h: 720,
-                                ...s.area,
-                                [k]: v,
-                              },
-                            }))
-                          }
-                        />
-                      ))}
-                    </details>
-                  )}
-                </PropertySection>
-                {gridTemplateKind !== 'layout' && (
-                  <PropertySection id="slide-background" title="Фон" initial>
-                    <Background
-                      libraryAvailable={libraryAvailable}
-                      deck={deck}
-                      key={slide.id}
-                      slide={slide}
-                      notice={notice}
-                      update={(next) =>
-                        modify(() => ({ ...next, ownBackground: true }))
-                      }
-                      reset={() =>
-                        modify((s) =>
-                          inheritedBackground(
-                            s,
-                            deck.master.art?.[s.kind ?? 'normal']
-                          )
-                        )
-                      }
-                    />
-                    {!saveTemplate && (
-                      <button
-                        onClick={() =>
-                          change((d) => {
-                            const kind = slide.kind ?? 'normal',
-                              base = d.master.art?.[kind] ?? {
-                                ...newSlide(),
-                                kind,
+                      {item.imageFit === 'cover' &&
+                        (['focusX', 'focusY'] as const).map((k, i) => (
+                          <label key={k}>
+                            {i ? 'Фокус по вертикали' : 'Фокус по горизонтали'}
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={item[k] ?? 50}
+                              onChange={(e) =>
+                                patch(item.id, { [k]: +e.target.value })
                               }
-                            const sample = inheritedBackground(base, slide)
-                            return {
-                              ...d,
-                              master: {
-                                ...d.master,
-                                art: { ...d.master.art, [kind]: sample },
-                              },
-                              slides: d.slides.map((s) =>
-                                (s.kind ?? 'normal') === kind &&
-                                (s.id === slide.id || !s.ownBackground)
-                                  ? inheritedBackground(s, sample)
-                                  : s
-                              ),
+                            />
+                          </label>
+                        ))}
+                    </PropertySection>
+                  )}
+                  {item.type === 'shape' && (
+                    <ShapePanel item={item} patch={(v) => patch(item.id, v)} />
+                  )}
+                  {item.type !== 'image' && (
+                    <TextPanel
+                      key={item.id}
+                      deck={deck}
+                      item={item}
+                      cell={itemCell}
+                      editOnCanvas={
+                        target(item) === 'tray' || item.hidden
+                          ? undefined
+                          : () => editText(item.id)
+                      }
+                      reset={
+                        isTextType(itemCell?.type)
+                          ? () => {
+                              setSelectedSlot(target(item))
+                              removeItem()
+                              select('')
                             }
+                          : undefined
+                      }
+                      patch={(v) => patch(item.id, v)}
+                    />
+                  )}
+                  {(saveTemplate ||
+                    slots(deck.master, slide).find((v) => v.id === target(item))
+                      ?.cell.type === 'free') && (
+                    <GeometryPanel
+                      item={item}
+                      canPin={freeDecoration}
+                      patch={(v) => {
+                        if (freeDecoration && v.fixed === true) {
+                          patch(item.id, {
+                            ...freezeDecoration(item, locations),
+                            role: item.role,
                           })
-                        }
-                      >
-                        Применить фон к схеме этой методички
-                      </button>
-                    )}
+                        } else if (item.fixed && v.fixed === false) {
+                          const free = slots(deck.master, slide).find(
+                            (p) => p.cell.type === 'free'
+                          )
+                          patch(item.id, {
+                            fixed: undefined,
+                            slot: free?.id ?? 'tray',
+                            ...(free
+                              ? {
+                                  x: (item.x - free.box.x) / free.scale,
+                                  y: (item.y - free.box.y) / free.scale,
+                                  w: item.w / free.scale,
+                                  h: item.h / free.scale,
+                                  contentScale:
+                                    (item.contentScale ?? 1) / free.scale,
+                                }
+                              : {}),
+                          })
+                        } else patch(item.id, v)
+                      }}
+                    />
+                  )}
+                  <PropertySection
+                    id="object-order"
+                    title="Порядок и удаление объекта"
+                    initial
+                  >
+                    <div className="field-pair">
+                      {[-1, 1].map((delta) => (
+                        <button
+                          key={delta}
+                          disabled={
+                            !slide.items[slide.items.indexOf(item) + delta]
+                          }
+                          onClick={() =>
+                            modify((s) => {
+                              const items = s.items.slice(),
+                                i = items.findIndex((o) => o.id === sel)
+                              ;[items[i], items[i + delta]] = [
+                                items[i + delta],
+                                items[i],
+                              ]
+                              return { ...s, items }
+                            })
+                          }
+                        >
+                          {delta < 0 ? 'Слой ниже' : 'Слой выше'}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={removeItem}>
+                      <Trash2 />
+                      Удалить объект
+                    </button>
                   </PropertySection>
-                )}
-              </>
-            )}
-            <StylesPanel
-              key={`${slide.id}:${styleItem?.id ?? selectedSlot}:${selectedStyleId}`}
-              initialStyleId={selectedStyleId}
-              library={styleLibrary}
-              deck={deck}
-              change={change}
-              notice={notice}
-            />
+                </>
+              ) : (
+                <p className="inspector-empty">
+                  Выберите объект для настройки его свойств.
+                </p>
+              )}
+            </section>
             {!gridTemplateKind && (
               <PropertySection id="slide-order" title="Порядок слайдов" initial>
                 <button disabled={!idx} onClick={() => reorder(-1)}>
@@ -1156,6 +1251,7 @@ export function Editor({
       >
         <CanvasViewport
           editable
+          bleed={freeDecoration}
           onContextMenu={(e) => {
             const id = (e.target as Element)
               .closest('[data-item]')
@@ -1168,6 +1264,7 @@ export function Editor({
             deck={deck}
             slide={draft ? { ...slide, items: [...slide.items, draft] } : slide}
             design={!!saveTemplate}
+            bleed={freeDecoration}
             selected={sel}
             onSlot={(id) => {
               chosenSlot.current = id
@@ -1181,7 +1278,7 @@ export function Editor({
             finishTextEdit={() =>
               setEdit((current) => (current === textEdit ? null : current))
             }
-            onSystemStyle={updateSystemStyle}
+            onSystemStyle={saveTemplate ? undefined : updateSystemStyle}
             undo={(redo) =>
               history.actions
                 .find((a) => a.key === (redo ? 'shift+z' : 'z'))
@@ -1191,7 +1288,8 @@ export function Editor({
             onNodes={(id, nodes) => patch(id, { nodes })}
             onEditText={editText}
             onSelect={(id) => {
-              setSelectedSlot('')
+              if (!saveTemplate) setSelectedSlot('')
+              chosenSlot.current = ''
               select(id)
             }}
             onMove={(id, x, y) =>
@@ -1208,7 +1306,17 @@ export function Editor({
                           (a.fixed
                             ? o.fixed
                             : !o.fixed && target(a) === target(o))
-                        ? { ...o, x: o.x + x - a.x, y: o.y + y - a.y }
+                        ? {
+                            ...o,
+                            x:
+                              freeDecoration && o.fixed
+                                ? Math.max(-8192, Math.min(8192, o.x + x - a.x))
+                                : o.x + x - a.x,
+                            y:
+                              freeDecoration && o.fixed
+                                ? Math.max(-8192, Math.min(8192, o.y + y - a.y))
+                                : o.y + y - a.y,
+                          }
                         : o
                   ),
                 }

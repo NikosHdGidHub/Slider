@@ -8,6 +8,7 @@ import {
   Rows3,
   Save,
   SplitSquareHorizontal,
+  Type,
 } from 'lucide-react'
 import {
   AvailabilityControl,
@@ -43,7 +44,7 @@ import {
   type Kind,
   type CellType,
 } from './grid'
-import { StylesPanel } from './Properties'
+import { TextStyleManager } from './TextStyleManager'
 import { sourceText, activeTextStyleId } from './model'
 import { isTextType, textTypes } from './textTypes'
 import type { Template } from './catalog'
@@ -137,6 +138,7 @@ export function GridDesigner({
     [selected, select] = useState(''),
     [merge, merging] = useState(false)
   const [objects, setObjects] = useState(false)
+  const [styleManager, setStyleManager] = useState(false)
   const [sourceEdit, setSourceEdit] = useState<
     | (TextEditStart & {
         id: string
@@ -374,6 +376,7 @@ export function GridDesigner({
       <Editor
         deck={deck}
         initialSlideId={s.id}
+        initialSlotId={(structural ? 's/' : 'm/') + c.id}
         gridTemplateKind={template.kind}
         libraryAvailable={libraryAvailable}
         history={history}
@@ -399,6 +402,16 @@ export function GridDesigner({
   return (
     <>
       {context.menu}
+      {styleManager && (
+        <TextStyleManager
+          deck={deck}
+          slide={s}
+          initialStyleId={selectedStyleId}
+          change={(update) => set({ ...template, deck: update(deck) })}
+          close={() => setStyleManager(false)}
+          notice={notice}
+        />
+      )}
       <Workspace
         scope="grid"
         inspectorRequest={inspectorRequest}
@@ -517,6 +530,15 @@ export function GridDesigner({
               )}
             </div>
             <HistoryButtons history={history} />
+            <IconButton
+              label="Текстовые стили"
+              onClick={() => {
+                setSourceEdit(null)
+                setStyleManager(true)
+              }}
+            >
+              <Type />
+            </IconButton>
           </>
         }
         properties={
@@ -592,7 +614,11 @@ export function GridDesigner({
                   </select>
                 </label>
                 {isTextType(c.type) && (
-                  <>
+                  <PropertySection
+                    id="grid-cell-text"
+                    title="Содержание текста"
+                    initial
+                  >
                     <label>
                       Исходный текст
                       <textarea
@@ -654,7 +680,7 @@ export function GridDesigner({
                         </select>
                       </label>
                     )}
-                  </>
+                  </PropertySection>
                 )}
                 <label>
                   Фон ячейки
@@ -693,13 +719,6 @@ export function GridDesigner({
                 />
               </div>
             </PropertySection>
-            <StylesPanel
-              key={`${s.id}:${c.id}:${selectedStyleId}`}
-              initialStyleId={selectedStyleId}
-              deck={deck}
-              notice={notice}
-              change={(update) => set({ ...template, deck: update(deck) })}
-            />
             {!structural && (
               <PropertySection id="grid-background" title="Фон">
                 <Background

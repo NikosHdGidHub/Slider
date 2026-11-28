@@ -2185,6 +2185,7 @@ function App() {
               : undefined
           }
           deck={editingTemplate.t.deck}
+          allowBleed={editingTemplate.t.kind === 'presentation'}
           status="Редактор шаблона"
           styleLibrary={styleLibrary}
           templates={visibleRows.map((r) => r.template)}

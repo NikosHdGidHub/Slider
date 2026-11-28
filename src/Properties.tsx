@@ -7,7 +7,13 @@ import {
   AlignVerticalJustifyEnd,
 } from 'lucide-react'
 import { fontCatalog } from './fontCatalog'
-import { textTypeIds, textTypes, isTextType, type TextType } from './textTypes'
+import {
+  textTypeIds,
+  textTypes,
+  isTextType,
+  defaultSystemStyles,
+  type TextType,
+} from './textTypes'
 import { type Cell, type Insets } from './grid'
 import { IconButton, PropertySection } from './Workspace'
 import { fontFamily } from './Artwork'
@@ -529,14 +535,18 @@ export function StylesPanel({
   notice,
   library,
   initialStyleId = 'text',
+  selection,
 }: {
   library?: StyleLibrary
   deck: Deck
   change: Change
   notice: (v: string) => void
   initialStyleId?: string
+  selection?: { id: string; setID: (id: string) => void }
 }) {
-  const [id, setID] = useState(initialStyleId)
+  const [localId, setLocalId] = useState(initialStyleId)
+  const id = selection?.id ?? localId
+  const setID = selection?.setID ?? setLocalId
   const [replacement, setReplacement] = useState('')
   const selected = deck.theme.styles.find((s) => s.id === id)
   const values = isTextType(id)
@@ -578,7 +588,7 @@ export function StylesPanel({
     }
   }
   return (
-    <PropertySection id="styles" title="Стили текста">
+    <div className="global-style-fields">
       <PropertySection id="text-resources" title="Ресурсы оформления">
         <PropertySection id="theme" title="Палитра темы">
           {deck.theme.palette.map((value, index) => (
@@ -676,6 +686,25 @@ export function StylesPanel({
       </label>
       <button onClick={() => createStyle()}>Создать стиль</button>
       <button onClick={() => createStyle(values)}>Дублировать стиль</button>
+      {isTextType(id) && (
+        <button
+          type="button"
+          onClick={() =>
+            change((d) => ({
+              ...d,
+              theme: {
+                ...d.theme,
+                systemStyles: {
+                  ...d.theme.systemStyles,
+                  [id]: defaultSystemStyles()[id],
+                },
+              },
+            }))
+          }
+        >
+          Сбросить базовый стиль
+        </button>
+      )}
       {selected && (
         <>
           <label>
@@ -770,7 +799,7 @@ export function StylesPanel({
           })
         }
       />
-    </PropertySection>
+    </div>
   )
 }
 
@@ -793,7 +822,7 @@ export function TextPanel({
   return (
     <PropertySection id="text" title="Содержание текста" initial>
       <div>
-        {!isTextType(cell?.type) && (
+        {item.type === 'text' && !isTextType(cell?.type) && (
           <label>
             Тип текста
             <select
@@ -820,7 +849,7 @@ export function TextPanel({
             </select>
           </label>
         )}
-        {type === 'text' && !cell?.textStyle && (
+        {item.type === 'text' && type === 'text' && !cell?.textStyle && (
           <label>
             Пользовательский стиль
             <select
@@ -842,6 +871,18 @@ export function TextPanel({
             </select>
           </label>
         )}
+        {item.type === 'text' &&
+          type === 'text' &&
+          (item.overrides || item.paragraphs) && (
+            <button
+              type="button"
+              onClick={() =>
+                patch({ overrides: undefined, paragraphs: undefined })
+              }
+            >
+              Сбросить локальное оформление
+            </button>
+          )}
         {editOnCanvas ? (
           <button onClick={editOnCanvas}>Редактировать на холсте</button>
         ) : (

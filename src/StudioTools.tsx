@@ -4,7 +4,7 @@ export function isTyping(target: EventTarget | null) {
   return (
     target instanceof Element &&
     !!target.closest(
-      'input,textarea,select,[contenteditable=true],[contenteditable=plaintext-only]'
+      'input,textarea,select,[contenteditable=true],[contenteditable=plaintext-only],.text-style-manager'
     )
   )
 }

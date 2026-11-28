@@ -23,6 +23,7 @@ interface StageProps {
   finishTextEdit?: () => void
   diagnostics?: boolean
   design?: boolean
+  bleed?: boolean
   onSlot?: (id: string) => void
   onSlotEdit?: (id: string, start: TextEditStart) => void
   onSourceText?: (id: string, fields: Partial<Item>) => void
@@ -90,6 +91,7 @@ export function Stage({
   finishTextEdit,
   diagnostics,
   design,
+  bleed = false,
   onSlot,
   onSlotEdit,
   onSourceText,
@@ -188,7 +190,12 @@ export function Stage({
         fy = item.flipY ? -1 : 1
       const localX = (c * dx + s * dy) * fx,
         localY = (-s * dx + c * dy) * fy
-      const transformed = !!(item.rotation || item.flipX || item.flipY)
+      const transformed = !!(
+        item.rotation ||
+        item.flipX ||
+        item.flipY ||
+        (bleed && item.fixed)
+      )
       const maxW = transformed ? 8192 : Math.max(1, run.bounds.w - item.x),
         maxH = transformed ? 8192 : Math.max(1, run.bounds.h - item.y)
       let w = Math.min(maxW, Math.max(Math.min(24, item.w), item.w + localX))
@@ -205,14 +212,32 @@ export function Stage({
         item.id,
         w,
         h,
-        item.x + (dw * fx * c - dh * fy * s - dw) / 2,
-        item.y + (dw * fx * s + dh * fy * c - dh) / 2
+        bleed && item.fixed
+          ? Math.max(
+              -8192,
+              Math.min(8192, item.x + (dw * fx * c - dh * fy * s - dw) / 2)
+            )
+          : item.x + (dw * fx * c - dh * fy * s - dw) / 2,
+        bleed && item.fixed
+          ? Math.max(
+              -8192,
+              Math.min(8192, item.y + (dw * fx * s + dh * fy * c - dh) / 2)
+            )
+          : item.y + (dw * fx * s + dh * fy * c - dh) / 2
       )
     } else {
       onMove?.(
         item.id,
-        Math.round(Math.max(0, Math.min(run.bounds.w - item.w, item.x + dx))),
-        Math.round(Math.max(0, Math.min(run.bounds.h - item.h, item.y + dy)))
+        Math.round(
+          bleed && item.fixed
+            ? Math.max(-8192, Math.min(8192, item.x + dx))
+            : Math.max(0, Math.min(run.bounds.w - item.w, item.x + dx))
+        ),
+        Math.round(
+          bleed && item.fixed
+            ? Math.max(-8192, Math.min(8192, item.y + dy))
+            : Math.max(0, Math.min(run.bounds.h - item.h, item.y + dy))
+        )
       )
     }
   }
@@ -226,7 +251,11 @@ export function Stage({
   return (
     <div
       ref={host}
-      className={'atlas-stage' + (onSelect ? ' atlas-editable' : '')}
+      className={
+        'atlas-stage' +
+        (onSelect ? ' atlas-editable' : '') +
+        (bleed && onSelect ? ' atlas-bleed' : '')
+      }
       onPointerMove={move}
       onPointerCancel={end}
       onPointerUp={end}
@@ -498,6 +527,9 @@ export function Stage({
             </div>
           )
         })}
+        {bleed && onSelect && (
+          <div className="atlas-bleed-scrim" aria-hidden="true" />
+        )}
       </div>
     </div>
   )

@@ -20,23 +20,32 @@ type Size = { w: number; h: number }
 type Camera = Point & { zoom: number }
 type Pan = { id: number; start: Point; camera: Camera; space: boolean }
 
-function constrain(position: Camera, area: Size): Camera {
+function constrain(position: Camera, area: Size, bleed = false): Camera {
   const x = Math.max(0, ((WIDTH * position.zoom) / 100 - area.w) / 2 + PADDING)
   const y = Math.max(0, ((HEIGHT * position.zoom) / 100 - area.h) / 2 + PADDING)
   return {
     zoom: position.zoom,
-    x: clamp(position.x, -x, x),
-    y: clamp(position.y, -y, y),
+    x: clamp(
+      position.x,
+      -x - (bleed ? (16384 * position.zoom) / 100 : 0),
+      x + (bleed ? (16384 * position.zoom) / 100 : 0)
+    ),
+    y: clamp(
+      position.y,
+      -y - (bleed ? (16384 * position.zoom) / 100 : 0),
+      y + (bleed ? (16384 * position.zoom) / 100 : 0)
+    ),
   }
 }
 
-function fitScale({ w, h }: Size) {
+function fitScale({ w, h }: Size, bleed = false) {
   return (
     100 *
     Math.min(
       Math.max(0, w - 2 * PADDING) / WIDTH,
       Math.max(0, h - 2 * PADDING) / HEIGHT
-    )
+    ) *
+    (bleed ? 0.78 : 1)
   )
 }
 
@@ -44,10 +53,12 @@ export function CanvasViewport({
   children,
   onContextMenu,
   editable = false,
+  bleed = false,
 }: {
   children: ReactNode
   onContextMenu?: React.MouseEventHandler<HTMLDivElement>
   editable?: boolean
+  bleed?: boolean
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size>({ w: 0, h: 0 })
@@ -59,7 +70,7 @@ export function CanvasViewport({
   const spacePressed = useRef(false)
   const suppressClick = useRef(false)
 
-  const fit = fitScale(size)
+  const fit = fitScale(size, bleed)
   const camera = manual ?? { zoom: fit, x: 0, y: 0 }
 
   useLayoutEffect(() => {
@@ -67,7 +78,7 @@ export function CanvasViewport({
     const measure = () => {
       const area = { w: el.clientWidth, h: el.clientHeight }
       setSize(area)
-      setManual((value) => (value ? constrain(value, area) : value))
+      setManual((value) => (value ? constrain(value, area, bleed) : value))
     }
     measure()
     const observer = new ResizeObserver(measure)
@@ -98,7 +109,7 @@ export function CanvasViewport({
       setManual((existing) => {
         const area = { w: el.clientWidth, h: el.clientHeight }
         const previous = existing ?? {
-          zoom: fitScale(area),
+          zoom: fitScale(area, bleed),
           x: 0,
           y: 0,
         }
@@ -114,7 +125,8 @@ export function CanvasViewport({
             x: x - (x - previous.x) * factor,
             y: y - (y - previous.y) * factor,
           },
-          area
+          area,
+          bleed
         )
       })
     }
@@ -162,7 +174,7 @@ export function CanvasViewport({
       window.removeEventListener('keyup', keyUp)
       window.removeEventListener('blur', blur)
     }
-  }, [editable])
+  }, [editable, bleed])
 
   function start(e: ReactPointerEvent<HTMLDivElement>) {
     if ((e.target as Element).closest('[data-text-controls]')) return
@@ -181,7 +193,7 @@ export function CanvasViewport({
     e.preventDefault()
     e.stopPropagation()
     e.currentTarget.focus({ preventScroll: true })
-    if (!manual || pan.current) return
+    if ((!manual && !bleed) || pan.current) return
     e.currentTarget.setPointerCapture(e.pointerId)
     pan.current = {
       id: e.pointerId,
@@ -202,13 +214,16 @@ export function CanvasViewport({
           x: current.camera.x + e.clientX - current.start.x,
           y: current.camera.y + e.clientY - current.start.y,
         },
-        size
+        size,
+        bleed
       )
     )
   }
 
   function setZoom(zoom: number) {
-    setManual(constrain({ ...camera, zoom: clamp(zoom, MIN, MAX) }, size))
+    setManual(
+      constrain({ ...camera, zoom: clamp(zoom, MIN, MAX) }, size, bleed)
+    )
   }
 
   return (
@@ -219,7 +234,13 @@ export function CanvasViewport({
         role={editable ? 'region' : undefined}
         tabIndex={editable ? 0 : undefined}
         aria-label={editable ? 'Рабочая область холста' : undefined}
-        data-pan={panning ? 'dragging' : space && manual ? 'ready' : undefined}
+        data-pan={
+          panning
+            ? 'dragging'
+            : space && (manual || bleed)
+              ? 'ready'
+              : undefined
+        }
         onPointerEnter={
           editable
             ? () => {
