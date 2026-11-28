@@ -1,3 +1,4 @@
+import { askConfirm } from './ConfirmDialog'
 import { LibraryStatus } from './LibraryStatus'
 import { desktopEditingMessage } from './libraryNavigation'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -311,12 +312,12 @@ export function TemplateLibrary({
         label: 'Удалить с устройства',
         icon: Trash2,
         danger: true,
-        run: () => {
+        run: async () => {
           if (
-            confirm(
+            await askConfirm(
               'Удалить локальную копию шаблона «' +
                 deck.title +
-                '»? Облачная копия сохранится, если она существует.'
+                '»? Облачная копия сохранится, если она существует.', { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
             )
           )
             return run(() => deleteTemplate(row, false), true)
@@ -328,12 +329,12 @@ export function TemplateLibrary({
         label: 'Удалить из облака',
         icon: Trash2,
         danger: true,
-        run: () => {
+        run: async () => {
           if (
-            confirm(
+            await askConfirm(
               'Удалить облачную копию шаблона «' +
                 deck.title +
-                '»? Локальные копии сохранятся.'
+                '»? Локальные копии сохранятся.', { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
             )
           )
             return run(() => deleteTemplate(row, true), true)

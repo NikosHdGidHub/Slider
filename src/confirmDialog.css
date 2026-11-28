@@ -1,0 +1,142 @@
+.atlas-confirm {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(470px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+  border: 1px solid #454b53;
+  border-radius: 14px;
+  background: #292d32;
+  color: #eef1f3;
+  box-shadow: 0 18px 80px #0007;
+  text-align: left;
+  animation: atlas-confirm-in 160ms ease-out;
+}
+.atlas-confirm::backdrop {
+  background: #10171399;
+}
+.atlas-confirm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.atlas-confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  background: #353e3a;
+  color: #9bd3bb;
+}
+.atlas-confirm-close {
+  background: transparent;
+  color: #bbc4ca;
+  border: 0;
+  padding: 6px;
+}
+.atlas-confirm h2 {
+  font: 600 21px/1.3 system-ui;
+  margin: 15px 0 10px;
+}
+.atlas-confirm-description {
+  color: #c5ccd0;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.atlas-confirm-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+.atlas-confirm-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid #454b53;
+  border-radius: 8px;
+  background: #353a41;
+  color: #eef1f3;
+  transition:
+    background 160ms,
+    border-color 160ms;
+}
+.atlas-confirm-action span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.atlas-confirm-action small {
+  color: inherit;
+  opacity: 0.83;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.atlas-confirm-action svg {
+  flex: none;
+}
+.atlas-confirm-action.atlas-confirm-primary {
+  background: #316b50;
+  border-color: #54886e;
+}
+.atlas-confirm-action.atlas-confirm-danger {
+  background: #452c2e;
+  border-color: #805252;
+  color: #ffc7c7;
+}
+.atlas-confirm-action.atlas-confirm-warning {
+  background: #59483c;
+  border-color: #806b53;
+  color: #f3dbb3;
+}
+.atlas-confirm-action:not(:disabled):hover {
+  filter: brightness(1.12);
+}
+.atlas-confirm button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.atlas-confirm button:focus-visible {
+  outline: 2px solid #9bd3bb;
+  outline-offset: 2px;
+}
+.atlas-confirm-error {
+  color: #ffc7c7;
+  overflow-wrap: anywhere;
+}
+.atlas-confirm-spin {
+  animation: atlas-confirm-spin 1s linear infinite;
+}
+@keyframes atlas-confirm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes atlas-confirm-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .atlas-confirm,
+  .atlas-confirm-spin {
+    animation: none;
+  }
+  .atlas-confirm-action {
+    transition: none;
+  }
+}

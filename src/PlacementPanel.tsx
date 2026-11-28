@@ -1,3 +1,4 @@
+import { askConfirm } from './ConfirmDialog'
 import { FORMAT_VERSION } from './schema'
 import { PropertySection } from './Workspace'
 import { useState } from 'react'
@@ -80,11 +81,11 @@ export function PlacementPanel({
                 const t = templates.find((t) => t.deck.id === e.target.value)
                 if (!t) return
                 if (
-                  !confirm(
+                  !(await askConfirm(
                     deck.migrated
                       ? 'Исходная композиция каждого слайда перейдёт в неразмещённое содержимое. В библиотеке сохранится копия прежней методички. Продолжить?'
                       : 'Применить главный шаблон ко всей методичке?'
-                  )
+                  ))
                 )
                   return
                 try {
@@ -137,9 +138,14 @@ export function PlacementPanel({
                         !target(o).startsWith('m/') &&
                         target(o) !== 'tray'
                     ) &&
-                    !confirm(
-                      'Текущее размещение будет сброшено. Перенести объекты области в неразмещённое содержимое этого слайда?'
-                    )
+                    !(await askConfirm(
+                      'Текущее размещение будет сброшено. Перенести объекты области в неразмещённое содержимое этого слайда?',
+                      {
+                        title: 'Изменение компоновки',
+                        label: 'Продолжить',
+                        variant: 'warning',
+                      }
+                    ))
                   )
                     return
                   try {

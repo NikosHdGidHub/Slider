@@ -1,3 +1,5 @@
+import { EditorHeader, type SaveControl } from './EditorHeader'
+import { askConfirm } from './ConfirmDialog'
 import { CanvasViewport } from './CanvasViewport'
 import { TextStyleManager } from './TextStyleManager'
 import { CellAppearance } from './CellAppearance'
@@ -24,7 +26,6 @@ import {
 import { shapes } from './schema'
 import { useEffect, useRef, useState } from 'react'
 import {
-  ArrowLeft,
   ChevronUp,
   ChevronDown,
   Plus,
@@ -34,7 +35,6 @@ import {
   Shapes,
   CloudUpload,
   RefreshCw,
-  Save,
   Type,
   Play,
   FileDown,
@@ -62,7 +62,7 @@ import {
 } from './model'
 import { Files } from './Files'
 import { optimize, checkImageBudget } from './media'
-import { AvailabilityControl, AvailabilityProps } from './AvailabilityControl'
+import { type AvailabilityProps } from './AvailabilityControl'
 
 type Props = {
   publishLabel?: string
@@ -82,6 +82,7 @@ type Props = {
   gridTemplateKind?: Template['kind']
   saveAs?: () => void
   saveTemplate?: () => void
+  saveControl: SaveControl
   exportTemplate?: () => void
   headerTools?: React.ReactNode
   exitLabel?: string
@@ -108,6 +109,7 @@ export function Editor({
   templates = [],
   resolveTemplate,
   saveTemplate,
+  saveControl,
   exportTemplate,
   headerTools,
   exitLabel = 'В библиотеку',
@@ -295,6 +297,7 @@ export function Editor({
   }
   useEffect(() => {
     function key(e: KeyboardEvent) {
+      if (document.querySelector('dialog.atlas-confirm[open]')) return
       if (
         (e.target as HTMLElement).closest(
           'input,textarea,select,[contenteditable],[data-text-controls],.text-style-manager'
@@ -352,8 +355,13 @@ export function Editor({
     choose(fresh.id)
     select('')
   }
-  function delSlide() {
-    if (!confirm('Удалить текущий слайд вместе с объектами и заметками?'))
+  async function delSlide() {
+    if (
+      !(await askConfirm(
+        'Удалить текущий слайд вместе с объектами и заметками?',
+        { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
+      ))
+    )
       return
     const slides = deck.slides.filter((s) => s.id !== slide.id)
     if (!slides.length) slides.push(newSlide())
@@ -633,29 +641,16 @@ export function Editor({
       <Workspace
         scope={saveTemplate ? 'template' : 'lesson'}
         header={
-          <>
-            <IconButton label={exitLabel} onClick={back}>
-              <ArrowLeft />
-            </IconButton>
-            <input
-              aria-label={
-                saveTemplate ? 'Название шаблона' : 'Название методички'
-              }
-              maxLength={200}
-              value={deck.title}
-              onChange={(e) => change((d) => ({ ...d, title: e.target.value }))}
-              onBlur={() => {
-                if (!deck.title.trim())
-                  change((d) => ({ ...d, title: 'Без названия' }))
-              }}
-            />
-            {availability ? (
-              <AvailabilityControl {...availability} />
-            ) : (
-              <small className="edit-status" role="status" title={status}>
-                {status}
-              </small>
-            )}
+          <EditorHeader
+            back={back}
+            exitLabel={exitLabel}
+            nameLabel={saveTemplate ? 'Название шаблона' : 'Название методички'}
+            title={deck.title}
+            rename={(title) => change((d) => ({ ...d, title }))}
+            availability={availability}
+            status={status}
+            save={saveControl}
+          >
             {!saveTemplate && (
               <button
                 className="primary"
@@ -682,17 +677,6 @@ export function Editor({
             )}
 
             {headerTools}
-            {saveTemplate && (
-              <button
-                className="primary"
-                aria-label="Сохранить шаблон"
-                title="Сохранить шаблон"
-                onClick={saveTemplate}
-              >
-                <Save size={16} />
-                <span>Сохранить шаблон</span>
-              </button>
-            )}
             {!saveTemplate && (
               <IconButton
                 label="Подготовить к офлайн-показу"
@@ -710,7 +694,7 @@ export function Editor({
                 <FileDown />
               </IconButton>
             )}
-          </>
+          </EditorHeader>
         }
         navigationLabel="Слайды"
         navigationActions={
@@ -921,9 +905,14 @@ export function Editor({
                           if (!t) return
                           if (
                             slide.items.some((o) => o.role !== 'decoration') &&
-                            !confirm(
-                              'Перенести прежнее содержимое в неразмещённые объекты и применить компоновку?'
-                            )
+                            !(await askConfirm(
+                              'Перенести прежнее содержимое в неразмещённые объекты и применить компоновку?',
+                              {
+                                title: 'Изменение компоновки',
+                                label: 'Продолжить',
+                                variant: 'warning',
+                              }
+                            ))
                           )
                             return
                           try {

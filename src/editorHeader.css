@@ -1,0 +1,14 @@
+.workspace .edit-head .editor-save-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  flex: 0 0 auto; min-width: 116px; background: #59483c; color: #d0bfb0;
+  border: 1px solid #796553; border-radius: 7px; padding: 7px 10px;
+  opacity: 1; transition: background-color 220ms ease, border-color 220ms ease, color 220ms ease;
+}
+.workspace .edit-head .editor-save-button[data-dirty] { background: #316b50; color: #effff3; border-color: #54886e; }
+.workspace .edit-head .editor-save-button[data-error] { background: #773c3c; color: #ffdfdf; border-color: #a76565; }
+.workspace .edit-head .editor-save-button[data-saving] { background: #375747; color: #d4e6da; border-color: #54886e; }
+.workspace .edit-head .editor-save-button:disabled { cursor: default; }
+.workspace .edit-head .editor-save-button:not(:disabled):hover { filter: brightness(1.1); }
+.editor-save-spin { animation: editor-save-spin 1s linear infinite; }
+@keyframes editor-save-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .workspace .edit-head .editor-save-button { transition: none; } .editor-save-spin { animation: none; } }

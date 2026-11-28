@@ -1,3 +1,4 @@
+import { askConfirm } from './ConfirmDialog'
 import {
   LibraryCard,
   LibraryItems,
@@ -583,10 +584,11 @@ export function ResourceGallery({
         icon: Trash2,
         danger: true,
         disabled: locked,
-        run: () => {
+        run: async () => {
           if (
-            confirm(
-              'Удалить изображение с этого устройства? Облачная копия не изменится.'
+            await askConfirm(
+              'Удалить изображение с этого устройства? Облачная копия не изменится.',
+              { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
             )
           )
             return act(() => removeLocalLibraryImage(owner, card.sha!), true)
@@ -605,10 +607,11 @@ export function ResourceGallery({
         icon: Trash2,
         danger: true,
         disabled: locked,
-        run: () => {
+        run: async () => {
           if (
-            confirm(
-              'Удалить приватную облачную копию? Локальные и публичные копии сохранятся.'
+            await askConfirm(
+              'Удалить приватную облачную копию? Локальные и публичные копии сохранятся.',
+              { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
             )
           )
             return act(

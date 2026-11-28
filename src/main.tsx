@@ -1,3 +1,6 @@
+import { ConfirmDialogHost, openConfirm, askConfirm } from './ConfirmDialog'
+import { sameDocument, useSaveOperation } from './documentSave'
+import type { SaveControl } from './EditorHeader'
 import { LibraryStatusDetails, useLibraryStatus } from './LibraryStatus'
 import { AlertCircle, AlertTriangle } from 'lucide-react'
 import { FORMAT_VERSION } from './schema'
@@ -35,12 +38,10 @@ import {
   BookOpenText,
   Upload,
   Play,
-  ArrowUpRight,
   UserRound,
   Layers3,
   FolderOpen,
   FileJson,
-  Pencil,
   Link2,
   LogOut,
   Menu,
@@ -48,8 +49,6 @@ import {
   ChevronRight,
   LogIn,
   RefreshCw,
-  Save,
-  ArrowLeft,
 } from 'lucide-react'
 import {
   newDeck,
@@ -126,15 +125,10 @@ function App() {
   const [doc, setDoc] = useState<Deck | null>(null),
     [watch, setWatch] = useState<Deck | null>(null),
     [status, setStatus] = useState('Сохранено')
-  const current = useRef<Deck | null>(null),
-    rev = useRef(0),
-    queue = useRef(Promise.resolve()),
-    failure = useRef<unknown>(null)
-
-  // Во время перетаскивания изменяем документ только в памяти.
-  // Сохраняем итоговое состояние после отпускания мыши.
-  const dragPointer = useRef<number | null>(null)
-  const pendingSave = useRef<Deck | null>(null)
+  const current = useRef<Deck | null>(null)
+  const savedDeck = useRef<Deck | null>(null)
+  const rev = useRef(0)
+  const saveOperation = useSaveOperation()
   const [modal, setModal] = useState(''),
     [message, notice] = useState(''),
     [busy, setBusy] = useState(''),
@@ -227,6 +221,8 @@ function App() {
     baseline: string
   } | null>(null)
 
+  const editingTemplateRef = useRef(editingTemplate)
+  editingTemplateRef.current = editingTemplate
   const working = useWorkingSync(
     workingOwner,
     online,
@@ -315,7 +311,10 @@ function App() {
   }
   const templateDirty =
     editingTemplate !== null &&
-    JSON.stringify(editingTemplate.t) !== editingTemplate.baseline
+    (!editingTemplate.row ||
+      JSON.stringify(editingTemplate.t) !== editingTemplate.baseline)
+  const lessonDirty = !!doc && !sameDocument(doc, savedDeck.current)
+  const documentDirty = lessonDirty || templateDirty
   const activeKind = doc ? 'lesson' : editingTemplate ? 'template' : undefined
 
   const activeId = doc?.id ?? editingTemplate?.t.deck.id
@@ -507,6 +506,7 @@ function App() {
       setListReady(false)
       setDoc(null)
       current.current = null
+      savedDeck.current = null
     }
   }, [allowed, working.records])
   useEffect(() => {
@@ -566,7 +566,6 @@ function App() {
     )
   const openedPublication = useRef('')
   const [publicationVerified, setPublicationVerified] = useState(false)
-  const afterExit = useRef<null | (() => Promise<void>)>(null)
   const marker = (id: string) => ownerKey + '-published-' + id
   useEffect(() => {
     if (!doc || status !== 'Сохранено') return
@@ -588,23 +587,16 @@ function App() {
     }
   }, [doc, status])
   useEffect(() => {
-    if (!doc || status === 'Сохранено') return
+    if (!documentDirty && !saveOperation.saving) return
     const warn = (e: BeforeUnloadEvent) => {
       e.preventDefault()
       e.returnValue = ''
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [doc, status])
+  }, [documentDirty, saveOperation.saving])
   const same =
     !!baseline && signature?.doc === doc && signature.hash === baseline
-  const canPublish =
-    owner &&
-    online &&
-    !busy &&
-    status === 'Сохранено' &&
-    signature?.doc === doc &&
-    !same
   async function publishedHash(id: string) {
     if (!(await listPublished()).includes(id)) return ''
     const remote = validateDeck(await readPublishedForInventory(id))
@@ -665,127 +657,122 @@ function App() {
     setPublicationVerified(false)
     current.current = d
     rev.current = revision
-    queue.current = Promise.resolve()
-    failure.current = null
+    savedDeck.current = d
+    saveOperation.clearError()
     setStatus('Сохранено')
     setDoc(d)
-  }
-
-  function persist(next: Deck) {
-    if (failure.current) {
-      setStatus('Ошибка записи')
-      return
-    }
-    setStatus('Сохранение…')
-    const savingOwner = editorOwnerRef.current
-    queue.current = queue.current.then(async () => {
-      if (failure.current) {
-        setStatus('Ошибка записи')
-        return
-      }
-
-      const expected = rev.current
-
-      try {
-        if (savingOwner !== workingOwnerRef.current) {
-          throw Error(
-            'Изменился сеанс авторизации. ' +
-              'Экспортируйте методичку и откройте её заново.'
-          )
-        }
-
-        await saveEntry(
-          next,
-          expected,
-          false,
-          false,
-          undefined,
-          false,
-          savingOwner
-        )
-        rev.current = expected + 1
-        if (current.current === next) {
-          setStatus('Сохранено')
-        }
-      } catch (e) {
-        failure.current = e
-        setStatus('Ошибка записи')
-        notice(errorText(e))
-      }
-    })
-  }
-
-  function flushPendingSave() {
-    const next = pendingSave.current
-    pendingSave.current = null
-
-    if (next) {
-      persist(next)
-    }
   }
 
   function change(fn: (d: Deck) => Deck) {
     const prev = current.current
     if (!prev) return
-
     const next = fn(prev)
-
-    if (next === prev) return
-
-    if (rev.current === 0 && JSON.stringify(next) === JSON.stringify(prev))
-      return
-
-    // Сразу обновляем состояние документа и изображение на экране.
+    if (next === prev || sameDocument(next, prev)) return
     current.current = next
     setDoc(next)
-
-    if (dragPointer.current !== null) {
-      pendingSave.current = next
-
-      setStatus(
-        failure.current ? 'Ошибка записи' : 'Есть несохранённые изменения'
-      )
-
-      return
-    }
-
-    // Обычные изменения сохраняются по прежней схеме.
-    persist(next)
+    setStatus(
+      sameDocument(next, savedDeck.current)
+        ? 'Сохранено'
+        : 'Есть несохранённые изменения'
+    )
   }
 
-  useEffect(() => {
-    function startDrag(e: PointerEvent) {
-      if (e.target instanceof Element && e.target.closest('.atlas-stage')) {
-        dragPointer.current = e.pointerId
-      }
+  async function persistLesson(forceLocal = false) {
+    const draft = current.current
+    if (!draft) throw Error('Методичка не открыта.')
+    if (!forceLocal && sameDocument(draft, savedDeck.current)) return
+    const expected = rev.current
+    const savingOwner = editorOwnerRef.current
+    if (savingOwner !== workingOwnerRef.current)
+      throw Error('Изменился сеанс авторизации. Экспортируйте JSON.')
+    setStatus('Сохранение…')
+    try {
+      const validated = validateDeck(draft)
+      await saveEntry(
+        validated,
+        expected,
+        false,
+        false,
+        undefined,
+        false,
+        savingOwner
+      )
+      if (
+        current.current?.id !== draft.id ||
+        savingOwner !== workingOwnerRef.current
+      )
+        throw Error('Изменился открытый документ или сеанс авторизации.')
+      rev.current = expected + 1
+      savedDeck.current = draft
+      setStatus(
+        sameDocument(current.current, draft)
+          ? 'Сохранено'
+          : 'Есть несохранённые изменения'
+      )
+      void refresh().catch((e) => notice(errorText(e)))
+    } catch (err) {
+      setStatus('Ошибка записи')
+      throw err
     }
+  }
 
-    function finishDrag(e: PointerEvent) {
-      if (dragPointer.current !== e.pointerId) return
-
-      dragPointer.current = null
-      flushPendingSave()
-    }
-
-    function finishOnBlur() {
-      dragPointer.current = null
-      flushPendingSave()
-    }
-
-    // Capture позволяет завершить операцию, даже если
-    // pointerup обработан вложенным элементом редактора.
-    window.addEventListener('pointerdown', startDrag, true)
-    window.addEventListener('pointerup', finishDrag, true)
-    window.addEventListener('pointercancel', finishDrag, true)
-    window.addEventListener('blur', finishOnBlur)
-
-    return () => {
-      window.removeEventListener('pointerdown', startDrag, true)
-      window.removeEventListener('pointerup', finishDrag, true)
-      window.removeEventListener('pointercancel', finishDrag, true)
-      window.removeEventListener('blur', finishOnBlur)
-    }
-  }, [])
+  async function saveActive(forceLocal = false) {
+    return saveOperation.run(async () => {
+      if (current.current) await persistLesson(forceLocal)
+      else if (
+        editingTemplateRef.current &&
+        (!editingTemplateRef.current.row ||
+          JSON.stringify(editingTemplateRef.current.t) !==
+            editingTemplateRef.current.baseline ||
+          forceLocal)
+      )
+        await persistActiveTemplate()
+      else if (!editingTemplateRef.current) throw Error('Документ не открыт.')
+    })
+  }
+  function saveFromButton() {
+    if (!documentDirty || saveOperation.lock.current || busy) return
+    void saveActive()
+      .then(() => notice('Документ сохранён.'))
+      .catch((e) => notice(errorText(e)))
+  }
+  const saveControl: SaveControl = {
+    dirty: documentDirty,
+    saving: saveOperation.saving,
+    error: documentDirty ? saveOperation.error : undefined,
+    disabled: !!busy,
+    onSave: saveFromButton,
+  }
+  async function ensureSaved() {
+    if (saveOperation.lock.current)
+      throw Error('Дождитесь завершения сохранения.')
+    const draft = current.current
+    const editor = editingTemplateRef.current
+    const template = editor?.t
+    const dirty = draft
+      ? !sameDocument(draft, savedDeck.current)
+      : !!editor &&
+        (!editor.row || JSON.stringify(editor.t) !== editor.baseline)
+    if (!dirty) return true
+    if (
+      !(await askConfirm(
+        'Перед этим действием необходимо сохранить изменения.',
+        {
+          title: 'Несохранённые изменения',
+          label: 'Сохранить и продолжить',
+        }
+      ))
+    )
+      return false
+    if (draft && current.current !== draft)
+      throw Error('Документ изменился. Повторите действие.')
+    await saveActive()
+    if (draft && !sameDocument(current.current, savedDeck.current))
+      throw Error('Есть новые несохранённые изменения.')
+    if (template && editingTemplateRef.current?.t !== template)
+      throw Error('Шаблон изменился. Повторите действие.')
+    return true
+  }
 
   const newerPublication =
     !!baseline && baseline !== openedPublication.current && !same
@@ -793,9 +780,8 @@ function App() {
     const draft = current.current
     if (!draft || !owner || !online)
       throw Error('Для синхронизации нужен вход и подключение к сети.')
-    flushPendingSave()
-    await queue.current
-    if (failure.current) throw failure.current
+    if (!sameDocument(draft, savedDeck.current))
+      throw Error('Сначала сохраните изменения.')
     const remote = validateDeck(await readPublic(draft.id))
     if (remote.id !== draft.id)
       throw Error('Идентификатор публикации не совпадает.')
@@ -803,7 +789,17 @@ function App() {
     if (current.current !== draft)
       throw Error('Черновик изменился. Повторите синхронизацию.')
     const revision = rev.current
-    await saveEntry(remote, revision, false, true)
+    if (editorOwnerRef.current !== workingOwnerRef.current)
+      throw Error('Изменился сеанс авторизации.')
+    await saveEntry(
+      remote,
+      revision,
+      false,
+      true,
+      undefined,
+      false,
+      editorOwnerRef.current
+    )
     localStorage.setItem(marker(remote.id), hash)
     open(remote, revision + 1)
     setModal('')
@@ -813,110 +809,167 @@ function App() {
     )
   }
   function closeTemplateEditor() {
+    editingTemplateRef.current = null
     setEditingTemplate(null)
     setModal('')
   }
 
   function requestTemplateExit() {
-    if (!editingTemplate) return
-
+    if (!editingTemplate || saveOperation.lock.current || busy) return
     if (!templateDirty) {
       closeTemplateEditor()
       return
     }
-
-    setModal('leave-template')
+    void openConfirm({
+      title: 'Несохранённые изменения',
+      description: 'Сохранить изменения шаблона перед выходом?',
+      actions: [
+        {
+          id: 'save',
+          label: 'Сохранить и выйти',
+          variant: 'primary',
+          onClick: async () => {
+            await saveActive()
+            if (editingTemplateRef.current?.t !== editingTemplate.t)
+              throw Error('Шаблон изменился. Повторите действие.')
+            closeTemplateEditor()
+          },
+        },
+        {
+          id: 'discard',
+          label: 'Выйти без сохранения',
+          variant: 'danger',
+          onClick: closeTemplateEditor,
+        },
+        { id: 'cancel', label: 'Продолжить редактирование' },
+      ],
+    })
   }
   async function persistActiveTemplate() {
-    const editor = editingTemplate
-
+    const editor = editingTemplateRef.current
     if (!editor) throw Error('Шаблон не открыт.')
-
+    const savingOwner = editorOwnerRef.current
+    if (savingOwner !== workingOwnerRef.current)
+      throw Error('Изменился сеанс авторизации. Экспортируйте шаблон.')
     const template = validateTemplate(structuredClone(editor.t))
-
     if (template.format === FORMAT_VERSION)
       template.deck.master.name = template.deck.title
-
     await saveLocal(template, editor.row)
-
-    const result = await refreshCatalog()
-
-    const row = result.rows.find(
-      (item) => item.template.deck.id === template.deck.id
+    if (
+      savingOwner !== workingOwnerRef.current ||
+      editingTemplateRef.current?.t.deck.id !== template.deck.id
     )
-
-    if (!row?.entry) throw Error('Не удалось получить сохранённый шаблон.')
-
-    setEditingTemplate((current) => {
-      if (!current || current.t.deck.id !== template.deck.id) return current
-
-      return {
-        ...current,
+      throw Error('Изменился открытый шаблон или сеанс авторизации.')
+    // The write has committed; update the expected revision even if catalog refresh fails.
+    const row: CatalogRow = {
+      template,
+      entry: {
+        template,
+        revision: (editor.row?.entry?.revision ?? 0) + 1,
+        cloudRevision: editor.row?.entry?.cloudRevision ?? 0,
+        dirty: true,
+      },
+      remote: editor.row?.remote,
+    }
+    const latest = editingTemplateRef.current
+    if (latest?.t.deck.id === template.deck.id)
+      editingTemplateRef.current = {
+        ...latest,
         row,
         baseline: JSON.stringify(editor.t),
       }
-    })
-
+    setEditingTemplate((current) =>
+      current?.t.deck.id === template.deck.id
+        ? { ...current, row, baseline: JSON.stringify(editor.t) }
+        : current
+    )
+    void refreshCatalog().catch((e) => notice(errorText(e)))
     return row.entry
   }
-  async function saveTemplateAndExit() {
-    if (!editingTemplate) return
-    if (
-      !templateDirty &&
-      editingTemplate.row?.meta &&
-      !editingTemplate.row?.entry
-    ) {
-      closeTemplateEditor()
-      return
-    }
-    const t = validateTemplate(structuredClone(editingTemplate.t))
-
-    if (t.format === FORMAT_VERSION) {
-      t.deck.master.name = t.deck.title
-    }
-
-    await saveLocal(t, editingTemplate.row)
-    await refreshCatalog()
-
-    closeTemplateEditor()
-    setCatalogKind(t.kind)
-    navigate('templates')
-
-    notice('Шаблон сохранён.')
-  }
   function requestExit(next?: () => Promise<void>) {
-    afterExit.current = next ?? null
-
-    // Нет публикации или локальная версия совпадает с облачной.
-    // Выходим без дополнительного диалога.
-    if (!baseline || same) {
-      void task('Сохранение…', closeEditor)
+    const draft = current.current
+    if (!draft || saveOperation.lock.current || busy) return
+    const dirty = !sameDocument(draft, savedDeck.current)
+    if (!dirty) {
+      void task('Выход…', () => finishLessonExit(next))
       return
     }
-
-    // Методичка опубликована, но есть неопубликованные изменения.
-    setModal('leave')
+    void openConfirm({
+      title: 'Несохранённые изменения',
+      description: 'Сохранить изменения методички перед выходом?',
+      actions: [
+        {
+          id: 'save',
+          label: 'Сохранить и выйти',
+          variant: 'primary',
+          onClick: async () => {
+            await saveActive()
+            if (!sameDocument(current.current, savedDeck.current))
+              throw Error('Есть новые несохранённые изменения.')
+            await finishLessonExit(next)
+          },
+        },
+        {
+          id: 'discard',
+          label: 'Выйти без сохранения',
+          variant: 'danger',
+          onClick: async () => {
+            if (next) {
+              current.current = savedDeck.current
+              setDoc(savedDeck.current)
+              setStatus('Сохранено')
+            }
+            await closeEditor(next)
+          },
+        },
+        { id: 'cancel', label: 'Продолжить редактирование' },
+      ],
+    })
   }
-
-  async function closeEditor() {
-    dragPointer.current = null
-    flushPendingSave()
-    await queue.current
-    if (failure.current)
-      throw Error(
-        'Не удалось сохранить черновик. Экспортируйте JSON перед выходом.'
-      )
-    if (afterExit.current) {
-      await afterExit.current()
-      afterExit.current = null
+  async function finishLessonExit(next?: () => Promise<void>) {
+    const draft = current.current
+    if (!draft || !sameDocument(draft, savedDeck.current))
+      throw Error('Есть несохранённые изменения.')
+    if (
+      baseline &&
+      owner &&
+      online &&
+      publicationVerified &&
+      (await fingerprint(draft)) !== baseline
+    ) {
+      const result = await openConfirm({
+        title: 'Обновление публикации',
+        description:
+          'Сохранённая методичка отличается от опубликованной версии.',
+        actions: [
+          {
+            id: 'publish',
+            label: 'Опубликовать и выйти',
+            variant: 'primary',
+            onClick: () => publishCurrent(false),
+          },
+          { id: 'local', label: 'Выйти без обновления публикации' },
+          { id: 'cancel', label: 'Продолжить редактирование' },
+        ],
+      })
+      if (result !== 'publish' && result !== 'local') return
+    }
+    if (current.current !== draft)
+      throw Error('Методичка изменилась. Повторите выход.')
+    await closeEditor(next)
+  }
+  async function closeEditor(next?: () => Promise<void>) {
+    if (next) {
+      await next()
       setModal('')
       return
     }
     current.current = null
+    savedDeck.current = null
     setDoc(null)
     setModal('')
     navigate(editorOrigin.current)
-    await refresh()
+    void refresh().catch((e) => notice(errorText(e)))
   }
   async function viewPublication(id: string) {
     if (online) return publicationDocument(id)
@@ -1067,102 +1120,112 @@ function App() {
       )
     download((deck.title.replace(/[\\/]/g, '_') || 'Методичка') + '.json', json)
   }
-  async function act(id: 'export' | 'publish' | 'offline', exitAfter = false) {
+  async function publishCurrent(showLink = true): Promise<boolean> {
     const d = current.current
-    if (!d) return
-    await task(
-      id === 'publish'
-        ? 'Публикация…'
-        : id === 'offline'
-          ? 'Проверяем файлы…'
-          : 'Подготовка JSON…',
-      async () => {
-        if (id === 'export') {
-          exportDeck(d)
-        } else if (id === 'offline') {
-          await ensureShell(d)
-          const prepared = await embedImages(d, rememberImage)
-          await queue.current
-          if (current.current !== d)
-            throw new Error('Методичка изменилась. Повторите подготовку.')
-          change(() => prepared)
-          await queue.current
-          if (failure.current) throw failure.current
-          notice(
-            'Готово к офлайн-показу. Приложение и все изображения сохранены.'
-          )
-        } else {
-          if (!owner)
-            throw new Error(
-              'Для публикации подключите Supabase и войдите как владелец.'
-            )
-          if (
-            d.resources.fonts.length &&
-            !confirm(
-              'Шрифты будут встроены в публичную презентацию и доступны зрителям. Лицензия разрешает распространение?'
-            )
-          )
-            return
-          flushPendingSave()
-          await queue.current
-          if (failure.current) throw failure.current
-          if (current.current !== d)
-            throw Error('Документ изменился. Повторите публикацию.')
-          const draftHash = await fingerprint(d)
-          const published = await publish(d, async () => {
-            const remoteHash = await publishedHash(d.id)
-            setBaseline(remoteHash)
-            if (
-              remoteHash &&
-              remoteHash !== openedPublication.current &&
-              remoteHash !== draftHash &&
-              !confirm(
-                'Облачная версия отличается от последней открытой на этом устройстве. Заменить её текущей методичкой?'
-              )
-            )
-              return false
-            return current.current === d
-          })
-          if (!published) return
-          const hash = await fingerprint(d)
-          localStorage.setItem(marker(d.id), hash)
-          openedPublication.current = hash
-          setBaseline(hash)
-          setPublicationVerified(true)
-          publicationChanged((stamp) => stamp + 1)
-          if (exitAfter && current.current === d) {
-            await closeEditor()
-            return
-          }
-          setValue(link(d.id))
-          setModal('link')
-        }
-      }
+    if (!d || !sameDocument(d, savedDeck.current))
+      throw Error('Сначала сохраните изменения методички.')
+    if (!owner || !online || editorOwnerRef.current !== workingOwnerRef.current)
+      throw Error(
+        'Для публикации войдите как владелец и подключитесь к интернету.'
+      )
+    if (
+      d.resources.fonts.length &&
+      !(await askConfirm(
+        'Шрифты будут встроены в публичную презентацию и доступны зрителям. Лицензия разрешает распространение?',
+        { title: 'Лицензия шрифтов', label: 'Разрешено' }
+      ))
     )
+      return false
+    if (current.current !== d)
+      throw Error('Документ изменился. Повторите публикацию.')
+    const draftHash = await fingerprint(d)
+    const published = await publish(d, async () => {
+      const remoteHash = await publishedHash(d.id)
+      setBaseline(remoteHash)
+      if (
+        remoteHash &&
+        remoteHash !== openedPublication.current &&
+        remoteHash !== draftHash &&
+        !(await askConfirm(
+          'Облачная версия отличается от последней открытой на этом устройстве. Заменить её текущей методичкой?',
+          {
+            title: 'Конфликт публикаций',
+            label: 'Заменить публикацию',
+            variant: 'warning',
+          }
+        ))
+      )
+        return false
+      return (
+        current.current === d &&
+        editorOwnerRef.current === workingOwnerRef.current
+      )
+    })
+    if (!published) return false
+    localStorage.setItem(marker(d.id), draftHash)
+    openedPublication.current = draftHash
+    setBaseline(draftHash)
+    setPublicationVerified(true)
+    publicationChanged((stamp) => stamp + 1)
+    if (showLink) {
+      setValue(link(d.id))
+      setModal('link')
+    }
+    return true
+  }
+  async function act(id: 'export' | 'publish' | 'offline') {
+    const draft = current.current
+    if (!draft) return
+    if (id === 'export') {
+      await task('Подготовка JSON…', async () => exportDeck(draft))
+      return
+    }
+    if (id === 'publish') {
+      await task('Публикация…', async () => {
+        if (!(await ensureSaved())) return
+        if (newerPublication) {
+          await openConfirm({
+            title: 'Публикация изменилась',
+            description: 'Выберите, какую версию использовать.',
+            actions: [
+              {
+                id: 'remote',
+                label: 'Загрузить опубликованную версию',
+                description: 'Сохранённый черновик останется отдельной копией.',
+                variant: 'warning',
+                onClick: syncPublication,
+              },
+              {
+                id: 'local',
+                label: 'Опубликовать текущий черновик',
+                variant: 'primary',
+                onClick: () => publishCurrent(),
+              },
+              { id: 'cancel', label: 'Продолжить редактирование' },
+            ],
+          })
+        } else await publishCurrent()
+      })
+      return
+    }
+    await task('Проверяем файлы…', async () => {
+      if (!(await ensureSaved())) return
+      const d = current.current
+      if (!d) return
+      await prepareForOffline(d)
+    })
   }
   async function toggleActiveLocal(enabled: boolean) {
     if (doc) {
       const draft = current.current
 
       if (!draft) throw Error('Методичка не открыта.')
-
-      dragPointer.current = null
-      flushPendingSave()
-
-      await queue.current
-
-      if (failure.current) throw failure.current
-
+      if (!(await ensureSaved())) return
       if (current.current !== draft)
         throw Error('Методичка изменилась. Повторите действие.')
 
       if (enabled) {
-        if (rev.current === 0) {
-          persist(draft)
-          await queue.current
-
-          if (failure.current) throw failure.current
-        }
+        if (rev.current === 0) await saveActive(true)
 
         await refresh()
 
@@ -1171,18 +1234,29 @@ function App() {
       }
 
       if (
-        !confirm(
+        !(await askConfirm(
           'Удалить методичку с этого устройства?\n\n' +
             'Редактор будет закрыт. Облачная копия ' +
-            'и публикация сохранятся, если они существуют.'
-        )
+            'и публикация сохранятся, если они существуют.',
+          { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
+        ))
       )
         return
 
-      await saveEntry(draft, rev.current, true, false, undefined, false)
+      if (editorOwnerRef.current !== workingOwnerRef.current)
+        throw Error('Изменился сеанс авторизации.')
+      await saveEntry(
+        draft,
+        rev.current,
+        true,
+        false,
+        undefined,
+        false,
+        editorOwnerRef.current
+      )
 
       current.current = null
-      pendingSave.current = null
+      savedDeck.current = null
 
       setDoc(null)
       setModal('')
@@ -1196,10 +1270,12 @@ function App() {
     }
 
     if (editingTemplate) {
-      const editor = editingTemplate
+      if (!(await ensureSaved())) return
+      const editor = editingTemplateRef.current
+      if (!editor) throw Error('Шаблон не открыт.')
 
       if (enabled) {
-        if (editor.row?.meta && !templateDirty) {
+        if (editor.row?.meta && !editor.row?.entry) {
           await saveTemplateLocally(editor.row)
 
           const result = await refreshCatalog()
@@ -1215,24 +1291,23 @@ function App() {
               ? { ...current, row }
               : current
           )
-        } else {
-          await persistActiveTemplate()
+        } else if (!editor.row?.entry) {
+          await saveActive(true)
         }
 
         notice('Шаблон сохранён на устройстве.')
         return
       }
 
-      if (templateDirty) throw Error('Сначала сохраните изменения шаблона.')
-
       if (!editor.row?.entry) throw Error('Локальная копия отсутствует.')
 
       if (
-        !confirm(
+        !(await askConfirm(
           'Удалить шаблон с устройства?\n\n' +
             'Редактор будет закрыт. Облачная копия ' +
-            'сохранится, если она существует.'
-        )
+            'сохранится, если она существует.',
+          { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
+        ))
       )
         return
 
@@ -1258,23 +1333,16 @@ function App() {
 
     if (!enabled) {
       if (
-        !confirm(
+        !(await askConfirm(
           'Удалить рабочую копию из облака?\n\n' +
             'Локальные копии на устройствах ' +
-            'и публикация сохранятся.'
-        )
+            'и публикация сохранятся.',
+          { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
+        ))
       )
         return
 
-      if (kind === 'template' && templateDirty)
-        throw Error('Сначала сохраните изменения шаблона.')
-
-      if (kind === 'lesson') {
-        flushPendingSave()
-        await queue.current
-
-        if (failure.current) throw failure.current
-      }
+      if (!(await ensureSaved())) return
 
       // Если это единственная рабочая копия,
       // после удаления закрываем редактор.
@@ -1306,13 +1374,15 @@ function App() {
       return
     }
 
+    if (!(await ensureSaved())) return
+
     // Включение облачного хранения.
     // Сначала гарантируем наличие локального JSON.
 
     if (kind === 'lesson') {
-      await toggleActiveLocal(true)
-    } else {
-      await persistActiveTemplate()
+      if (rev.current === 0) await saveActive(true)
+    } else if (!editingTemplateRef.current?.row?.entry) {
+      await saveActive(true)
     }
 
     await requestCloudCreation(workingOwner, kind, id)
@@ -1329,30 +1399,33 @@ function App() {
     if (!owner || !signedInOwner || !online)
       throw Error('Для публикации необходимо подключение к облаку.')
 
-    flushPendingSave()
-    await queue.current
-
-    if (failure.current) throw failure.current
+    if (!(await ensureSaved())) return
 
     if (enabled) {
       if (
-        !confirm(
+        !(await askConfirm(
           'Опубликовать текущую методичку?\n\n' +
-            'Она будет доступна по публичной ссылке.'
-        )
+            'Она будет доступна по публичной ссылке.',
+          { title: 'Публикация', label: 'Опубликовать' }
+        ))
       )
         return
 
-      await act('publish')
+      await publishCurrent()
       return
     }
 
     if (
-      !confirm(
+      !(await askConfirm(
         'Снять методичку с публикации?\n\n' +
           'Публичная ссылка перестанет работать. ' +
-          'Рабочие копии сохранятся.'
-      )
+          'Рабочие копии сохранятся.',
+        {
+          title: 'Снятие с публикации',
+          label: 'Снять с публикации',
+          variant: 'warning',
+        }
+      ))
     )
       return
 
@@ -1378,35 +1451,22 @@ function App() {
   }
   async function resolveActiveConflict() {
     if (
-      !confirm(
+      !(await askConfirm(
         'Для разрешения конфликта необходимо ' +
-          'сохранить работу и закрыть редактор. Продолжить?'
-      )
+          'сохранить работу и закрыть редактор. Продолжить?',
+        { title: 'Конфликт версий', label: 'Продолжить', variant: 'warning' }
+      ))
     )
       return
 
+    if (!(await ensureSaved())) return
     if (doc) {
-      dragPointer.current = null
-      flushPendingSave()
-
-      await queue.current
-
-      if (failure.current) throw failure.current
-
-      current.current = null
-
-      setDoc(null)
-
-      navigate(editorOrigin.current)
-
-      await refresh()
+      if (!sameDocument(current.current, savedDeck.current))
+        throw Error('Сначала сохраните изменения.')
+      await closeEditor()
     }
-
     if (editingTemplate) {
-      if (templateDirty) await persistActiveTemplate()
-
       closeTemplateEditor()
-
       navigate('templates')
     }
 
@@ -1418,10 +1478,7 @@ function App() {
     activeId && activeKind
       ? {
           state: {
-            local: doc
-              ? rev.current > 0 &&
-                (status === 'Сохранено' || !!activeRecord?.localId)
-              : !!editingTemplate?.row?.entry,
+            local: doc ? rev.current > 0 : !!editingTemplate?.row?.entry,
 
             cloud: !client
               ? false
@@ -1441,8 +1498,8 @@ function App() {
               !!doc &&
               publicationVerified &&
               !!baseline &&
-              signature?.doc === doc &&
-              signature.hash !== baseline,
+              (lessonDirty ||
+                (signature?.doc === doc && signature.hash !== baseline)),
 
             pending: !!activeRecord?.dirty,
 
@@ -1454,15 +1511,12 @@ function App() {
 
             error: !!activeRecord?.dirty && working.errors.length > 0,
 
-            localSaving:
-              !!doc &&
-              (status === 'Сохранение…' ||
-                status === 'Есть несохранённые изменения'),
+            localSaving: saveOperation.saving,
 
-            localError: !!doc && status.startsWith('Ошибка'),
+            localError: documentDirty && !!saveOperation.error,
           },
 
-          disabled: !!busy,
+          disabled: !!busy || saveOperation.saving,
 
           cloudDisabled: !workingOwner || !signedInOwner,
 
@@ -1565,11 +1619,12 @@ function App() {
 
         if (enabled) {
           if (
-            !confirm(
+            !(await askConfirm(
               'Опубликовать методичку «' +
                 entry.deck.title +
-                '»? Она будет доступна по публичной ссылке.'
-            )
+                '»? Она будет доступна по публичной ссылке.',
+              { title: 'Публикация', label: 'Опубликовать' }
+            ))
           )
             return
 
@@ -1577,10 +1632,11 @@ function App() {
 
           if (
             deck.resources.fonts.length &&
-            !confirm(
+            !(await askConfirm(
               'Шрифты будут доступны зрителям. ' +
-                'Лицензия разрешает распространение?'
-            )
+                'Лицензия разрешает распространение?',
+              { title: 'Лицензия шрифтов', label: 'Разрешено' }
+            ))
           )
             return
 
@@ -1600,9 +1656,14 @@ function App() {
           setModal('link')
         } else {
           if (
-            !confirm(
-              'Снять методичку с публикации? ' + 'Рабочие копии сохранятся.'
-            )
+            !(await askConfirm(
+              'Снять методичку с публикации? ' + 'Рабочие копии сохранятся.',
+              {
+                title: 'Снятие с публикации',
+                label: 'Снять с публикации',
+                variant: 'warning',
+              }
+            ))
           )
             return
 
@@ -1644,11 +1705,12 @@ function App() {
           notice('Шаблон сохранён на устройстве.')
         } else {
           if (
-            !confirm(
+            !(await askConfirm(
               'Удалить локальную копию шаблона? ' +
                 'Облачная копия сохранится, ' +
-                'если она существует.'
-            )
+                'если она существует.',
+              { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
+            ))
           )
             return
 
@@ -1676,9 +1738,11 @@ function App() {
           notice('Шаблон поставлен в очередь загрузки.')
         } else {
           if (
-            !confirm(
-              'Удалить облачную копию шаблона? ' + 'Локальные копии сохранятся.'
-            )
+            !(await askConfirm(
+              'Удалить облачную копию шаблона? ' +
+                'Локальные копии сохранятся.',
+              { title: 'Удаление копии', label: 'Удалить', variant: 'danger' }
+            ))
           )
             return
 
@@ -1716,7 +1780,14 @@ function App() {
         '»?\n\n' +
         'Облачная копия и публикация, если они существуют, сохранятся.'
 
-    if (!confirm(message)) return
+    if (
+      !(await askConfirm(message, {
+        title: 'Удаление копии',
+        label: 'Удалить',
+        variant: 'danger',
+      }))
+    )
+      return
 
     await task('Удаление…', async () => {
       if (cloud) {
@@ -1740,6 +1811,7 @@ function App() {
   }
   async function logout() {
     await task('Выход…', async () => {
+      if (!(await ensureSaved())) return
       if (client) {
         const { error } = await client.auth.signOut({ scope: 'local' })
         if (error) throw error
@@ -1975,6 +2047,8 @@ function App() {
                 create={(deck) => insert(deck, templateCourse.current)}
                 edit={(t, row) => {
                   if (allowEditing()) {
+                    editorOwnerRef.current = workingOwnerRef.current
+                    saveOperation.clearError()
                     setEditingTemplate({
                       t,
                       row,
@@ -2108,7 +2182,13 @@ function App() {
                     await exportDeck(await publicationDocument(id))
                   } else if (action === 'offline') {
                     await prepareForOffline(await publicationDocument(id))
-                  } else if (confirm('Снять методичку с публикации?')) {
+                  } else if (
+                    await askConfirm('Снять методичку с публикации?', {
+                      title: 'Снятие с публикации',
+                      label: 'Снять с публикации',
+                      variant: 'warning',
+                    })
+                  ) {
                     await unpublish(id)
                     localStorage.removeItem(marker(id))
                     publicationChanged((stamp) => stamp + 1)
@@ -2159,7 +2239,15 @@ function App() {
       ) : watch ? (
         <Viewer
           deck={watch}
-          onPrepare={prepareForOffline}
+          onPrepare={async (deck) => {
+            if (current.current?.id === deck.id) {
+              if (!(await ensureSaved())) throw Error('Подготовка отменена.')
+              const saved = current.current
+              if (!saved || saved.id !== deck.id)
+                throw Error('Документ изменился.')
+              await prepareForOffline(saved)
+            } else await prepareForOffline(deck)
+          }}
           onClose={() => setWatch(null)}
         />
       ) : editingTemplate?.t.format === FORMAT_VERSION && allowed && !phone ? (
@@ -2172,7 +2260,8 @@ function App() {
           history={templateHistory}
           notice={notice}
           back={requestTemplateExit}
-          save={() => task('Сохраняем шаблон…', saveTemplateAndExit)}
+          save={saveFromButton}
+          saveControl={saveControl}
         />
       ) : editingTemplate && allowed && !phone ? (
         <Editor
@@ -2204,7 +2293,8 @@ function App() {
           }
           back={requestTemplateExit}
           availability={availability}
-          saveTemplate={() => task('Сохраняем шаблон…', saveTemplateAndExit)}
+          saveTemplate={saveFromButton}
+          saveControl={saveControl}
           view={() => setWatch(editingTemplate.t.deck)}
           exportTemplate={() =>
             download(
@@ -2219,11 +2309,15 @@ function App() {
         <Editor
           key={doc.id + '/' + editorSession}
           history={lessonHistory}
+          saveControl={saveControl}
           saveAs={() =>
             requestExit(async () => {
-              await queue.current
-              if (failure.current) throw failure.current
-              const t = templateFrom(current.current!)
+              if (
+                !current.current ||
+                !sameDocument(current.current, savedDeck.current)
+              )
+                throw Error('Сначала сохраните методичку.')
+              const t = templateFrom(current.current)
               await saveLocal(t)
               const result = await refreshCatalog()
               const row = result.rows.find(
@@ -2234,6 +2328,8 @@ function App() {
               current.current = null
               setCatalogKind('presentation')
               navigate('templates')
+              editorOwnerRef.current = workingOwnerRef.current
+              saveOperation.clearError()
               setEditingTemplate({
                 t,
                 row,
@@ -2260,13 +2356,12 @@ function App() {
           availability={availability}
           back={() => requestExit()}
           view={() => setWatch(doc)}
-          action={(id) =>
-            id === 'publish' && newerPublication ? setModal('sync') : act(id)
-          }
+          action={(id) => void act(id)}
           notice={notice}
         />
       ) : null}
       {home}
+      <ConfirmDialogHost />
       {modal && (
         <div className="overlay">
           <section
@@ -2320,7 +2415,7 @@ function App() {
                 <Link2 />
               ) : modal === 'login' ? (
                 <UserRound />
-              ) : modal === 'sync' || modal === 'working-sync' ? (
+              ) : modal === 'working-sync' ? (
                 <RefreshCw />
               ) : (
                 <Layers3 />
@@ -2329,11 +2424,8 @@ function App() {
             <h2 id="dialog-title">
               {
                 {
-                  sync: 'Публикация изменилась',
                   'working-sync': 'Синхронизация',
                   'publication-qr': 'QR-код публикации',
-                  leave: 'Выход из редактора',
-                  'leave-template': 'Выход из редактора шаблона',
                   preview: 'Предпросмотр импорта',
                   create: 'Новая методичка',
                   import: 'Импорт JSON',
@@ -2369,167 +2461,6 @@ function App() {
               </>
             ) : modal === 'publication-qr' ? (
               <QrImage address={value} label="QR-код публикации" />
-            ) : modal === 'sync' ? (
-              <>
-                <p className="leave-description">
-                  Облачная версия методички изменилась на другом устройстве.
-                  Выберите, какую версию использовать.
-                </p>
-
-                <div className="leave-actions">
-                  <button
-                    className="leave-action leave-action-publish"
-                    aria-labelledby="sync-load-label"
-                    aria-describedby="sync-load-hint"
-                    onClick={() => task('Синхронизация…', syncPublication)}
-                  >
-                    <Globe2 size={21} />
-
-                    <span className="leave-action-content">
-                      <strong id="sync-load-label">
-                        Загрузить опубликованную версию
-                      </strong>
-                      <small id="sync-load-hint">
-                        Открыть актуальную методичку из облака. Текущий черновик
-                        сохранится отдельной копией.
-                      </small>
-                    </span>
-
-                    <ArrowUpRight size={18} />
-                  </button>
-
-                  <button
-                    className="leave-action leave-action-local"
-                    aria-labelledby="sync-publish-label"
-                    aria-describedby="sync-publish-hint"
-                    disabled={!canPublish}
-                    onClick={() => act('publish')}
-                  >
-                    <FolderOpen size={21} />
-
-                    <span className="leave-action-content">
-                      <strong id="sync-publish-label">
-                        Опубликовать текущий черновик
-                      </strong>
-                      <small id="sync-publish-hint">
-                        Заменить облачную публикацию версией с этого устройства.
-                      </small>
-                    </span>
-                  </button>
-
-                  <button
-                    className="leave-action-cancel"
-                    onClick={() => setModal('')}
-                  >
-                    <Pencil size={16} />
-                    Продолжить редактирование
-                  </button>
-                </div>
-              </>
-            ) : modal === 'leave-template' ? (
-              <>
-                <p className="leave-description">
-                  В шаблоне есть несохранённые изменения. Что сделать перед
-                  выходом?
-                </p>
-
-                <div className="leave-actions">
-                  <button
-                    className="leave-action leave-action-publish"
-                    disabled={!!busy}
-                    onClick={() =>
-                      task('Сохраняем шаблон…', saveTemplateAndExit)
-                    }
-                  >
-                    <Save size={21} />
-
-                    <span className="leave-action-content">
-                      <strong>Сохранить и выйти</strong>
-
-                      <small>Сохранить изменения в библиотеке шаблонов</small>
-                    </span>
-
-                    <ArrowUpRight size={18} />
-                  </button>
-
-                  <button
-                    className="leave-action leave-action-local"
-                    disabled={!!busy}
-                    onClick={closeTemplateEditor}
-                  >
-                    <ArrowLeft size={21} />
-
-                    <span className="leave-action-content">
-                      <strong>Выйти без сохранения</strong>
-
-                      <small>Отменить изменения текущего сеанса</small>
-                    </span>
-                  </button>
-
-                  <button
-                    className="leave-action-cancel"
-                    disabled={!!busy}
-                    onClick={() => setModal('')}
-                  >
-                    <Pencil size={16} />
-                    Продолжить редактирование
-                  </button>
-                </div>
-              </>
-            ) : modal === 'leave' ? (
-              <>
-                <p className="leave-description">
-                  {baseline
-                    ? 'В методичке есть неопубликованные изменения. Что сделать перед выходом?'
-                    : 'Методичка ещё не опубликована. Что сделать перед выходом?'}
-                </p>
-
-                <div className="leave-actions">
-                  <button
-                    className="leave-action leave-action-publish"
-                    aria-labelledby="leave-publish-label"
-                    aria-describedby="leave-publish-hint"
-                    disabled={!canPublish}
-                    onClick={() => act('publish', true)}
-                  >
-                    <Globe2 size={21} />
-                    <span className="leave-action-content">
-                      <strong id="leave-publish-label">
-                        Опубликовать и выйти
-                      </strong>
-                      <small id="leave-publish-hint">
-                        Обновить публичную версию методички
-                      </small>
-                    </span>
-                    <ArrowUpRight size={18} />
-                  </button>
-
-                  <button
-                    className="leave-action leave-action-local"
-                    aria-labelledby="leave-local-label"
-                    aria-describedby="leave-local-hint"
-                    onClick={() => task('Сохранение…', closeEditor)}
-                  >
-                    <FolderOpen size={21} />
-                    <span className="leave-action-content">
-                      <strong id="leave-local-label">
-                        Сохранить черновик и выйти
-                      </strong>
-                      <small id="leave-local-hint">
-                        Сохранить рабочие изменения без обновления публикации
-                      </small>
-                    </span>
-                  </button>
-
-                  <button
-                    className="leave-action-cancel"
-                    onClick={() => setModal('')}
-                  >
-                    <Pencil size={16} />
-                    Продолжить редактирование
-                  </button>
-                </div>
-              </>
             ) : modal === 'preview' && preview ? (
               <ImportPreview
                 deck={preview}

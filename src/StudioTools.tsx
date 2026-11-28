@@ -127,6 +127,7 @@ export function useCommands(actions: Action[]) {
   } | null>(null)
   useEffect(() => {
     function key(e: KeyboardEvent) {
+      if (document.querySelector('dialog.atlas-confirm[open]')) return
       if (e.key === 'Escape') {
         show(null)
         return

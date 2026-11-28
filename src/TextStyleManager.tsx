@@ -1,3 +1,4 @@
+import { askConfirm } from './ConfirmDialog'
 import { useEffect, useRef, useState } from 'react'
 import { Stage } from './Stage'
 import { StylesPanel } from './Properties'
@@ -97,10 +98,10 @@ export function TextStyleManager({
     const index = custom.findIndex((s) => s.id === selected)
     setPage(index < 0 ? 0 : 1 + Math.floor(index / 6))
   }, [selected, custom.length])
-  function cancel() {
+  async function cancel() {
     if (
       !changed ||
-      window.confirm('Закрыть без применения изменений текстовых стилей?')
+      await askConfirm('Закрыть без применения изменений текстовых стилей?', { title: 'Несохранённые стили', label: 'Закрыть без применения', variant: 'danger' })
     )
       close()
   }

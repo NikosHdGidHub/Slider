@@ -1,3 +1,4 @@
+import { askConfirm } from './ConfirmDialog'
 import {
   Cloud,
   CloudAlert,
@@ -168,7 +169,7 @@ export function WorkingSyncPanel({
             <button className="secondary" disabled={busy || inEditor || !online || !authorized}
               onClick={() => void run(async () => { await courses.resolve('local') })}>Применить мои изменения</button>
             <button className="secondary" disabled={busy || inEditor || !online || !authorized}
-              onClick={() => { if (confirm('Заменить ожидающие изменения курсов облачной версией?')) void run(async () => { await courses.resolve('remote') }) }}>Принять облачную версию</button>
+              onClick={async () => { if (await askConfirm('Заменить ожидающие изменения курсов облачной версией?', { title: 'Конфликт версий', label: 'Заменить', variant: 'warning' })) void run(async () => { await courses.resolve('remote') }) }}>Принять облачную версию</button>
           </div>
           <button className="secondary" disabled={inEditor} onClick={openCourses}>Открыть курсы</button>
         </div>

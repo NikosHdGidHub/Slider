@@ -1,3 +1,4 @@
+import { EditorHeader, type SaveControl } from './EditorHeader'
 import {
   ArrowLeft,
   Captions,
@@ -6,14 +7,10 @@ import {
   Merge,
   PanelTop,
   Rows3,
-  Save,
   SplitSquareHorizontal,
   Type,
 } from 'lucide-react'
-import {
-  AvailabilityControl,
-  type AvailabilityProps,
-} from './AvailabilityControl'
+import type { AvailabilityProps } from './AvailabilityControl'
 import { CanvasViewport } from './CanvasViewport'
 import {
   HistoryButtons,
@@ -121,6 +118,7 @@ export function GridDesigner({
   set,
   history,
   save,
+  saveControl,
   back,
   notice,
 }: {
@@ -130,6 +128,7 @@ export function GridDesigner({
   history: HistoryControls
   set: (t: Template) => void
   save: () => void
+  saveControl: SaveControl
   back: () => void
   notice: (s: string) => void
 }) {
@@ -391,6 +390,7 @@ export function GridDesigner({
           </IconButton>
         }
         saveTemplate={save}
+        saveControl={saveControl}
         exportTemplate={exportTemplate}
         action={() => {}}
         view={() => {}}
@@ -416,32 +416,25 @@ export function GridDesigner({
         scope="grid"
         inspectorRequest={inspectorRequest}
         header={
-          <>
-            <IconButton label="В библиотеку" onClick={back}>
-              <ArrowLeft />
-            </IconButton>
-            <input
-              aria-label="Название шаблона"
-              maxLength={200}
-              value={deck.title}
-              onChange={(e) =>
-                set({
-                  ...template,
-                  deck: {
-                    ...deck,
-                    title: e.target.value,
-                    master: { ...deck.master, name: e.target.value },
-                  },
-                })
-              }
-            />
-            {availability ? (
-              <AvailabilityControl {...availability} />
-            ) : (
-              <small className="edit-status" role="status">
-                {structural ? 'Шаблон компоновки' : 'Главный шаблон'}
-              </small>
-            )}
+          <EditorHeader
+            back={back}
+            exitLabel="В библиотеку"
+            nameLabel="Название шаблона"
+            title={deck.title}
+            rename={(title) =>
+              set({
+                ...template,
+                deck: {
+                  ...deck,
+                  title,
+                  master: { ...deck.master, name: title },
+                },
+              })
+            }
+            availability={availability}
+            status={structural ? 'Шаблон компоновки' : 'Главный шаблон'}
+            save={saveControl}
+          >
             <IconButton
               label="Оформление и объекты"
               onClick={() => {
@@ -451,19 +444,10 @@ export function GridDesigner({
             >
               <Captions />
             </IconButton>
-            <button
-              className="primary"
-              aria-label="Сохранить шаблон"
-              title="Сохранить шаблон"
-              onClick={save}
-            >
-              <Save size={16} />
-              <span>Сохранить шаблон</span>
-            </button>
             <IconButton label="Экспортировать JSON" onClick={exportTemplate}>
               <FileDown />
             </IconButton>
-          </>
+          </EditorHeader>
         }
         navigationLabel="Схемы"
         navigation={

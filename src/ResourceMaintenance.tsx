@@ -1,3 +1,4 @@
+import { askConfirm } from './ConfirmDialog'
 import { FileDialog } from './FileDialog'
 import { useRef, useState } from 'react'
 import {
@@ -55,13 +56,14 @@ export function ResourceMaintenance({
     if (
       mode !== 'local-audit' &&
       mode !== 'cloud-audit' &&
-      !confirm(
+      !await askConfirm(
         'Запустить «' +
           labels[mode] +
           '»? Закройте редакторы во всех вкладках. Сначала экспортируйте важные документы. Изображения не удаляются.'
       )
     )
       return
+    if (lock.current) return
     lock.current = true
     setBusy(mode)
     setLines([])
